@@ -19,7 +19,7 @@ int coopen(char * name, int flags, coport * prt)
 		err(1,"cosetup failed");
 	}
 
-	error=colookup(U_COOPEN,&ukern_coopen);
+	error=colookup(,&ukern_coopen);
 	if (error!=0)
 	{
 		err(1,"colookup of microkernel ipc open failed");
