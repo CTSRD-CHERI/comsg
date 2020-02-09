@@ -1,7 +1,8 @@
-#ifndef _COPORT_H
+ #ifndef _COPORT_H
 #define _COPORT_H
 
 #define COPORT_NAME_LEN 255
+#define MAX_COPORTS_ALLOWED 10
 
 #define COPORT_OPEN 0
 #define COPORT_READY 0x1
