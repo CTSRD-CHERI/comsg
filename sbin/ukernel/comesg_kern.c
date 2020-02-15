@@ -1,27 +1,32 @@
+#include "comesg_kern.h"
+
 #include <err.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
+
 
 #include "coport.h"
 #include "sys_comsg.h"
-#include "comesg_kern.h"
 
-static coopen_data_t worker_strings[WORKER_COUNT];
 
-extern coport_tbl_t coport_table;
-extern unsigned int next_port_index = 0;
+coopen_data_t worker_strings[WORKER_COUNT];
+
+unsigned int next_port_index = 0;
+coport_tbl_t coport_table;
 
 int rand_string(char * buf,unsigned int len)
 {
 	char c;
 	char * s;
+	int rand_no;
 	s = (char *) malloc(sizeof(char)*len);
-	srandomdev();
 	for (int i = 0; i < len; i++)
 	{
-		c=(srandom() % KEYSPACE)+"!";
+		rand_no=random() % KEYSPACE;
+		c=(char)rand_no+0x21;
 		s[i]=c;
 	}
 	strcpy(buf,s);
@@ -29,23 +34,39 @@ int rand_string(char * buf,unsigned int len)
 	return 0;
 }
 
-// I was too tired to be trusted when I wrote this
-// int generate_random_strings(char * buf)
-// {
-// 	char new_string[LOOKUP_STRING_LEN];
-// 	for (int i = 0; i < WORKER_COUNT; i++)
-// 	{
-// 		err=rand_string(buf,LOOKUP_STRING_LEN);
-// 		err=strcpy(buf,new_string);
-// 	}
-// 	return 0;
-// }
+int add_port(coport_tbl_entry_t * entry)
+{
+	if(coport_table.index==MAX_COPORTS)
+	{
+		return 1;
+	}
+
+	pthread_mutex_lock(&coport_table.lock);
+	memcpy(&coport_table.table[coport_table.index],entry,sizeof(coport_tbl_entry_t));
+	coport_table.index++;
+	pthread_mutex_unlock(&coport_table.lock);
+
+	return 0;
+}
+
+int lookup_port(char * port_name)
+{
+	if (strlen(port_name)>COPORT_NAME_LEN)
+	{
+		err(1,"port name length too long");
+	}
+	return 0;
+}
+
 
 void *coport_open(void *args)
 {
 	coopen_data_t *data = (coopen_data_t *)args;
-	coopen_args_t coport_args;
+	cocall_coopen_t coport_args;
+	coport_tbl_entry_t table_entry;
 	coport_t port;
+
+	int error;
 
 	void * __capability switcher_code;
 	void * __capability switcher_data;
@@ -60,19 +81,30 @@ void *coport_open(void *args)
 
 		/* check if port exists */
 		/* set up coport */
-		error=init_port(coport_args.args.name,coport_args.args.type,port);
+		error=init_port(coport_args.args.name,coport_args.args.type,&table_entry);
+
+		
+
+		error=add_port(&table_entry);
+		if(error!=0)
+		{
+			err(1,"unable to init_port");
+		}
+		port.buffer=table_entry.buffer;
 		coport_args.port=port;
 	}
+	return 0;
 }
 
 int coaccept_init(void * __capability switcher_code,void * __capability switcher_data, char * target_name)
 {
-	error=cosetup(COSETUP_COREGISTER,&switcher_code,&switcher_data);
+	int error;
+	error=cosetup(COSETUP_COACCEPT,&switcher_code,&switcher_data);
 	if (error!=0)
 	{
 		err(1,"could not cosetup");
 	}
-	error=coregister(target_name,NULL);
+	error=coregister(target_name,0);
 	if (error!=0)
 	{
 		err(1,"could not coregister");
@@ -83,38 +115,47 @@ int coaccept_init(void * __capability switcher_code,void * __capability switcher
 void *coport_connect(void *args)
 {
 	coopen_data_t * data = (coopen_data_t *)args;
+	return 0;
 }
 
 int coport_tbl_setup()
 {
-	err=pthread_mutex_init(coport_table.lock,NULL);
+	int error=pthread_mutex_init(&coport_table.lock,0);
 	coport_table.index=0;
 	/* reserve a superpage or two for this, entries should be small */
 	/* reserve a few superpages for ports */
 	return 0;
 }
 
-int spawn_workers(void * func, pthread_t * worker_array)
+int spawn_workers(int func, pthread_t * worker_array)
 {
+	int error;
 	/* split into threads */
 	pthread_t threads[WORKER_COUNT];
 	pthread_t thread;
 	pthread_attr_t thread_attrs;
 	char thread_name[THREAD_STRING_LEN];
-	for (int i = 1; i <= WORKER_COUNT; i++)
+	printf("Starting.");
+	for (int i = 0; i < WORKER_COUNT; i++)
 	{
-		err=rand_string(thread_name,strlen(thread_name));
-		err=pthread_create(&thread,&thread_attrs,func,&worker_strings[i-1]);
-		if (err=0)
+		error=rand_string(thread_name,THREAD_STRING_LEN);
+		strcpy(worker_strings[i].name,thread_name);
+		if(func==1)
 		{
-			coopen_threads[i-1]=coopener;
+			error=pthread_create(&thread,&thread_attrs,&coport_open,&worker_strings[i]);
+
+		}
+		if (error==0)
+		{
+			threads[i]=thread;
 		}
 	}
+	return 0;
 }
 
 int main(int argc, const char *argv[])
 {
-	int err;
+	int error;
 	pthread_t coopen_threads[WORKER_COUNT];
 
 	/* check we're in a colocated address space */
@@ -122,10 +163,12 @@ int main(int argc, const char *argv[])
 	/* we can only have one handler per cocall string */
 	/*  */
 	/* set up table */
-	err=coport_tbl_setup();
+	printf("Starting comesg microkernel...\n");
+	error=coport_tbl_setup();
+	printf("Table setup complete.\n");
 	
-
-	err=spawn_workers(coport_open,coopen_threads);
+	printf("Spawning co-open listeners...\n");
+	error=spawn_workers(1,coopen_threads);
 
 	
 
