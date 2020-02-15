@@ -27,4 +27,6 @@ struct coport_tbl_entry
 	struct coport_buf coport_buffer;
 };
 
+int init_port(const char * name);
+
 #endif
