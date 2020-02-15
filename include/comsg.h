@@ -1,10 +1,11 @@
 #ifndef COMSG_H
 #define COMSG_H
 
-#include <cheri.h>
+
 
 #include "sys/sys_comsg.h"
 #include "coport.h"
+
 
 struct coport
 {
