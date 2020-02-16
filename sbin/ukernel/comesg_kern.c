@@ -7,8 +7,8 @@
 #include <string.h>
 #include <stdio.h>
 
-
 #include "coport.h"
+#include "comsg.h"
 #include "sys_comsg.h"
 
 
@@ -23,12 +23,13 @@ int rand_string(char * buf,unsigned int len)
 	char * s;
 	int rand_no;
 	s = (char *) malloc(sizeof(char)*len);
-	for (int i = 0; i < len; i++)
+	for (int i = 0; i < len-1; i++)
 	{
 		rand_no=random() % KEYSPACE;
 		c=(char)rand_no+0x21;
 		s[i]=c;
 	}
+	s[len-1]=0;
 	strcpy(buf,s);
 	free(s);
 	return 0;
@@ -49,13 +50,21 @@ int add_port(coport_tbl_entry_t * entry)
 	return 0;
 }
 
-int lookup_port(char * port_name)
+int lookup_port(char * port_name,coport_t * port_buf)
 {
 	if (strlen(port_name)>COPORT_NAME_LEN)
 	{
 		err(1,"port name length too long");
 	}
-	return 0;
+	for(int i = 0; i<coport_table.index;i++)
+	{
+		if(strcmp(port_name,coport_table.table[i].name)==0)
+		{
+			port_buf->buffer=coport_table.table[i].buffer;
+			return 0;
+		}
+	}
+	return 1;
 }
 
 
@@ -67,6 +76,7 @@ void *coport_open(void *args)
 	coport_t port;
 
 	int error;
+	int lookup;
 
 	void * __capability switcher_code;
 	void * __capability switcher_data;
@@ -80,26 +90,49 @@ void *coport_open(void *args)
 		/* check args are acceptable */
 
 		/* check if port exists */
-		/* set up coport */
-		error=init_port(coport_args.args.name,coport_args.args.type,&table_entry);
-
-		
-
-		error=add_port(&table_entry);
-		if(error!=0)
+		lookup=lookup_port(coport_args.args.name,&port);
+		if(lookup==1)
 		{
-			err(1,"unable to init_port");
-		}
-		port.buffer=table_entry.buffer;
+			/* if it doesn't, set up coport */
+			error=init_port(coport_args.args.name,coport_args.args.type,&table_entry);
+			error=add_port(&table_entry);
+			if(error!=0)
+			{
+				err(1,"unable to init_port");
+			}
+			port.buffer=table_entry.buffer;
+		}	
 		coport_args.port=port;
 	}
 	return 0;
 }
 
-int coaccept_init(void * __capability switcher_code,void * __capability switcher_data, char * target_name)
+void manage_coopen_requests()
 {
 	int error;
-	error=cosetup(COSETUP_COACCEPT,&switcher_code,&switcher_data);
+
+	void * __capability sw_code;
+	void * __capability sw_data;
+	void * __capability cookie;
+
+	cocall_lookup_t lookup;
+
+	error=coaccept_init(sw_code,sw_data,U_COOPEN);
+	for(;;)
+	{
+		for(int i = 0; i < WORKER_COUNT; i++)
+		{
+			error=coaccept(sw_code,sw_data,&cookie,&lookup,sizeof(lookup));
+			error=colookup(worker_strings[i].name,lookup.target);
+		}
+	}
+
+}
+
+int coaccept_init(void * __capability code_cap,void * __capability data_cap, char * target_name)
+{
+	int error;
+	error=cosetup(COSETUP_COACCEPT,&code_cap,&data_cap);
 	if (error!=0)
 	{
 		err(1,"could not cosetup");
@@ -127,25 +160,24 @@ int coport_tbl_setup()
 	return 0;
 }
 
-int spawn_workers(int func, pthread_t * worker_array)
+int spawn_workers(void * __capability func, pthread_t * threads)
 {
-	int error;
+	int e;
 	/* split into threads */
-	pthread_t threads[WORKER_COUNT];
-	pthread_t thread;
-	pthread_attr_t thread_attrs;
+	threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
+	
 	char thread_name[THREAD_STRING_LEN];
-	printf("Starting.");
 	for (int i = 0; i < WORKER_COUNT; i++)
 	{
-		error=rand_string(thread_name,THREAD_STRING_LEN);
-		strcpy(worker_strings[i].name,thread_name);
-		if(func==1)
-		{
-			error=pthread_create(&thread,&thread_attrs,&coport_open,&worker_strings[i]);
+		pthread_t thread;
+		pthread_attr_t thread_attrs;
 
-		}
-		if (error==0)
+		rand_string(thread_name,THREAD_STRING_LEN);
+		strcpy(worker_strings[i].name,thread_name);
+		printf("%s",thread_name);
+		e=pthread_attr_init(&thread_attrs);
+		e=pthread_create(&thread,&thread_attrs,func,thread_name);
+		if (e==0)
 		{
 			threads[i]=thread;
 		}
@@ -167,12 +199,13 @@ int main(int argc, const char *argv[])
 	error=coport_tbl_setup();
 	printf("Table setup complete.\n");
 	
-	printf("Spawning co-open listeners...\n");
-	error=spawn_workers(1,coopen_threads);
-
-	
-
 	/* perform setup */
+	printf("Spawning co-open listeners...\n");
+	error=spawn_workers(&coport_open,coopen_threads);
+
+
+	/* listen for coopen requests */
+	manage_coopen_requests();
 
 	return 0;
 }

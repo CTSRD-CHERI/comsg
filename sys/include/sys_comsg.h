@@ -5,6 +5,8 @@
 #define U_COOPEN "coopen"
 #define U_COCLOSE "coclose"
 
+#define COPORT_BUF_LEN 4096
 #define COPORT_NAME_LEN 255
+
 
 #endif

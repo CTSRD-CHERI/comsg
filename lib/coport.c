@@ -23,12 +23,11 @@ int init_port(const char * name, coport_type_t type, coport_tbl_entry_t * p)
 	{
 		err(1,"port name length too long");
 	}
-	strcpy(new_port.name,name);
+	strcpy(p->name,name);
 
-	new_port.buffer=mmap(0,COPORT_BUF_LEN,COPORT_MMAP_PROT,COPORT_MMAP_FLAGS,-1,0);
-	new_port.status=COPORT_OPEN;
-	new_port.id=generate_id();
+	p->buffer=mmap(0,COPORT_BUF_LEN,COPORT_MMAP_PROT,COPORT_MMAP_FLAGS,-1,0);
+	p->status=COPORT_OPEN;
+	p->id=generate_id();
 
-	memcpy(p,&new_port,sizeof(new_port));
 	return 0;
 }

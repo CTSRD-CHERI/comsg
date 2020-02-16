@@ -4,6 +4,8 @@
 #include "coport.h"
 #include "comsg.h"
 
+int cocall_lookup()
+
 int coopen(char * coport_name, coport_type_t type, coport_t * prt)
 {
 	/* request new coport from microkernel */
@@ -22,7 +24,7 @@ int coopen(char * coport_name, coport_type_t type, coport_t * prt)
 		err(1,"cosetup failed");
 	}
 
-	error=colookup(,&ukern_coopen);
+	error=colookup(U_COOPEN,&ukern_coopen);
 	if (error!=0)
 	{
 		err(1,"colookup of microkernel ipc open failed");

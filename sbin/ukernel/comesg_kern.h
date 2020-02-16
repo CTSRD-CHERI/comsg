@@ -37,7 +37,8 @@ void *coport_open(void *args);
 int coaccept_init(void * __capability switcher_code,void * __capability switcher_data, char * target_name);
 void *coport_connect(void *args);
 int coport_tbl_setup();
-int spawn_workers(int func, pthread_t * worker_array);
+int spawn_workers(void * func, pthread_t * worker_array);
+void manage_requests(pthread_t * coport_open_threads);
 int main(int argc, const char *argv[]);
 
 extern coport_tbl_t coport_table;
