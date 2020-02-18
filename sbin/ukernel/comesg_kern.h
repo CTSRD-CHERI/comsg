@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 
+#include "coport.h"
 #include "sys_comsg.h"
 
 #define WORKER_COUNT 1
@@ -16,7 +17,7 @@ typedef struct _coport_tbl_entry_t
 	unsigned int id;
 	char name[COPORT_NAME_LEN];
 	unsigned int status;
-	void * __capability buffer;
+	coport_t port;
 } coport_tbl_entry_t;
 
 typedef struct _coopen_data_t 
