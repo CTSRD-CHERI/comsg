@@ -54,6 +54,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	uint error;
 
 	/* cocall setup */
+	//TODO-PBB: Only do this once.
 	error=ukern_lookup(switcher_code,switcher_data,U_COOPEN,ukern_coopen);
 
 	strcpy(call.args.name,coport_name);

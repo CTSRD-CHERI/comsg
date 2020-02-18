@@ -153,12 +153,6 @@ int coaccept_init(void * __capability __capability code_cap,void * __capability 
 	return 0;
 }
 
-void *coport_connect(void *args)
-{
-	coopen_data_t * data = (coopen_data_t *)args;
-	return 0;
-}
-
 int coport_tbl_setup()
 {
 	int error=pthread_mutex_init(&coport_table.lock,0);
