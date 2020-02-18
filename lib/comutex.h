@@ -3,9 +3,11 @@
 
 typedef struct _comutex_t
 {
-	volatile int * __capability lock;
 	void * __capability key;
+	volatile void * __capability __capability lock;
 } comutex_t;
+
+
 
 int comutex_init(comutex_t * mtx);
 int colock(comutex_t * mtx);

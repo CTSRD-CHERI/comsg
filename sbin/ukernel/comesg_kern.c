@@ -18,6 +18,8 @@ coopen_data_t worker_strings[WORKER_COUNT];
 unsigned int next_port_index = 0;
 coport_tbl_t coport_table;
 
+
+
 int rand_string(char * buf,unsigned int len)
 {
 	char c;
@@ -67,6 +69,7 @@ int lookup_port(char * port_name,coport_t * port_buf)
 			return 0;
 		}
 	}
+	port_buf=NULL;
 	return 1;
 }
 
@@ -105,8 +108,8 @@ void *coport_open(void *args)
 				err(1,"unable to init_port");
 			}
 			port=&coport_table.table[index].port;
-		}	
-		coport_args.port=&coport_table.table[index].port;;
+		}
+		coport_args.port=port;
 	}
 	return 0;
 }
