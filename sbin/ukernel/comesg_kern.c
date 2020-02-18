@@ -8,6 +8,8 @@
 #include <stdio.h>
 
 #include "coport.h"
+#include "coport_utils.h"
+#include "coproc.h"
 #include "comsg.h"
 #include "sys_comsg.h"
 
@@ -37,6 +39,7 @@ int rand_string(char * buf,unsigned int len)
 
 int add_port(coport_tbl_entry_t * entry)
 {
+	int entry_index;
 	if(coport_table.index==MAX_COPORTS)
 	{
 		return 1;
@@ -44,10 +47,11 @@ int add_port(coport_tbl_entry_t * entry)
 
 	pthread_mutex_lock(&coport_table.lock);
 	memcpy(&coport_table.table[coport_table.index],entry,sizeof(coport_tbl_entry_t));
-	coport_table.index++;
+	entry_index=++coport_table.index;
+	
 	pthread_mutex_unlock(&coport_table.lock);
 
-	return 0;
+	return entry_index;
 }
 
 int lookup_port(char * port_name,coport_t * port_buf)
@@ -60,10 +64,11 @@ int lookup_port(char * port_name,coport_t * port_buf)
 	{
 		if(strcmp(port_name,coport_table.table[i].name)==0)
 		{
-			port_buf->buffer=coport_table.table[i].buffer;
+			port_buf=&coport_table.table[i].port;
 			return 0;
 		}
 	}
+	port_buf=NULL;
 	return 1;
 }
 
@@ -73,16 +78,17 @@ void *coport_open(void *args)
 	coopen_data_t *data = (coopen_data_t *)args;
 	cocall_coopen_t coport_args;
 	coport_tbl_entry_t table_entry;
-	coport_t port;
+	coport_t * port;
 
 	int error;
+	int index;
 	int lookup;
 
 	void * __capability switcher_code;
 	void * __capability switcher_data;
 	void * __capability caller_cookie;
 
-	error=coaccept_init(switcher_code,switcher_data,data->name);
+	error=coaccept_init(&switcher_code,&switcher_data,data->name);
 	
 	for (;;)
 	{
@@ -90,18 +96,18 @@ void *coport_open(void *args)
 		/* check args are acceptable */
 
 		/* check if port exists */
-		lookup=lookup_port(coport_args.args.name,&port);
+		lookup=lookup_port(coport_args.args.name,port);
 		if(lookup==1)
 		{
 			/* if it doesn't, set up coport */
 			error=init_port(coport_args.args.name,coport_args.args.type,&table_entry);
-			error=add_port(&table_entry);
+			index=add_port(&table_entry);
 			if(error!=0)
 			{
 				err(1,"unable to init_port");
 			}
-			port.buffer=table_entry.buffer;
-		}	
+			port=&coport_table.table[index].port;
+		}
 		coport_args.port=port;
 	}
 	return 0;
@@ -117,11 +123,12 @@ void manage_coopen_requests()
 
 	cocall_lookup_t lookup;
 
-	error=coaccept_init(sw_code,sw_data,U_COOPEN);
+	error=coaccept_init(&sw_code,&sw_data,U_COOPEN);
 	for(;;)
 	{
 		for(int i = 0; i < WORKER_COUNT; i++)
 		{
+			printf("Lookup is size %lu",sizeof(cocall_lookup_t));
 			error=coaccept(sw_code,sw_data,&cookie,&lookup,sizeof(lookup));
 			error=colookup(worker_strings[i].name,lookup.target);
 		}
@@ -129,10 +136,10 @@ void manage_coopen_requests()
 
 }
 
-int coaccept_init(void * __capability code_cap,void * __capability data_cap, char * target_name)
+int coaccept_init(void * __capability __capability code_cap,void * __capability __capability data_cap, char * target_name)
 {
 	int error;
-	error=cosetup(COSETUP_COACCEPT,&code_cap,&data_cap);
+	error=cosetup(COSETUP_COACCEPT,code_cap,data_cap);
 	if (error!=0)
 	{
 		err(1,"could not cosetup");
@@ -142,12 +149,6 @@ int coaccept_init(void * __capability code_cap,void * __capability data_cap, cha
 	{
 		err(1,"could not coregister");
 	}
-	return 0;
-}
-
-void *coport_connect(void *args)
-{
-	coopen_data_t * data = (coopen_data_t *)args;
 	return 0;
 }
 
@@ -174,7 +175,7 @@ int spawn_workers(void * __capability func, pthread_t * threads)
 
 		rand_string(thread_name,THREAD_STRING_LEN);
 		strcpy(worker_strings[i].name,thread_name);
-		printf("%s",thread_name);
+		//printf("%s",thread_name);
 		e=pthread_attr_init(&thread_attrs);
 		e=pthread_create(&thread,&thread_attrs,func,thread_name);
 		if (e==0)
@@ -202,10 +203,14 @@ int main(int argc, const char *argv[])
 	/* perform setup */
 	printf("Spawning co-open listeners...\n");
 	error=spawn_workers(&coport_open,coopen_threads);
+	printf("Worker threads spawned.");
 
 
 	/* listen for coopen requests */
+	printf("Listening for requests.");
 	manage_coopen_requests();
+
+	free(coopen_threads);
 
 	return 0;
 }
