@@ -9,6 +9,7 @@
 
 #include "coport.h"
 #include "coport_utils.h"
+#include "coproc.h"
 #include "comsg.h"
 #include "sys_comsg.h"
 
@@ -17,8 +18,6 @@ coopen_data_t worker_strings[WORKER_COUNT];
 
 unsigned int next_port_index = 0;
 coport_tbl_t coport_table;
-
-
 
 int rand_string(char * buf,unsigned int len)
 {

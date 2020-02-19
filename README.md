@@ -37,6 +37,8 @@
 		+ might use capability sealing/unsealing as locking/unlocking
 			- could very easily manage shared objects this way
 			- might want to split these into two things
+	* The current line of thinking is:
+		+ Setup of mutual exclusion locks will be managed by the microkernel, similar to POSIX semaphores.
 
 ## Current outstanding questions:
 

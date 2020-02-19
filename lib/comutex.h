@@ -3,8 +3,8 @@
 
 typedef struct _comutex_t
 {
-	void * __capability key;
-	volatile void * __capability __capability lock;
+	 void * __capability key;
+	_Atomic void * __capability __capability lock;
 } comutex_t;
 
 
