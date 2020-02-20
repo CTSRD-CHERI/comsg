@@ -30,7 +30,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	call.args.type=type;
 
 	error=cocall(switcher_code,switcher_data,func,&call,sizeof(call));
-	*prt=call.port;
+	port=call.port;
 
 	return 0;
 }
