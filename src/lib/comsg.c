@@ -41,7 +41,7 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 	//we need some atomicity on changes toe end and start
 	if(port->type==COCHANNEL)
 	{
-		if((port->length-(end-start))<len)
+		if((port->length-(port->end-port->start))<len)
 		{
 			err(1,"message too big/buffer is full");
 		}
@@ -57,7 +57,7 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 		//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
 		msg_buf=(void *) malloc(len);
 		//copy data from buf
-		memcpy(msg_buf,buf,len)
+		memcpy(msg_buf,buf,len);
 		//reduce capability to buffer to read only
 		msg_cap=cheri_andperm(msg_buf,CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP);
 		//append capability to buffer
