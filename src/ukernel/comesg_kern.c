@@ -296,10 +296,11 @@ void *comutex_unlock(void *args)
 	return 0;
 }
 
-int comutex_deinit(comutex_table_entry_t * m)
+int comutex_deinit(comutex_tbl_entry_t * m)
 {
-	free(m->kern_mtx->val);
-	free(m->kern_mtx);
+	sys_comutex_t mtx = m->mtx;
+	free(mtx->kern_mtx->val);
+	free(mtx->kern_mtx);
 	m->user_mtx=NULL;
 
 	// remove from table?
@@ -394,7 +395,7 @@ int spawn_workers(void * __capability func, pthread_t * threads, char * name)
 	/* split into threads */
 	threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
 	w_i=++next_worker_i;
-	strcpy(&worker_lookup[w_i],name);
+	strcpy(worker_lookup[w_i],name);
 	for (int i = 0; i < WORKER_COUNT; i++)
 	{
 		rand_string(thread_name,THREAD_STRING_LEN);
