@@ -197,21 +197,19 @@ void *comutex_setup(void *args)
 		if(lookup==1)
 		{
 			/* if it doesn't, set up mutex */
-			error=sys_comutex_init(comutex_args.args.name,&table_entry);
+			error=sys_comutex_init(comutex_args.args.name,&mtx);
+			table_entry.mtx=mtx;
+			table_entry.id=generate_id();
 			index=add_mutex(&table_entry);
 			if(error!=0)
 			{
 				err(1,"unable to init_port");
 			}
-			strcpy(user_mutex->name,comutex_args.args.name);
-			user_mutex->mtx=comutex_table.table[index].mtx.user_mtx;
 		}
-		else
-		{
-			strcpy(user_mutex->name,mtx->name);
-			user_mutex->mtx=mtx->user_mtx;
-			user_mutex->key=NULL;
-		}
+		strcpy(user_mutex->name,mtx->name);
+		user_mutex->mtx=mtx->user_mtx;
+		user_mutex->key=NULL;
+		
 		comutex_args.mutex=user_mutex;
 	}
 	return 0;

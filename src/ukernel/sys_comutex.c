@@ -114,7 +114,7 @@ int sys_counlock(sys_comutex_t * mutex,void * __capability)
 	}
 }
 
-int sys_comutex_init(char * name, comutex_tbl_entry_t * m)
+int sys_comutex_init(char * name, sys_comutex_t * m)
 {
 	sys_comutex_t mutex;
 	comtx_t * mtx;
