@@ -179,7 +179,7 @@ void *comutex_setup(void *args)
 	cocall_comutex_init_t comutex_args;
 	comutex_tbl_entry_t table_entry;
 	sys_comutex_t * mtx;
-	comutex_t user_mutex;
+	comutex_t * user_mutex;
 
 	data = (worker_args_t *)args;
 
@@ -208,14 +208,14 @@ void *comutex_setup(void *args)
 			{
 				err(1,"unable to init_port");
 			}
-			strcpy(user_mutex.name,comutex_args.args.name);
-			user_mutex.mtx=comutex_table.table[index].mtx.user_mtx;
+			strcpy(user_mutex->name,comutex_args.args.name);
+			user_mutex->mtx=comutex_table.table[index].mtx.user_mtx;
 		}
 		else
 		{
-			strcpy(user_mutex.name,mtx->name);
-			user_mutex.mtx=mtx;
-			user_mutex.key=NULL;
+			strcpy(user_mutex->name,mtx->name);
+			user_mutex->mtx=mtx;
+			user_mutex->key=NULL;
 		}
 		comutex_args.mutex=user_mutex;
 	}
@@ -228,7 +228,7 @@ void *comutex_lock(void *args)
 	colock_args_t colock_args;
 	comutex_tbl_entry_t table_entry;
 	sys_comutex_t * mtx;
-	comutex_t user_mutex;
+	comutex_t * user_mutex;
 
 	data = (worker_args_t *)args;
 
@@ -251,8 +251,8 @@ void *comutex_lock(void *args)
 		if(lookup==0)
 		{
 			user_mutex=colock_args.mutex;
-			error=sys_colock(mtx,user_mutex.key);
-			mtx->key=user_mutex.key;
+			error=sys_colock(mtx,user_mutex->key);
+			mtx->key=user_mutex->key;
 		}
 		//report errors
 	}
@@ -265,7 +265,7 @@ void *comutex_unlock(void *args)
 	counlock_args_t colock_args;
 	comutex_tbl_entry_t table_entry;
 	sys_comutex_t * mtx;
-	comutex_t user_mutex;
+	comutex_t * user_mutex;
 
 	data = (worker_args_t *)args;
 
@@ -288,8 +288,8 @@ void *comutex_unlock(void *args)
 		if(lookup==0)
 		{
 			user_mutex=colock_args.mutex;
-			error=sys_counlock(mtx,user_mutex.key);
-			mtx->key=user_mutex.key;
+			error=sys_counlock(mtx,user_mutex->key);
+			mtx->key=user_mutex->key;
 		}
 		//report errors
 	}
@@ -299,9 +299,9 @@ void *comutex_unlock(void *args)
 int comutex_deinit(comutex_tbl_entry_t * m)
 {
 	sys_comutex_t mtx = m->mtx;
-	free(mtx->kern_mtx->val);
-	free(mtx->kern_mtx);
-	m->user_mtx=NULL;
+	free(mtx.kern_mtx->val);
+	free(mtx.kern_mtx);
+	mtx.user_mtx=NULL;
 
 	// remove from table?
 	return 0;
@@ -342,7 +342,7 @@ void *manage_requests(void *args)
 		{
 			printf("Lookup is size %lu",sizeof(cocall_lookup_t));
 			error=coaccept(sw_code,sw_data,&cookie,&lookup,sizeof(lookup));
-			error=colookup(worker_strings[workers_index][j].name,lookup.target);
+			error=colookup(worker_strings[workers_index][j]->name,lookup.target);
 		}
 	}
 }
