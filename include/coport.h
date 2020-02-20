@@ -1,7 +1,7 @@
 #ifndef _COPORT_H
 #define _COPORT_H
 
-#include <cheric.h>
+#include <cheri/cheric.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 
