@@ -101,7 +101,7 @@ int coreceive(coport_t * port, void * __capability buf, size_t len)
 		{
 			warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
 		}
-		if(cheri_getperm(buf)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP)==0)
+		if(!cheri_ccheckperms(buf,(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP)))
 		{
 			err(1,"received capability does not grant read permissions");
 		}
