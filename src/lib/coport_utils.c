@@ -1,6 +1,6 @@
 #include "coport_utils.h"
 
-#include <cheric.h>
+#include <cheri/cheric.h>
 #include <sys/mman.h>
 #include <err.h>
 #include <string.h>
@@ -9,13 +9,6 @@
 #include "comesg_kern.h"
 #include "coport.h"
 
-
-int generate_id()
-{
-	static int id_counter = 0;
-	// TODO: Replace this with something smarter.
-	return ++id_counter;
-}
 
 int init_port(const char * name, coport_type_t type, coport_t * p)
 {

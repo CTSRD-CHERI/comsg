@@ -12,5 +12,12 @@ typedef struct _sys_comutex_t
 	void * __capability key;
 } sys_comutex_t;
 
+__inline int cmtx_cmp(comutex_t * a,comutex_t * b);
+__inline int cmtx_validate(comutex_t * a);
+
+int sys_cotrylock(sys_comutex_t * mutex, void * __capability key);
+int sys_colock(sys_comutex_t * mutex,void * __capability key);
+int sys_counlock(sys_comutex_t * mutex,void * __capability);
+int sys_comutex_init(char * name, comutex_table_entry_t * m);
 
 #endif

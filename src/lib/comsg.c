@@ -1,4 +1,4 @@
-#include <cheri.h>
+#include <cheri/cheri.h>
 #include <cheri/cherireg.h>
 #include <unistd.h>
 
