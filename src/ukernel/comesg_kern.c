@@ -399,7 +399,7 @@ int spawn_workers(void * __capability func, pthread_t * threads, char * name)
 	for (int i = 0; i < WORKER_COUNT; i++)
 	{
 		rand_string(thread_name,THREAD_STRING_LEN);
-		strcpy(worker_strings[w_i][i].name,thread_name);
+		strcpy(worker_strings[w_i][i]->name,thread_name);
 		strcpy(args.name,thread_name);
 		//printf("%s",thread_name);
 		e=pthread_attr_init(&thread_attrs);
