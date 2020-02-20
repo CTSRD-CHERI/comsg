@@ -395,7 +395,6 @@ int spawn_workers(void * __capability func, pthread_t * threads, char * name)
 	threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
 	w_i=++next_worker_i;
 	strcpy(&worker_lookup[w_i],name);
-	worker_strings[w_i]=malloc(sizeof(worker_args_t)*WORKER_COUNT);
 	for (int i = 0; i < WORKER_COUNT; i++)
 	{
 		rand_string(thread_name,THREAD_STRING_LEN);
