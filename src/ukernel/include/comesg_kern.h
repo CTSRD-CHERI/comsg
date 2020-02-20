@@ -64,7 +64,7 @@ void *coport_open(void *args);
 void *comutex_setup(void *args);
 void *comutex_lock(void *args);
 void *comutex_unlock(void *args);
-int comutex_deinit(comutex_table_entry_t * m);
+int comutex_deinit(comutex_tbl_entry_t * m);
 void *manage_requests(void *args);
 int coaccept_init(
 	void * __capability __capability code_cap,
