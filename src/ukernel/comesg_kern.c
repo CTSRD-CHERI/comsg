@@ -251,8 +251,8 @@ void *comutex_lock(void *args)
 		if(lookup==0)
 		{
 			user_mutex=colock_args.mutex;
-			error=sys_colock(mtx,user_mutex->key);
-			mtx.key=user_mutex->key;
+			error=sys_colock(mtx,user_mutex.key);
+			mtx->key=user_mutex.key;
 		}
 		//report errors
 	}
@@ -288,8 +288,8 @@ void *comutex_unlock(void *args)
 		if(lookup==0)
 		{
 			user_mutex=colock_args.mutex;
-			error=sys_counlock(mtx,user_mutex->key);
-			mtx.key=user_mutex->key;
+			error=sys_counlock(mtx,user_mutex.key);
+			mtx->key=user_mutex.key;
 		}
 		//report errors
 	}
