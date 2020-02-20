@@ -61,8 +61,7 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 		//append capability to buffer
 		old_end=port->end;
 		port->end=port->end+CHERICAP_SIZE;
-		port->buffer+old_end=msg_cap;
-
+		memcpy(port->buffer+old_end,msg_cap,CHERICAP_SIZE);
 	}
 	return 0;
 }
@@ -96,7 +95,7 @@ int coreceive(coport_t * port, void * __capability buf, size_t len)
 		port->start=port->start+CHERICAP_SIZE;
 		//pop next cap from buffer into buf (index indicated by start)
 		buf=port->buffer+old_start;
-		port->buffer+old_start=NULL;
+		memcpy(port->buffer+old_start,(void *)NULL,CHERICAP_SIZE);
 		//perhaps inspect length and perms for safety
 		if(cheri_getlen(buf)!=len)
 		{
