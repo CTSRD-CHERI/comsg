@@ -197,7 +197,7 @@ void *comutex_setup(void *args)
 		if(lookup==1)
 		{
 			/* if it doesn't, set up mutex */
-			error=sys_comutex_init(comutex_args.args.name,&mtx);
+			error=sys_comutex_init(comutex_args.args.name,mtx);
 			table_entry.mtx=mtx;
 			table_entry.id=generate_id();
 			index=add_mutex(&table_entry);
