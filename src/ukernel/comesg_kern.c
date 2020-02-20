@@ -214,7 +214,7 @@ void *comutex_setup(void *args)
 		else
 		{
 			strcpy(user_mutex->name,mtx->name);
-			user_mutex->mtx=mtx;
+			user_mutex->mtx=mtx->user_mtx;
 			user_mutex->key=NULL;
 		}
 		comutex_args.mutex=user_mutex;

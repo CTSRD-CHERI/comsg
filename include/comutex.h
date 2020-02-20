@@ -36,7 +36,7 @@ typedef struct _comutex_t
 	void * __capability key;
 } comutex_t;
 
-int comutex_init(comutex_t * mtx);
+int counlock(comutex_t * mtx)
 int colock(comutex_t * mtx);
 int comutex_init(char * mtx_name, comutex_t * mutex);
 
