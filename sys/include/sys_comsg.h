@@ -8,8 +8,11 @@
 #define U_COLOCK "colock"
 #define U_COMUTEX_INIT "comutex_init"
 
+#define U_FUNCTIONS 5
+
 #define COPORT_BUF_LEN 4096
 #define COPORT_NAME_LEN 255
+#define COMUTEX_NAME_LEN 255
 
 
 #endif
