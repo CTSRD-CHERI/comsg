@@ -54,4 +54,4 @@ dkms.conf
 setup.sh
 tests/get_perms.c
 tests/get_voidstar_perms
-output/*
+output/
