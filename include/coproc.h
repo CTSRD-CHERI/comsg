@@ -1,6 +1,9 @@
 #ifndef _COPROC_H
 #define _COPROC_H
 
+#include "comutex.h"
+#include "coport.h"
+
 typedef struct _cocall_lookup_t
 {
 	char func_name[PATH_MAX];
