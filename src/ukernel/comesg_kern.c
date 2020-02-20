@@ -299,7 +299,7 @@ void *comutex_unlock(void *args)
 int comutex_deinit(comutex_tbl_entry_t * m)
 {
 	sys_comutex_t mtx = m->mtx;
-	free(mtx.kern_mtx->val);
+	free(mtx.kern_mtx->lock);
 	free(mtx.kern_mtx);
 	mtx.user_mtx=NULL;
 
