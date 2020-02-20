@@ -11,7 +11,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	/* request new coport from microkernel */
 	void * __capability switcher_code;
 	void * __capability switcher_data;
-	void * __capability ukern_coopen;
+	void * __capability func;
 
 
 	cocall_coopen_t call;
@@ -21,13 +21,13 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 
 	/* cocall setup */
 	//TODO-PBB: Only do this once.
-	error=ukern_lookup(switcher_code,switcher_data,U_COOPEN,ukern_coopen);
+	error=ukern_lookup(switcher_code,switcher_data,U_COOPEN,func);
 
 	strcpy(call.args.name,coport_name);
 	call.args.type=type;
 
-	error=cocall(switcher_code,switcher_data,ukern_coopen,&call,sizeof(call));
-	prt=call.port;
+	error=cocall(switcher_code,switcher_data,func,&call,sizeof(call));
+	*prt=call.port;
 
 	return 0;
 }

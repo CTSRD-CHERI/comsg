@@ -9,8 +9,8 @@
 #include "sys_comsg.h"
 	
 #define COPORT_OPEN 0
-#define COPORT_READY 0x1
-#define COPORT_BUSY 0x2 
+#define COPORT_READY 1
+#define COPORT_BUSY 2
 #define COPORT_CLOSED -1
 
 
@@ -24,19 +24,8 @@
 				to the sent message
 	COPIPE	  -	synchronous message passing ipc. as yet unimplemented.
 */
-typedef enum _coport_type_t {COCHANNEL, COCARRIER,COPIPE} coport_type_t;
 
-typedef struct _coopen_args_t
-{
-	char name[COPORT_NAME_LEN];
-	coport_type_t type;
-} coopen_args_t;
-
-typedef struct _coport_mutex_t
-{
-	int lock;
-} coport_mutex_t;
-
+typedef enum {COCHANNEL, COCARRIER, COPIPE} coport_type_t;
 
 /* 
  * TODO-PBB: Rework so we can have fine-grained, least-privilege protection of 
@@ -57,11 +46,5 @@ typedef struct _coport_t
 	coport_type_t type;
 	comutex_t lock;
 } coport_t;
-
-typedef struct _cocall_coopen_t
-{
-	coopen_args_t args;
-	coport_t * __capability port; 
-} cocall_coopen_t;
 
 #endif

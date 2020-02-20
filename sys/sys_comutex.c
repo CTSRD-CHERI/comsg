@@ -1,43 +1,137 @@
 #include "comutex.h"
+#include "sys_comutex.h"
+
 
 #include <stdatomic.h>
+#include <cheri/cheric.h>
+
+#define LOCK_PERMS (CHERI_PERM_LOAD|CHERI_PERM_STORE)
+#define CHECK_LOCK_PERMS (CHERI_PERM_LOAD)
+#define KEY_PERMS (CHERI_PERM_SEAL|CHERI_PERM_UNSEAL)
+#define MTX_PERMS (CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP)
 
 
 //XXX-PBB: Thinking about changing these, hence the defines.
-#define lock_succ memory_order_seq_cst
-#define lock_fail memory_order_seq_cst
+#define LOCK_SUCC memory_order_seq_cst
+#define LOCK_FAIL memory_order_seq_cst
 
-#define atomic_cas(a,b,c) \
-	atomic_compare_exchange_weak_explicit(a,b,c,lock_succ,lock_fail)
+#define ATOMIC_CAS(a,b,c) \
+	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
 
-int sys_co_trylock(comutex_t * mtx)
+__inline int cmtx_cmp(comutex_t * a,comutex_t * b)
 {
-	if(cheri_getsealed(mtx->lock))
+	int result=0;
+	if(cheri_getaddress(a->mtx->lock)!=cheri_getaddress(b->mtx->lock))
 	{
-		//already locked :(
+		result++;
+	}
+	if(cheri_getaddress(a->mtx->check_lock)!=cheri_getaddress(b->mtx->check_lock))
+	{
+		result++;
+	}
+	return result;
+}
+
+__inline int cmtx_validate(comutex_t * a)
+{
+	// return 1 (true) if a the capabilities in a match
+	int result=1;
+	if(cheri_getaddress(a->mtx->lock)!=cheri_getaddress(a->mtx->check_lock))
+	{
+		result=0;
+	}
+	if(!cheri_ccheckperms(a->mtx->lock,LOCK_PERMS))
+	{
+		result=0;
+	}
+	if(!cheri_ccheckperms(a->mtx->check_lock,CHECK_LOCK_PERMS))
+	{
+		result=0;
+	}
+	if(!cheri_ccheckperms(a->key,KEY_PERMS))
+	{
+		result=0;
+	}
+	return result;
+}
+
+int sys_cotrylock(sys_comutex_t * mutex, void * __capability key)
+{
+	comtx_t * mtx;
+
+	mtx=mutex->kern_mtx;
+	if(*mtx->check_lock!=0)
+	{
+		return 1;
+	}
+	else if ATOMIC_CAS(mtx->lock,0,1)
+	{
+		if(mtx->check_lock!=1)
+		{
+			err(4,"atomic cas on mtx->lock did not propagate");
+		}
+		sys_mtx->key=key;
+		mtx->lock=cheri_seal(mtx->lock,key);
+		return 0;
+	}
+	return 2;
+}
+
+int sys_colock(sys_comutex_t * mutex,void * __capability key)
+{
+	//TODO-PBB: convert to sleep with signal?
+	while(sys_cotrylock(mutex,key)==0)
+	{
+		//spin
+	}
+	return 0;
+}
+
+int sys_counlock(sys_comutex_t * mutex,void * __capability)
+{
+	comtx_t * mtx;
+	atomic_int * __capability unlocked, locked;
+
+	mtx=sys_mtx->kern_mtx;
+	if(atomic_load(mtx->check_lock)==0)
+	{
 		return 1;
 	}
 	else
 	{
-		void * __capability key;
-		if atomic_cas(mtx->lock,NULL,new)
+		locked=mtx->lock;
+		unlocked=cheri_unseal(mtx->lock,user_mtx->key);
+		//composability is a problem here
+		if ATOMIC_CAS(&mtx->lock,locked,unlocked)
 		{
-			//we did it!
-			mtx->key=key;
-			mtx->lock=cheri_seal(mtx->lock,mtx->key);
+			atomic_store(mtx->lock,0);
+			if(mtx->check_lock!=0)
+			{
+				err(3,"cas to mtx->lock via unlocked did not propagate");
+			}
 			return 0;
-		}
-		else
-		{
-			//beaten to it
-			//included in case we want to think about contention detection
-			return 2;
 		}
 	}
 }
 
-int _comutex_init(comutex_t * mtx)
+int sys_comutex_init(char * name, comutex_table_entry_t * m)
 {
-	mtx->key=NULL;
-	/* call into ukernel to create shared place mtx->lock can live */
+	sys_comutex_t mutex;
+	comtx_t * mtx;
+	atomic_int * __capability val;
+
+	val=(_Atomic int *)malloc(sizeof(int));
+	atomic_store(val,0);
+	mtx=(comtx_t *)malloc(sizeof(comtx_t));
+
+	mtx.lock=cheri_andperms(val,LOCK_PERMS);
+	mtx.check_lock=cheri_andperms(val,CHECK_LOCK_PERMS);
+	m->user_mtx=cheri_andperms(mtx,MTX_PERMS);
+	m->kern_mtx=mtx;
+
+	m->key=NULL;
+	strcpy(m->name,name);
+	return 0;
 }
+
+
