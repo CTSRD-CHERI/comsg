@@ -477,19 +477,19 @@ int main(int argc, const char *argv[])
 
 	/* listen for coopen requests */
 	printf("Spawning request handlers...");
-	handler_args.func_name=U_COOPEN;
+	strcpy(handler_args.func_name,U_COOPEN);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&coopen_handler,&thread_attrs,manage_requests,&handler_args);
-	handler_args.func_name=U_COCLOSE;
+	strcpy(handler_args.func_name,U_COCLOSE);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&counlock_handler,&thread_attrs,manage_requests,&handler_args);
-	handler_args.func_name=U_COUNLOCK;
+	strcpy(handler_args.func_name,U_COUNLOCK);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,&handler_args);
-	handler_args.func_name=U_COLOCK;
+	strcpy(handler_args.func_name,U_COLOCK);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&colock_handler,&thread_attrs,manage_requests,&handler_args);
-	handler_args.func_name=U_COMUTEX_INIT;
+	strcpy(handler_args.func_name,U_COMUTEX_INIT);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&coclose_handler,&thread_attrs,manage_requests,&handler_args);
 
