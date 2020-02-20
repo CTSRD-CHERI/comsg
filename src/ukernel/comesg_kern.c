@@ -104,9 +104,9 @@ int lookup_port(char * port_name,coport_t * port_buf)
 
 int lookup_mutex(char * mtx_name,sys_comutex_t * mtx_buf)
 {
-	if (strlen(port_name)>COPORT_NAME_LEN)
+	if (strlen(mtx_name)>COPORT_NAME_LEN)
 	{
-		err(1,"port name length too long");
+		err(1,"mtx name length too long");
 	}
 	for(int i = 0; i<comutex_table.index;i++)
 	{
@@ -115,7 +115,7 @@ int lookup_mutex(char * mtx_name,sys_comutex_t * mtx_buf)
 			mtx_buf=NULL;
 			return 1;
 		}
-		if(strcmp(mtx_name,comutex_table.table[i].name)==0)
+		if(strcmp(mtx_name,comutex_table.table[i].mtx.name)==0)
 		{
 			mtx_buf=&comutex_table.table[i].mtx;
 			return 0;
@@ -158,9 +158,8 @@ void *coport_open(void *args)
 			/* if it doesn't, set up coport */
 			type=coport_args.args.type;
 			error=init_port(port_name,type,port);
-			table_entry.port=port;
+			table_entry.port=*port;
 			table_entry.id=generate_id();
-			table_entry.lock=NULL;
 			index=add_port(&table_entry);
 			if(error!=0)
 			{
