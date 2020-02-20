@@ -52,17 +52,15 @@ int rand_string(char * buf,unsigned int len)
 int add_port(coport_tbl_entry_t * entry)
 {
 	int entry_index;
+	pthread_mutex_lock(&coport_table.lock);
 	if(coport_table.index==MAX_COPORTS)
 	{
+		pthread_mutex_unlock(&coport_table.lock);
 		return 1;
 	}
-
-	pthread_mutex_lock(&coport_table.lock);
 	memcpy(&coport_table.table[coport_table.index],entry,sizeof(coport_tbl_entry_t));
 	entry_index=++coport_table.index;
-	
 	pthread_mutex_unlock(&coport_table.lock);
-
 	return entry_index;
 }
 
@@ -70,15 +68,13 @@ int add_mutex(comutex_tbl_entry_t * entry)
 {
 	int entry_index;
 	
-
 	pthread_mutex_lock(&comutex_table.lock);
 	if(comutex_table.index>=MAX_COPORTS)
 	{
 		pthread_mutex_unlock(&comutex_table.lock);
-		//handle this error better
 		return 1;
 	}
-	memcpy(&comutex_table.table[comutex_table.index],entry,sizeof(entry));
+	memcpy(&comutex_table.table[comutex_table.index],entry,sizeof(comutex_tbl_entry_t));
 	entry_index=++comutex_table.index;
 	pthread_mutex_unlock(&comutex_table.lock);
 	return entry_index;
