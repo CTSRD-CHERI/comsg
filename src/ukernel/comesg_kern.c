@@ -429,6 +429,13 @@ int main(int argc, const char *argv[])
 	pthread_t colock_threads[WORKER_COUNT];
 	pthread_t coclose_threads[WORKER_COUNT];
 
+	pthread_t coopen_handler;
+	pthread_t counlock_handler;
+	pthread_t comutex_init_handler;
+	pthread_t colock_handler;
+	pthread_t coclose_handler;
+
+	pthread_attr_t thread_attrs;
 	/*
 	 * TODO-PBB: Options. 
 	 * - verbose
@@ -468,11 +475,23 @@ int main(int argc, const char *argv[])
 	*/
 	printf("Worker threads spawned.");
 
-
 	/* listen for coopen requests */
 	printf("Spawning request handlers...");
-	handler_args.name=U_COOPEN;
-	manage_requests();
+	handler_args.func_name=U_COOPEN;
+	pthread_attr_init(&thread_attrs);
+	pthread_create(&coopen_handler,&thread_attrs,manage_requests,&handler_args);
+	handler_args.func_name=U_COCLOSE;
+	pthread_attr_init(&thread_attrs);
+	pthread_create(&counlock_handler,&thread_attrs,manage_requests,&handler_args);
+	handler_args.func_name=U_COUNLOCK;
+	pthread_attr_init(&thread_attrs);
+	pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,&handler_args);
+	handler_args.func_name=U_COLOCK;
+	pthread_attr_init(&thread_attrs);
+	pthread_create(&colock_handler,&thread_attrs,manage_requests,&handler_args);
+	handler_args.func_name=U_COMUTEX_INIT;
+	pthread_attr_init(&thread_attrs);
+	pthread_create(&coclose_handler,&thread_attrs,manage_requests,&handler_args);
 
 	free(coopen_threads);
 
