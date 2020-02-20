@@ -79,7 +79,7 @@ int coreceive(coport_t * port, void * __capability buf, size_t len)
 		}
 		if(port->buffer==NULL)
 		{
-			err(1,"coport %s is closed",port->name);
+			err(1,"coport is closed");
 		}
 		old_start=port->start;
 		port->start=port->start+len;
