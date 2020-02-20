@@ -10,15 +10,10 @@
 #include "coport.h"
 
 
-int init_port(const char * name, coport_type_t type, coport_t * p)
+int init_port(coport_type_t type, coport_t * p)
 {
 	int error;
 
-	if (strlen(name)>COPORT_NAME_LEN)
-	{
-		err(1,"port name length too long");
-	}
-	strcpy(p->name,name);
 	/*
 	 * TODO-PBB: We will replace this mmap call so that its job is performed by
 	 * a worker thread ahead of time, avoiding the context switch from the 
