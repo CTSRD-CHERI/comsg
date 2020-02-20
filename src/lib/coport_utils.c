@@ -1,6 +1,6 @@
 #include "coport_utils.h"
 
-#include <cheric.h>
+#include <cheri/cheric.h>
 #include <sys/mman.h>
 #include <err.h>
 #include <string.h>
@@ -10,22 +10,8 @@
 #include "coport.h"
 
 
-int generate_id()
+int init_port(coport_type_t type, coport_t * p)
 {
-	static int id_counter = 0;
-	// TODO: Replace this with something smarter.
-	return ++id_counter;
-}
-
-int init_port(const char * name, coport_type_t type, coport_t * p)
-{
-	int error;
-
-	if (strlen(name)>COPORT_NAME_LEN)
-	{
-		err(1,"port name length too long");
-	}
-	strcpy(p->name,name);
 	/*
 	 * TODO-PBB: We will replace this mmap call so that its job is performed by
 	 * a worker thread ahead of time, avoiding the context switch from the 
@@ -37,6 +23,7 @@ int init_port(const char * name, coport_type_t type, coport_t * p)
 	p->start=0;
 	p->end=0;
 	p->status=COPORT_OPEN;
+	p->type=type;
 
 	return 0;
 }

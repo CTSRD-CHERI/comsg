@@ -8,7 +8,6 @@
 #include "sys_comutex.h"
 
 #define WORKER_COUNT 1
-#define LOOKUP_STRING_LEN 16
 #define THREAD_STRING_LEN 16
 #define KEYSPACE 93
 #define MAX_COPORTS 10
@@ -23,7 +22,6 @@ typedef struct _request_handler_args_t
 {
 	char func_name[LOOKUP_STRING_LEN];
 } request_handler_args_t;
-
 
 typedef struct _coport_tbl_entry_t
 {
@@ -54,14 +52,27 @@ typedef struct _comutex_tbl_t
 } comutex_tbl_t;
 
 
+int generate_id(void);
 int rand_string(char * buf,unsigned int len);
+int add_port(coport_tbl_entry_t * entry);
+int add_mutex(comutex_tbl_entry_t * entry);
+int lookup_port(char * port_name,coport_t ** port_buf);
+int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf);
 void *coport_open(void *args);
-int coaccept_init(void * __capability switcher_code,void * __capability switcher_data, char * target_name);
-void *coport_connect(void *args);
-int coport_tbl_setup();
-void *manage_coopen_requests(void *args)
-int spawn_workers(void * __capability func, pthread_t * threads, char * name)
-void run_tests();
+void *comutex_setup(void *args);
+void *comutex_lock(void *args);
+void *comutex_unlock(void *args);
+int comutex_deinit(comutex_tbl_entry_t * m);
+void *manage_requests(void *args);
+int coaccept_init(
+	void * __capability * __capability  code_cap,
+	void * __capability * __capability  data_cap, 
+	char * target_name,
+	void * __capability * __capability target_cap);
+int coport_tbl_setup(void);
+int comutex_tbl_setup(void);
+int spawn_workers(void * func, pthread_t * threads, const char * name);
+void run_tests(void);
 int main(int argc, const char *argv[]);
 
 

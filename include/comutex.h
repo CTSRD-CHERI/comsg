@@ -4,6 +4,10 @@
 #include <stdatomic.h>
 
 #include "sys_comsg.h"
+
+#define COMUTEX_LOCKED 1
+#define COMUTEX_UNLOCKED 0
+
 /*
  * PBB: comutexes
  * mutexes for colocated processes using cheri capabilities
@@ -25,19 +29,19 @@
 
 typedef struct _comtx_t
 {
-	atomic_int * __capability lock;
-	atomic_int * __capability check_lock;
+	_Atomic int * lock;
+	_Atomic int * check_lock;
 } comtx_t;
 
 typedef struct _comutex_t
 {
-	comutex_t * __capability mtx;
+	comtx_t * mtx;
 	char * name;
-	void * __capability key;
+	void * key;
 } comutex_t;
 
-int comutex_init(comutex_t * mtx);
-int colock(comutex_t * mtx);
 int counlock(comutex_t * mtx);
+int colock(comutex_t * mtx, void * key);
+int comutex_init(char * mtx_name, comutex_t * mutex);
 
 #endif

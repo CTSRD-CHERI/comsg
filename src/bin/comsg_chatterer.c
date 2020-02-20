@@ -3,9 +3,12 @@
 #include <time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <err.h>
+#include <string.h>
 
-const char * port_name = "benchmark_port";
-const char * ts_port_name = "timestamp_port";
+static const char * port_name = "benchmark_port";
+//static const char * ts_port_name = "timestamp_port";
 
 #define	timespecsub(vvp, uvp)						\
 	do {								\
@@ -17,7 +20,7 @@ const char * ts_port_name = "timestamp_port";
 		}							\
 	} while (0)
 
-void send_data()
+static void send_data()
 {
 	u_int * buf;
 	struct timespec start_timestamp;
@@ -25,28 +28,26 @@ void send_data()
 	coport_t port;
 	int status;
 
-	buf_slice=(u_int *)malloc(4096/sizeof(u_int));
+	buf=(u_int *)malloc(4096/sizeof(u_int));
 
 	status=coopen(port_name,COCHANNEL,&port);
-	buf_slice[0]=0;
+	buf[0]=0;
 
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
 	cosend(&port,buf,4096);
-
 }
-
-void send_timestamp(struct timespec * timestamp)
+/*
+static void send_timestamp(struct timespec * timestamp)
 {
 	coport_t port;
 	int status;
 
 	status=coopen(ts_port_name,COCHANNEL,&port);
 	cosend(&port,timestamp,sizeof(timestamp));
-
-
+	
 }
-
-void receive_data()
+	*/
+	static void receive_data()
 {
 	u_int * buf;
 	struct timespec start,end;
@@ -54,34 +55,34 @@ void receive_data()
 	coport_t port;
 	int status;
 
-	buf_slice=(u_int *)malloc(4096/sizeof(u_int));
+	buf=(u_int *)malloc(4096/sizeof(u_int));
 
 	status=coopen(port_name,COCHANNEL,&port);
-	
 
 	clock_gettime(CLOCK_REALTIME,&start);
-	coreceive(&port,buf,4096);
+	corecv(&port,buf,4096);
 	clock_gettime(CLOCK_REALTIME,&end);
-
 }
-
-void receive_timestamp()
 
 int main(int argc, char const *argv[])
 {
-	pid_t pid;
+	if(argc==0)
+	{
+		err(1,"must supply either -s or -r");
+	}
 
-	pid=fork();
-
-	if(pid==0)
+	if(strcmp(argv[1],"-r"))
 	{
 		receive_data();
 
 	}
-	else
+	else if (strcmp(argv[1],"-s"))
 	{
 		send_data();
-
+	}
+	else
+	{
+		err(1,"invalid options");
 	}
 
 	return 0;

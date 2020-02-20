@@ -1,9 +1,14 @@
+#include <stdlib.h>
+#include <stdatomic.h>
+#include <cheri/cheric.h>
+#include <cheri/cherireg.h>
+
+#include <string.h>
+#include <err.h>
+
 #include "comutex.h"
 #include "sys_comutex.h"
 
-
-#include <stdatomic.h>
-#include <cheri/cheric.h>
 
 #define LOCK_PERMS (CHERI_PERM_LOAD|CHERI_PERM_STORE)
 #define CHECK_LOCK_PERMS (CHERI_PERM_LOAD)
@@ -14,9 +19,17 @@
 //XXX-PBB: Thinking about changing these, hence the defines.
 #define LOCK_SUCC memory_order_seq_cst
 #define LOCK_FAIL memory_order_seq_cst
+#define UNLOCK_SUCC memory_order_er
 
 #define ATOMIC_CAS(a,b,c) \
-	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
+	atomic_compare_exchange_weak_explicit(a,&b,c,LOCK_SUCC,LOCK_FAIL)
+#define ATOMIC_CAS_LOCK(a,b,c) \
+	atomic_compare_exchange_weak_explicit(a,&b,c,LOCK_SUCC,LOCK_FAIL)
+#define ATOMIC_CAS_UNLOCK(a,b,c) \
+	atomic_compare_exchange_weak_explicit(a,&b,c,LOCK_SUCC,LOCK_FAIL)
+
+int LOCKED = COMUTEX_LOCKED;
+int UNLOCKED = COMUTEX_UNLOCKED;
 
 __inline int cmtx_cmp(comutex_t * a,comutex_t * b)
 {
@@ -40,44 +53,44 @@ __inline int cmtx_validate(comutex_t * a)
 	{
 		result=0;
 	}
-	if(!cheri_ccheckperms(a->mtx->lock,LOCK_PERMS))
+	if((cheri_getperm(a->mtx->lock)&LOCK_PERMS)==0)
 	{
 		result=0;
 	}
-	if(!cheri_ccheckperms(a->mtx->check_lock,CHECK_LOCK_PERMS))
+	if((cheri_getperm(a->mtx->check_lock)&CHECK_LOCK_PERMS)==0)
 	{
 		result=0;
 	}
-	if(!cheri_ccheckperms(a->key,KEY_PERMS))
+	if((cheri_getperm(a->key)&KEY_PERMS)==0)
 	{
 		result=0;
 	}
 	return result;
 }
 
-int sys_cotrylock(sys_comutex_t * mutex, void * __capability key)
+int sys_cotrylock(sys_comutex_t * mutex, void * key)
 {
 	comtx_t * mtx;
 
 	mtx=mutex->kern_mtx;
-	if(*mtx->check_lock!=0)
+	if(atomic_load(mtx->check_lock)==LOCKED)
 	{
 		return 1;
 	}
-	else if ATOMIC_CAS(mtx->lock,0,1)
+	else if (ATOMIC_CAS(mtx->lock,UNLOCKED,LOCKED))
 	{
-		if(mtx->check_lock!=1)
+		if(*mtx->check_lock!=LOCKED)
 		{
 			err(4,"atomic cas on mtx->lock did not propagate");
 		}
-		sys_mtx->key=key;
+		mutex->key=key;
 		mtx->lock=cheri_seal(mtx->lock,key);
 		return 0;
 	}
 	return 2;
 }
 
-int sys_colock(sys_comutex_t * mutex,void * __capability key)
+int sys_colock(sys_comutex_t * mutex,void * key)
 {
 	//TODO-PBB: convert to sleep with signal?
 	while(sys_cotrylock(mutex,key)==0)
@@ -87,46 +100,45 @@ int sys_colock(sys_comutex_t * mutex,void * __capability key)
 	return 0;
 }
 
-int sys_counlock(sys_comutex_t * mutex,void * __capability)
+int sys_counlock(sys_comutex_t * mutex,void * key)
 {
 	comtx_t * mtx;
-	atomic_int * __capability unlocked, locked;
+	atomic_int * unlocked;
+	atomic_int * locked;
 
-	mtx=sys_mtx->kern_mtx;
-	if(atomic_load(mtx->check_lock)==0)
+	mtx=mutex->kern_mtx;
+	if(atomic_load(mtx->check_lock)==UNLOCKED)
 	{
 		return 1;
 	}
 	else
 	{
 		locked=mtx->lock;
-		unlocked=cheri_unseal(mtx->lock,user_mtx->key);
-		//composability is a problem here
-		if ATOMIC_CAS(&mtx->lock,locked,unlocked)
+		unlocked=cheri_unseal(mtx->lock,key);
+
+		mtx->lock=unlocked;
+		atomic_store(mtx->lock,UNLOCKED);
+		if(*mtx->check_lock!=UNLOCKED)
 		{
-			atomic_store(mtx->lock,0);
-			if(mtx->check_lock!=0)
-			{
-				err(3,"cas to mtx->lock via unlocked did not propagate");
-			}
-			return 0;
+			err(3,"cas to mtx->lock via unlocked did not propagate");
 		}
+		return 0;
+		
 	}
 }
 
-int sys_comutex_init(char * name, comutex_table_entry_t * m)
+int sys_comutex_init(char * name, sys_comutex_t * m)
 {
-	sys_comutex_t mutex;
 	comtx_t * mtx;
-	atomic_int * __capability val;
+	atomic_int * val;
 
 	val=(_Atomic int *)malloc(sizeof(int));
-	atomic_store(val,0);
+	*val=COMUTEX_UNLOCKED;
 	mtx=(comtx_t *)malloc(sizeof(comtx_t));
 
-	mtx.lock=cheri_andperms(val,LOCK_PERMS);
-	mtx.check_lock=cheri_andperms(val,CHECK_LOCK_PERMS);
-	m->user_mtx=cheri_andperms(mtx,MTX_PERMS);
+	mtx->lock=cheri_andperm(val,LOCK_PERMS);
+	mtx->check_lock=cheri_andperm(val,CHECK_LOCK_PERMS);
+	m->user_mtx=cheri_andperm(mtx,MTX_PERMS);
 	m->kern_mtx=mtx;
 
 	m->key=NULL;
