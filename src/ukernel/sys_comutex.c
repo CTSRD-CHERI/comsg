@@ -124,9 +124,9 @@ int sys_comutex_init(char * name, sys_comutex_t * m)
 	atomic_store(val,0);
 	mtx=(comtx_t *)malloc(sizeof(comtx_t));
 
-	mtx.lock=cheri_andperms(val,LOCK_PERMS);
-	mtx.check_lock=cheri_andperms(val,CHECK_LOCK_PERMS);
-	m->user_mtx=cheri_andperms(mtx,MTX_PERMS);
+	mtx.lock=cheri_andperm(val,LOCK_PERMS);
+	mtx.check_lock=cheri_andperm(val,CHECK_LOCK_PERMS);
+	m->user_mtx=cheri_andperm(mtx,MTX_PERMS);
 	m->kern_mtx=mtx;
 
 	m->key=NULL;

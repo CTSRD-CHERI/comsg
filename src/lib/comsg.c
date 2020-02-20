@@ -59,7 +59,7 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 		//copy data from buf
 		memcpy(msg_buf,buf,len)
 		//reduce capability to buffer to read only
-		msg_cap=cheri_andperms(msg_buf,CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP);
+		msg_cap=cheri_andperm(msg_buf,CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP);
 		//append capability to buffer
 		old_end=port->end;
 		port->end=port->end+CHERICAP_SIZE;
