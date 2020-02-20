@@ -153,9 +153,10 @@ void *coport_open(void *args)
 		{
 			/* if it doesn't, set up coport */
 			type=coport_args.args.type;
-			error=init_port(port_name,type,port);
+			error=init_port(type,port);
 			table_entry.port=*port;
 			table_entry.id=generate_id();
+			strcpy(&table_entry.name,port_name);
 			index=add_port(&table_entry);
 			if(error!=0)
 			{
