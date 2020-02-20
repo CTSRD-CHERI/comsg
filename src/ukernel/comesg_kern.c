@@ -156,7 +156,7 @@ void *coport_open(void *args)
 			error=init_port(type,port);
 			table_entry.port=*port;
 			table_entry.id=generate_id();
-			strcpy(&table_entry.name,port_name);
+			strcpy(table_entry.name,port_name);
 			index=add_port(&table_entry);
 			if(error!=0)
 			{

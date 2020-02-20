@@ -4,6 +4,6 @@
 #include "coport.h"
 #include "comesg_kern.h"
 
-int init_port(const char * name, coport_type_t type, coport_t * p);
+int init_port(coport_type_t type, coport_t * p);
 
 #endif
