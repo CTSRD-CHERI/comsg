@@ -1,9 +1,11 @@
 #include <cheri/cheri.h>
 #include <cheri/cheric.h>
-
 #include <cheri/cherireg.h>
+
 #include <unistd.h>
 #include <err.h>
+#include <string.h>
+#include <stdlib.h>
 
 #include "coproc.h"
 #include "coport.h"
@@ -49,7 +51,7 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 		port->end=port->end+len;
 		memcpy(port->buffer+old_end, buf, len);
 	}
-	else if(port->type=COCARRIER)
+	else if(port->type==COCARRIER)
 	{
 		void * __capability __capability msg_cap;
 		void * __capability msg_buf;
@@ -103,7 +105,7 @@ int coreceive(coport_t * port, void * __capability buf, size_t len)
 		{
 			warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
 		}
-		if(!cheri_ccheckperms(buf,(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP)))
+		if((cheri_getperm(buf)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
 		{
 			err(1,"received capability does not grant read permissions");
 		}

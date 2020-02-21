@@ -1,3 +1,8 @@
+#include <unistd.h>
+#include <err.h>
+#include <string.h>
+
+
 #include "coproc.h"
 
 int ukern_lookup(void * __capability __capability code, 
@@ -7,7 +12,7 @@ int ukern_lookup(void * __capability __capability code,
 	int error;
 	cocall_lookup_t lookup_data;
 	void * __capability lookup_cap;
-	if(*code==NULL || *data==NULL)
+	if(code==NULL || data==NULL)
 	{
 		error=cosetup(COSETUP_COCALL,code,data);
 		if(error!=0)
@@ -27,7 +32,7 @@ int ukern_lookup(void * __capability __capability code,
 	}
 	strcpy(lookup_data.func_name,target_name);
 
-	error=cocall(code,data,lookup_cap,lookup_data,sizeof(lookup_data));
+	error=cocall(code,data,lookup_cap,&lookup_data,sizeof(lookup_data));
 	if(error!=0)
 	{
 		err(1,"cocall failed");

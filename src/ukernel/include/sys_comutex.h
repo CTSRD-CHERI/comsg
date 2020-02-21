@@ -17,7 +17,7 @@ __inline int cmtx_validate(comutex_t * a);
 
 int sys_cotrylock(sys_comutex_t * mutex, void * __capability key);
 int sys_colock(sys_comutex_t * mutex,void * __capability key);
-int sys_counlock(sys_comutex_t * mutex,void * __capability);
+int sys_counlock(sys_comutex_t * mutex,void * __capability key);
 int sys_comutex_init(char * name, sys_comutex_t * m);
 
 #endif

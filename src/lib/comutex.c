@@ -1,12 +1,18 @@
+#include <unistd.h>
+#include <string.h>
 #include <stdatomic.h>
 
 #include "comutex.h"
 #include "coproc.h"
 
 
+
 int counlock(comutex_t * mtx)
 {
-	void * __capability sw_code, sw_data, func;
+	counlock_args_t call_data;
+	void * __capability sw_code;
+	void * __capability sw_data;
+	void * __capability func;
 	int error;
 
 	error=ukern_lookup(&sw_code,&sw_data,U_COUNLOCK,&func);
@@ -16,31 +22,37 @@ int counlock(comutex_t * mtx)
 	return call_data.result;
 }
 
-int colock(comutex_t * mtx)
+int colock(comutex_t * mtx, void * __capability key)
 {
 	colock_args_t call_data;
-	void * __capability sw_code, sw_data, func;
+	void * __capability sw_code;
+	void * __capability sw_data;
+	void * __capability func;
 	int error;
 
+
 	error=ukern_lookup(&sw_code,&sw_data,U_COLOCK,&func);
+	mtx->key=key;
 	call_data.mutex=mtx;
 	error=cocall(sw_code,sw_data,func,&call_data,sizeof(call_data));
 
 	return call_data.result;
 }
 
-int comutex_init(char * mtx_name, comutex_t * mutex);
+int comutex_init(char * mtx_name, comutex_t * mutex)
 {
 	/* call into ukernel to create shared place mtx->lock can live */
-	void * __capability sw_code, sw_data, func;
+	void * __capability sw_code;
+	void * __capability sw_data;
+	void * __capability func;
 	cocall_comutex_init_t call_data;
 	int error;
 
 	error=ukern_lookup(&sw_code,&sw_data,U_COMUTEX_INIT,&func);
 
-	strcpy(&call_data.args.name,mtx_name);
+	strcpy(call_data.args.name,mtx_name);
 	error=cocall(sw_code,sw_data,func,&call_data,sizeof(call_data));
-	mutex=call_data.mtx;
+	mutex=call_data.mutex;
 
 	return 0;
 }
