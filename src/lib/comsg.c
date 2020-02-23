@@ -70,7 +70,7 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 	return 0;
 }
 
-int coreceive(coport_t * port, void * __capability buf, size_t len)
+int corecv(coport_t * port, void * __capability buf, size_t len)
 {
 	//we need more atomicity on changes to end
 	int old_start;

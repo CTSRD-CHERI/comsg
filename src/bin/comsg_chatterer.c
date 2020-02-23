@@ -3,6 +3,7 @@
 #include <time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 const char * port_name = "benchmark_port";
 const char * ts_port_name = "timestamp_port";
@@ -25,14 +26,13 @@ void send_data()
 	coport_t port;
 	int status;
 
-	buf_slice=(u_int *)malloc(4096/sizeof(u_int));
+	buf=(u_int *)malloc(4096/sizeof(u_int));
 
 	status=coopen(port_name,COCHANNEL,&port);
-	buf_slice[0]=0;
+	buf[0]=0;
 
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
 	cosend(&port,buf,4096);
-
 }
 
 void send_timestamp(struct timespec * timestamp)
@@ -42,8 +42,7 @@ void send_timestamp(struct timespec * timestamp)
 
 	status=coopen(ts_port_name,COCHANNEL,&port);
 	cosend(&port,timestamp,sizeof(timestamp));
-
-
+	
 }
 
 void receive_data()
@@ -54,18 +53,16 @@ void receive_data()
 	coport_t port;
 	int status;
 
-	buf_slice=(u_int *)malloc(4096/sizeof(u_int));
+	buf=(u_int *)malloc(4096/sizeof(u_int));
 
 	status=coopen(port_name,COCHANNEL,&port);
-	
 
 	clock_gettime(CLOCK_REALTIME,&start);
-	coreceive(&port,buf,4096);
+	corecv(&port,buf,4096);
 	clock_gettime(CLOCK_REALTIME,&end);
-
 }
 
-void receive_timestamp()
+void receive_timestamp();
 
 int main(int argc, char const *argv[])
 {
@@ -81,7 +78,6 @@ int main(int argc, char const *argv[])
 	else
 	{
 		send_data();
-
 	}
 
 	return 0;
