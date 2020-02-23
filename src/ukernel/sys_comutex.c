@@ -20,8 +20,13 @@
 //XXX-PBB: Thinking about changing these, hence the defines.
 #define LOCK_SUCC memory_order_seq_cst
 #define LOCK_FAIL memory_order_seq_cst
+#define UNLOCK_SUCC memory_order_er
 
 #define ATOMIC_CAS(a,b,c) \
+	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
+#define ATOMIC_CAS_LOCK(a,b,c) \
+	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
+#define ATOMIC_CAS_UNLOCK(a,b,c) \
 	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
 
 __inline int cmtx_cmp(comutex_t * a,comutex_t * b)

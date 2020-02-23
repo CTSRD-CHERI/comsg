@@ -5,11 +5,16 @@ INC=include/ src/ukernel/include
 LIB_PARAMS=$(foreach l, $(LIB),	 -l$l)
 INC_PARAMS=$(foreach i, $(INC), -I$i)
 
-CFLAGS=-v -ggdb
+
+DEBUG=-v -ggdb 
+CFLAGS=$(DEBUG) -target mips64-unknown-freebsd13 -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 --sysroot=/Users/peter/Projects/CHERI/output/sdk/sysroot128 -B/Users/peter/Projects/CHERI/output/sdk/bin -mabi=purecap
 BUILDDIR=build
 OUTDIR=output
 
+CHERI_FSDIR=/Users/peter/Projects/cheri/extra-files/root/bin
+
 default : ukernel
+	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)
 
 ukernel : comesg_kern.o coport_utils.o comsg.o sys_comutex.o comutex.o coproc.o
 	$(CC) $(CCFLAGS) $(LIB_PARAMS) $(INC_PARAMS)  -o $(OUTDIR)/comesg_ukernel $(foreach o, $^, $(BUILDDIR)/$o)

@@ -17,7 +17,7 @@
 #define DEBUG
 
 worker_args_t * worker_strings[U_FUNCTIONS][WORKER_COUNT];
-char * worker_lookup[U_FUNCTIONS];
+char worker_lookup[U_FUNCTIONS][LOOKUP_STRING_LEN];
 int next_worker_i = 0;
 
 unsigned int next_port_index = 0;
@@ -43,7 +43,7 @@ int rand_string(char * buf,unsigned int len)
 		c=(char)rand_no+0x21;
 		s[i]=c;
 	}
-	s[len-1]=0;
+	s[len-1]='\0';
 	strcpy(buf,s);
 	free(s);
 	return 0;
@@ -313,7 +313,7 @@ void *manage_requests(void *args)
 	void * __capability cookie;
 
 	cocall_lookup_t lookup;
-	char * func_name;
+	char func_name[LOOKUP_STRING_LEN];
 
 	data=(request_handler_args_t *)args;
 	strcpy(func_name,data->func_name);
@@ -355,7 +355,7 @@ int coaccept_init(
 	error=coregister(target_name,0);
 	if (error!=0)
 	{
-		err(1,"could not coregister");
+		err(1,"could not coregister with name %s",target_name);
 	}
 	return 0;
 }
@@ -384,22 +384,26 @@ int spawn_workers(void * __capability func, pthread_t * threads, char * name)
 	worker_args_t args;
 	int e;
 	int w_i;
-	char thread_name[THREAD_STRING_LEN];
+	char * thread_name;
 
 	/* split into threads */
+	thread_name=malloc(THREAD_STRING_LEN*sizeof(char));
 	threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
 	w_i=++next_worker_i;
 	strcpy(worker_lookup[w_i],name);
+	printf("workers for %s\n",name);
+
 	for (int i = 0; i < WORKER_COUNT; i++)
 	{
 		rand_string(thread_name,THREAD_STRING_LEN);
-		strcpy(worker_strings[w_i][i]->name,thread_name);
 		strcpy(args.name,thread_name);
 		//printf("%s",thread_name);
 		e=pthread_attr_init(&thread_attrs);
+		printf("thr_name %s\n",args.name);
 		e=pthread_create(&thread,&thread_attrs,func,&args);
 		if (e==0)
 		{
+			memcpy(&worker_strings[w_i][i],&args,sizeof(worker_args_t));
 			threads[i]=thread;
 		}
 	}
