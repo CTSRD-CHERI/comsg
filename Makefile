@@ -17,7 +17,7 @@ default : ukernel cochatter
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)
 	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)
 
-ukernel : comesg_kern.o coport_utils.o comsg.o sys_comutex.o comutex.o coproc.o
+ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o 
 	$(CC) $(CFLAGS) $(LIB_PARAMS) $(INC_PARAMS)  -o $(OUTDIR)/comesg_ukernel $(foreach o, $^, $(BUILDDIR)/$o)
 
 cochatter : comsg_chatterer.o comsg.o coproc.o comutex.o
@@ -32,7 +32,7 @@ comesg_kern.o : src/ukernel/comesg_kern.c \
 	src/ukernel/include/comesg_kern.h include/coport.h \
 	include/comutex.h src/ukernel/include/sys_comsg.h \
 	src/ukernel/include/sys_comutex.h include/coport_utils.h \
-	include/coproc.h include/comsg.h
+	include/coproc.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/ukernel/comesg_kern.c -o $(BUILDDIR)/comesg_kern.o
 
 comutex.o: src/lib/comutex.c include/comutex.h \
