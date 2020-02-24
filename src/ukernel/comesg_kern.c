@@ -16,7 +16,7 @@
 
 #define DEBUG
 
-worker_args_t * worker_strings[U_FUNCTIONS][WORKER_COUNT];
+worker_args_t worker_strings[U_FUNCTIONS][WORKER_COUNT];
 char worker_lookup[U_FUNCTIONS][LOOKUP_STRING_LEN];
 int next_worker_i = 0;
 
