@@ -6,18 +6,18 @@
 
 typedef struct _sys_comutex_t
 {
-	comtx_t * __capability user_mtx;
-	comtx_t * __capability kern_mtx;
+	comtx_t * user_mtx;
+	comtx_t * kern_mtx;
 	char name[COMUTEX_NAME_LEN];
-	void * __capability key;
+	void * key;
 } sys_comutex_t;
 
 __inline int cmtx_cmp(comutex_t * a,comutex_t * b);
 __inline int cmtx_validate(comutex_t * a);
 
-int sys_cotrylock(sys_comutex_t * mutex, void * __capability key);
-int sys_colock(sys_comutex_t * mutex,void * __capability key);
-int sys_counlock(sys_comutex_t * mutex,void * __capability key);
+int sys_cotrylock(sys_comutex_t * mutex, void * key);
+int sys_colock(sys_comutex_t * mutex,void * key);
+int sys_counlock(sys_comutex_t * mutex,void * key);
 int sys_comutex_init(char * name, sys_comutex_t * m);
 
 #endif

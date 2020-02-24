@@ -139,8 +139,9 @@ void *coport_open(void *args)
 	void * __capability sw_code;
 	void * __capability sw_data;
 	void * __capability caller_cookie;
+	void * __capability target;
 
-	error=coaccept_init(&sw_code,&sw_data,data->name);
+	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,&coport_args,sizeof(coport_args));
@@ -183,8 +184,9 @@ void *comutex_setup(void *args)
 	void * __capability sw_code;
 	void * __capability sw_data;
 	void * __capability caller_cookie;
+	void * __capability target;
 	
-	error=coaccept_init(&sw_code,&sw_data,data->name);
+	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,&comutex_args,sizeof(comutex_args));
@@ -228,8 +230,9 @@ void *comutex_lock(void *args)
 	void * __capability sw_code;
 	void * __capability sw_data;
 	void * __capability caller_cookie;
+	void * __capability target;
 
-	error=coaccept_init(&sw_code,&sw_data,data->name);
+	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,&colock_args,sizeof(colock_args));
@@ -252,7 +255,8 @@ void *comutex_unlock(void *args)
 {
 	void * __capability sw_code;
 	void * __capability sw_data;
-	void * __capability caller_cookie;
+	void * __capability  caller_cookie;
+	void * __capability  target;
 
 	worker_args_t * data=args;
 	counlock_args_t colock_args;
@@ -264,8 +268,7 @@ void *comutex_unlock(void *args)
 	int index;
 	int lookup;
 
-	printf("supplied name: %s",data->name);
-	error=coaccept_init(&sw_code,&sw_data,data->name);
+	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,&colock_args,sizeof(colock_args));
@@ -299,21 +302,26 @@ void *manage_requests(void *args)
 {
 	int error;
 	int workers_index;
+	int j;
 
 	request_handler_args_t * data = args;
 
 	void * __capability sw_code;
 	void * __capability sw_data;
 	void * __capability cookie;
+	void * __capability target;
 
-	cocall_lookup_t lookup;
+	worker_args_t * workers;
 
-	error=coaccept_init(&sw_code,&sw_data,data->func_name);
+	cocall_lookup_t * lookup;
+
+	error=coaccept_init(&sw_code,&sw_data,data->func_name,&target);
 	workers_index=-1;
 	for(int i = 0; i < U_FUNCTIONS; i++)
 	{
 		if(strcmp(worker_lookup[i],data->func_name)==0)
 		{
+			workers=worker_strings[i];
 			workers_index=i;
 			break;
 		}
@@ -322,21 +330,24 @@ void *manage_requests(void *args)
 	{
 		err(1,"Function workers not registered");
 	}
+	lookup=malloc(sizeof(cocall_lookup_t));
 	for(;;)
 	{
 		for(int j = 0; j < WORKER_COUNT; j++)
 		{
-			printf("Lookup is size %lu",sizeof(cocall_lookup_t));
-			error=coaccept(sw_code,sw_data,&cookie,&lookup,sizeof(lookup));
-			error=colookup(worker_strings[workers_index][j]->name,lookup.target);
+			printf("coaccepting for %s",data->func_name);
+			error=coaccept(sw_code,sw_data,&cookie,lookup,sizeof(cocall_lookup_t));
+			printf("Lookup of %s is size %lu",workers[j].name,sizeof(cocall_lookup_t));
+			strcpy(lookup->target,workers[j].name);
 		}
 	}
 }
 
 int coaccept_init(
-	void * __capability __capability code_cap,
-	void * __capability __capability data_cap, 
-	char * target_name)
+	void * __capability * __capability  code_cap,
+	void * __capability * __capability  data_cap, 
+	char * target_name,
+	void * __capability * __capability target_cap)
 {
 	int error;
 	error=cosetup(COSETUP_COACCEPT,code_cap,data_cap);
@@ -344,12 +355,14 @@ int coaccept_init(
 	{
 		err(1,"ERROR: Could not cosetup.\n");
 	}
-	//printf("Attempting to coregister with name %s",target_name);
-	error=coregister(target_name,0);
+	printf("Attempting to coregister with name %s\n",target_name);
+
+	error=coregister(target_name,target_cap);
 	if (error!=0)
 	{
 		err(1,"ERROR: Could not coregister with name %s.\n",target_name);
 	}
+	printf("Successfully coregistered with name %s\n",target_name);
 	return 0;
 }
 
@@ -370,9 +383,9 @@ int comutex_tbl_setup()
 	return 0;
 }
 
-int spawn_workers(void * __capability func, pthread_t * threads, char * name)
+int spawn_workers(void * func, pthread_t * threads, char * name)
 {
-	pthread_t thread;
+	pthread_t * thread;
 	pthread_attr_t thread_attrs;
 	worker_args_t * args;
 	int e;
@@ -388,17 +401,18 @@ int spawn_workers(void * __capability func, pthread_t * threads, char * name)
 
 	for (int i = 0; i < WORKER_COUNT; i++)
 	{
+		thread=malloc(sizeof(pthread_t));
 		args=malloc(sizeof(worker_args_t));
 		rand_string(thread_name,THREAD_STRING_LEN);
 		strcpy(args->name,thread_name);
 		//printf("%s",thread_name);
 		e=pthread_attr_init(&thread_attrs);
 		//printf("thr_name %s\n",args->name);
-		e=pthread_create(&thread,&thread_attrs,func,args);
+		e=pthread_create(thread,&thread_attrs,func,args);
 		if (e==0)
 		{
 			memcpy(&worker_strings[w_i][i],&args,sizeof(worker_args_t));
-			threads[i]=thread;
+			threads[i]=*thread;
 		}
 		pthread_attr_destroy(&thread_attrs);
 	}
@@ -438,6 +452,7 @@ int main(int argc, const char *argv[])
 	verbose=1;
 	#endif
 
+
 	/* check we're in a colocated address space */
 
 	/* we can only have one handler per cocall string */
@@ -466,32 +481,39 @@ int main(int argc, const char *argv[])
 	printf("Spawning co-close listeners...\n");
 	error=spawn_workers(&coport_open,coclose_threads,U_COCLOSE);
 	*/
-	printf("Worker threads spawned.");
+	printf("Worker threads spawned.\n");
 
 	/* listen for coopen requests */
-	printf("Spawning request handlers...");
+	printf("Spawning request handlers...\n");
 	handler_args=malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COOPEN);
 	pthread_attr_init(&thread_attrs);
-	pthread_create(&coopen_handler,&thread_attrs,manage_requests,&handler_args);
+	pthread_create(&coopen_handler,&thread_attrs,manage_requests,handler_args);
+
+	/*
 	handler_args=malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COCLOSE);
 	pthread_attr_init(&thread_attrs);
-	pthread_create(&counlock_handler,&thread_attrs,manage_requests,&handler_args);
+	pthread_create(&counlock_handler,&thread_attrs,manage_requests,handler_args);
+	*/
+
 	handler_args=malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COUNLOCK);
 	pthread_attr_init(&thread_attrs);
-	pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,&handler_args);
+	pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,handler_args);
+
 	handler_args=malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COLOCK);
 	pthread_attr_init(&thread_attrs);
-	pthread_create(&colock_handler,&thread_attrs,manage_requests,&handler_args);
+	pthread_create(&colock_handler,&thread_attrs,manage_requests,handler_args);
+
 	handler_args=malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COMUTEX_INIT);
 	pthread_attr_init(&thread_attrs);
-	pthread_create(&coclose_handler,&thread_attrs,manage_requests,&handler_args);
+	pthread_create(&coclose_handler,&thread_attrs,manage_requests,handler_args);
 
-	pthread_join(coopen_handler,NULL);
+	pthread_join(coopen_threads[0],NULL);
+	pthread_join(coclose_handler,NULL);
 
 	return 0;
 }

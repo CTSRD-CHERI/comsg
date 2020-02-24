@@ -4,6 +4,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <err.h>
+#include <string.h>
 
 const char * port_name = "benchmark_port";
 const char * ts_port_name = "timestamp_port";
@@ -68,16 +70,18 @@ int main(int argc, char const *argv[])
 {
 	pid_t pid;
 
-	pid=fork();
-
-	if(pid==0)
+	if(strcmp(argv[1],"-r"))
 	{
 		receive_data();
 
 	}
-	else
+	else if (strcmp(argv[1],"-s"))
 	{
 		send_data();
+	}
+	else
+	{
+		err(1,"invalid options");
 	}
 
 	return 0;

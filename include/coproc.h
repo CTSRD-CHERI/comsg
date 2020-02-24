@@ -3,11 +3,11 @@
 
 #include "comutex.h"
 #include "coport.h"
+#include "sys_comsg.h"
 
 typedef struct _cocall_lookup_t
 {
-	char func_name[PATH_MAX];
-	void * __capability target;
+	char target[LOOKUP_STRING_LEN];
 } cocall_lookup_t;
 
 typedef struct _coopen_args_t
@@ -19,7 +19,7 @@ typedef struct _coopen_args_t
 typedef struct _cocall_coopen_t
 {
 	coopen_args_t args;
-	coport_t * __capability port; 
+	coport_t * port; 
 } cocall_coopen_t;
 
 typedef struct _comutex_init_args_t
@@ -30,7 +30,7 @@ typedef struct _comutex_init_args_t
 typedef struct _cocall_comutex_init_t
 {
 	cocall_comutex_init_args_t args;
-	comutex_t * __capability mutex; 
+	comutex_t * mutex; 
 } cocall_comutex_init_t;
 
 typedef struct _colock_args_t
@@ -41,8 +41,8 @@ typedef struct _colock_args_t
 typedef struct _colock_args_t counlock_args_t;
 
 
-int ukern_lookup(void * __capability __capability code, 
-	void * __capability __capability data, const char * target_name, 
-	void * __capability __capability target_cap);
+int ukern_lookup(void *  *code, 
+	void *  *data, const char * target_name, 
+	void *  *target_cap);
 
 #endif

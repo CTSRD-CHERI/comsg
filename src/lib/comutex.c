@@ -10,9 +10,9 @@
 int counlock(comutex_t * mtx)
 {
 	counlock_args_t call_data;
-	void * __capability sw_code;
-	void * __capability sw_data;
-	void * __capability func;
+	void * sw_code;
+	void * sw_data;
+	void * func;
 	int error;
 
 	error=ukern_lookup(&sw_code,&sw_data,U_COUNLOCK,&func);
@@ -22,12 +22,12 @@ int counlock(comutex_t * mtx)
 	return call_data.result;
 }
 
-int colock(comutex_t * mtx, void * __capability key)
+int colock(comutex_t * mtx, void * key)
 {
 	colock_args_t call_data;
-	void * __capability sw_code;
-	void * __capability sw_data;
-	void * __capability func;
+	void * sw_code;
+	void * sw_data;
+	void * func;
 	int error;
 
 
@@ -42,9 +42,9 @@ int colock(comutex_t * mtx, void * __capability key)
 int comutex_init(char * mtx_name, comutex_t * mutex)
 {
 	/* call into ukernel to create shared place mtx->lock can live */
-	void * __capability sw_code;
-	void * __capability sw_data;
-	void * __capability func;
+	void * sw_code;
+	void * sw_data;
+	void * func;
 	cocall_comutex_init_t call_data;
 	int error;
 

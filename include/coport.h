@@ -38,7 +38,7 @@ typedef enum {COCHANNEL, COCARRIER, COPIPE} coport_type_t;
  */
 typedef struct _coport_t
 {
-	void * __capability buffer;
+	void * buffer;
 	u_int length;
 	u_int start;
 	u_int end;

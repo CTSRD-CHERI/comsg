@@ -66,7 +66,7 @@ __inline int cmtx_validate(comutex_t * a)
 	return result;
 }
 
-int sys_cotrylock(sys_comutex_t * mutex, void * __capability key)
+int sys_cotrylock(sys_comutex_t * mutex, void * key)
 {
 	comtx_t * mtx;
 
@@ -88,7 +88,7 @@ int sys_cotrylock(sys_comutex_t * mutex, void * __capability key)
 	return 2;
 }
 
-int sys_colock(sys_comutex_t * mutex,void * __capability key)
+int sys_colock(sys_comutex_t * mutex,void * key)
 {
 	//TODO-PBB: convert to sleep with signal?
 	while(sys_cotrylock(mutex,key)==0)
@@ -98,11 +98,11 @@ int sys_colock(sys_comutex_t * mutex,void * __capability key)
 	return 0;
 }
 
-int sys_counlock(sys_comutex_t * mutex,void * __capability key)
+int sys_counlock(sys_comutex_t * mutex,void * key)
 {
 	comtx_t * mtx;
-	atomic_int * __capability unlocked;
-	atomic_int * __capability locked;
+	atomic_int * unlocked;
+	atomic_int * locked;
 
 	mtx=mutex->kern_mtx;
 	if(atomic_load(mtx->check_lock)==COMUTEX_UNLOCKED)
@@ -128,7 +128,7 @@ int sys_counlock(sys_comutex_t * mutex,void * __capability key)
 int sys_comutex_init(char * name, sys_comutex_t * m)
 {
 	comtx_t * mtx;
-	atomic_int * __capability val;
+	atomic_int * val;
 
 	val=(_Atomic int *)malloc(sizeof(int));
 	*val=COMUTEX_UNLOCKED;

@@ -35,13 +35,13 @@ typedef struct _comtx_t
 
 typedef struct _comutex_t
 {
-	comtx_t * __capability mtx;
+	comtx_t * mtx;
 	char * name;
-	void * __capability key;
+	void * key;
 } comutex_t;
 
 int counlock(comutex_t * mtx);
-int colock(comutex_t * mtx, void * __capability key);
+int colock(comutex_t * mtx, void * key);
 int comutex_init(char * mtx_name, comutex_t * mutex);
 
 #endif

@@ -14,9 +14,9 @@
 int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 {
 	/* request new coport from microkernel */
-	void * __capability switcher_code;
-	void * __capability switcher_data;
-	void * __capability func;
+	void * switcher_code;
+	void * switcher_data;
+	void * func;
 
 
 	cocall_coopen_t call;
@@ -26,7 +26,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 
 	/* cocall setup */
 	//TODO-PBB: Only do this once.
-	error=ukern_lookup(switcher_code,switcher_data,U_COOPEN,func);
+	error=ukern_lookup(&switcher_code,&switcher_data,U_COOPEN,&func);
 
 	strcpy(call.args.name,coport_name);
 	call.args.type=type;
@@ -37,7 +37,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	return 0;
 }
 
-int cosend(coport_t * port, const void * __capability buf, size_t len)
+int cosend(coport_t * port, const void * buf, size_t len)
 {
 	unsigned int old_end;
 	//we need some atomicity on changes toe end and start
@@ -53,8 +53,8 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 	}
 	else if(port->type==COCARRIER)
 	{
-		void * __capability __capability msg_cap;
-		void * __capability msg_buf;
+		void * msg_cap;
+		void * msg_buf;
 		//map buffer of size len
 		//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
 		msg_buf=(void *) malloc(len);
@@ -70,7 +70,7 @@ int cosend(coport_t * port, const void * __capability buf, size_t len)
 	return 0;
 }
 
-int corecv(coport_t * port, void * __capability buf, size_t len)
+int corecv(coport_t * port, void * buf, size_t len)
 {
 	//we need more atomicity on changes to end
 	int old_start;
