@@ -7,8 +7,8 @@
 #include <err.h>
 #include <string.h>
 
-const char * port_name = "benchmark_port";
-const char * ts_port_name = "timestamp_port";
+static const char * port_name = "benchmark_port";
+//static const char * ts_port_name = "timestamp_port";
 
 #define	timespecsub(vvp, uvp)						\
 	do {								\
@@ -20,7 +20,7 @@ const char * ts_port_name = "timestamp_port";
 		}							\
 	} while (0)
 
-void send_data()
+static void send_data()
 {
 	u_int * buf;
 	struct timespec start_timestamp;
@@ -36,8 +36,8 @@ void send_data()
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
 	cosend(&port,buf,4096);
 }
-
-void send_timestamp(struct timespec * timestamp)
+/*
+static void send_timestamp(struct timespec * timestamp)
 {
 	coport_t port;
 	int status;
@@ -46,8 +46,8 @@ void send_timestamp(struct timespec * timestamp)
 	cosend(&port,timestamp,sizeof(timestamp));
 	
 }
-
-void receive_data()
+	*/
+	static void receive_data()
 {
 	u_int * buf;
 	struct timespec start,end;
@@ -64,11 +64,12 @@ void receive_data()
 	clock_gettime(CLOCK_REALTIME,&end);
 }
 
-void receive_timestamp();
-
 int main(int argc, char const *argv[])
 {
-	pid_t pid;
+	if(argc==0)
+	{
+		err(1,"must supply either -s or -r");
+	}
 
 	if(strcmp(argv[1],"-r"))
 	{

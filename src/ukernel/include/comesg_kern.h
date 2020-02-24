@@ -52,12 +52,12 @@ typedef struct _comutex_tbl_t
 } comutex_tbl_t;
 
 
-int generate_id();
+int generate_id(void);
 int rand_string(char * buf,unsigned int len);
 int add_port(coport_tbl_entry_t * entry);
 int add_mutex(comutex_tbl_entry_t * entry);
-int lookup_port(char * port_name,coport_t * port_buf);
-int lookup_mutex(char * mtx_name,sys_comutex_t * mtx_buf);
+int lookup_port(char * port_name,coport_t ** port_buf);
+int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf);
 void *coport_open(void *args);
 void *comutex_setup(void *args);
 void *comutex_lock(void *args);
@@ -69,10 +69,10 @@ int coaccept_init(
 	void * __capability * __capability  data_cap, 
 	char * target_name,
 	void * __capability * __capability target_cap);
-int coport_tbl_setup();
-int comutex_tbl_setup();
-int spawn_workers(void * func, pthread_t * threads, char * name);
-void run_tests();
+int coport_tbl_setup(void);
+int comutex_tbl_setup(void);
+int spawn_workers(void * func, pthread_t * threads, const char * name);
+void run_tests(void);
 int main(int argc, const char *argv[]);
 
 

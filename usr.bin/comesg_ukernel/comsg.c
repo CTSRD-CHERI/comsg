@@ -20,7 +20,6 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 
 
 	cocall_coopen_t call;
-	cocall_lookup_t lookup;
 
 	uint error;
 
@@ -49,7 +48,7 @@ int cosend(coport_t * port, const void * buf, size_t len)
 		}
 		old_end=port->end;
 		port->end=port->end+len;
-		memcpy(port->buffer+old_end, buf, len);
+		memcpy((char *)port->buffer+old_end, buf, len);
 	}
 	else if(port->type==COCARRIER)
 	{
@@ -65,7 +64,7 @@ int cosend(coport_t * port, const void * buf, size_t len)
 		//append capability to buffer
 		old_end=port->end;
 		port->end=port->end+CHERICAP_SIZE;
-		memcpy(port->buffer+old_end,msg_cap,CHERICAP_SIZE);
+		memcpy((char *)port->buffer+old_end,msg_cap,CHERICAP_SIZE);
 	}
 	return 0;
 }
@@ -86,7 +85,7 @@ int corecv(coport_t * port, void * buf, size_t len)
 		}
 		old_start=port->start;
 		port->start=port->start+len;
-		memcpy(buf,port->buffer+old_start, len);
+		memcpy(buf,(char *)port->buffer+old_start, len);
 		port->start=port->start+len;
 	}
 	else if(port->type==COCARRIER)
@@ -98,8 +97,8 @@ int corecv(coport_t * port, void * buf, size_t len)
 		old_start=port->start;
 		port->start=port->start+CHERICAP_SIZE;
 		//pop next cap from buffer into buf (index indicated by start)
-		buf=port->buffer+old_start;
-		memcpy(port->buffer+old_start,(void *)NULL,CHERICAP_SIZE);
+		buf=(char *)port->buffer+old_start;
+		memcpy((char *)port->buffer+old_start,(void *)NULL,CHERICAP_SIZE);
 		//perhaps inspect length and perms for safety
 		if(cheri_getlen(buf)!=len)
 		{

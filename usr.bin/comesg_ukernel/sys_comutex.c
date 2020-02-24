@@ -16,18 +16,20 @@
 #define MTX_PERMS (CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP)
 
 
-
 //XXX-PBB: Thinking about changing these, hence the defines.
 #define LOCK_SUCC memory_order_seq_cst
 #define LOCK_FAIL memory_order_seq_cst
 #define UNLOCK_SUCC memory_order_er
 
 #define ATOMIC_CAS(a,b,c) \
-	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
+	atomic_compare_exchange_weak_explicit(a,&b,c,LOCK_SUCC,LOCK_FAIL)
 #define ATOMIC_CAS_LOCK(a,b,c) \
-	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
+	atomic_compare_exchange_weak_explicit(a,&b,c,LOCK_SUCC,LOCK_FAIL)
 #define ATOMIC_CAS_UNLOCK(a,b,c) \
-	atomic_compare_exchange_weak_explicit(a,b,c,LOCK_SUCC,LOCK_FAIL)
+	atomic_compare_exchange_weak_explicit(a,&b,c,LOCK_SUCC,LOCK_FAIL)
+
+int LOCKED = COMUTEX_LOCKED;
+int UNLOCKED = COMUTEX_UNLOCKED;
 
 __inline int cmtx_cmp(comutex_t * a,comutex_t * b)
 {
@@ -71,13 +73,13 @@ int sys_cotrylock(sys_comutex_t * mutex, void * key)
 	comtx_t * mtx;
 
 	mtx=mutex->kern_mtx;
-	if(atomic_load(mtx->check_lock)==COMUTEX_LOCKED)
+	if(atomic_load(mtx->check_lock)==LOCKED)
 	{
 		return 1;
 	}
-	else if (ATOMIC_CAS(mtx->lock,COMUTEX_UNLOCKED,COMUTEX_LOCKED))
+	else if (ATOMIC_CAS(mtx->lock,UNLOCKED,LOCKED))
 	{
-		if(*mtx->check_lock!=COMUTEX_LOCKED)
+		if(*mtx->check_lock!=LOCKED)
 		{
 			err(4,"atomic cas on mtx->lock did not propagate");
 		}
@@ -105,7 +107,7 @@ int sys_counlock(sys_comutex_t * mutex,void * key)
 	atomic_int * locked;
 
 	mtx=mutex->kern_mtx;
-	if(atomic_load(mtx->check_lock)==COMUTEX_UNLOCKED)
+	if(atomic_load(mtx->check_lock)==UNLOCKED)
 	{
 		return 1;
 	}
@@ -115,8 +117,8 @@ int sys_counlock(sys_comutex_t * mutex,void * key)
 		unlocked=cheri_unseal(mtx->lock,key);
 
 		mtx->lock=unlocked;
-		atomic_store(mtx->lock,COMUTEX_UNLOCKED);
-		if(*mtx->check_lock!=COMUTEX_UNLOCKED)
+		atomic_store(mtx->lock,UNLOCKED);
+		if(*mtx->check_lock!=UNLOCKED)
 		{
 			err(3,"cas to mtx->lock via unlocked did not propagate");
 		}

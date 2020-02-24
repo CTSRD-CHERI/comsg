@@ -12,8 +12,6 @@
 
 int init_port(coport_type_t type, coport_t * p)
 {
-	int error;
-
 	/*
 	 * TODO-PBB: We will replace this mmap call so that its job is performed by
 	 * a worker thread ahead of time, avoiding the context switch from the 
@@ -25,6 +23,7 @@ int init_port(coport_type_t type, coport_t * p)
 	p->start=0;
 	p->end=0;
 	p->status=COPORT_OPEN;
+	p->type=type;
 
 	return 0;
 }
