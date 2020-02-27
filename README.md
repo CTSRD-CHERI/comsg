@@ -3,78 +3,92 @@
 ## What we currently have:
 
 1. Basic microkernel/ipc functionality 
-	* we currently use a generic coport_t struct with an enum 'type' field for all flavours
-	* semantics are a bit fiddly with cocall, but I've made them friendlier 
-	* supported operations:
-		+ create new ipc channel
-		+ lookup existing ipc channel
-	* infrastructure:
-		+ table tracking coports in microkernel 
-		+ support for multi-threading in microkernel to expose multiple functions
-			- named function is cocalled into
-			- this function returns the capability required to cocall the worker thread handling calls to the "real" function
-			- ideally we only do this once per named function per caller
-			- worker allocations are not smart (but are predictable; possible side channel?)
+	* We currently use a generic coport_t struct with an enum 'type' field for all flavours
+	* Semantics are a bit fiddly with cocall, but I've made them friendlier 
+	* Supported operations:
+		+ Create new ipc channel
+		+ Lookup existing ipc channel
+		+ Create comutex
+		+ Lock/unlock comutex
+		+ Lookup existing comutex
+	* Infrastructure:
+		+ Tables tracking coports and comutexes in microkernel 
+		+ Support for multi-threading in microkernel to expose multiple functions
+			- Named function is cocalled into (e.g. coopen or colock)
+			- This function returns the capability required to cocall the worker thread. This thread actually does the work.
+			- Ideally, we only do this once per named function per caller
+			- Worker allocations are not smart (but are predictable; possible side channel/route for targeted Denial-of-service)
 2. Three ipc types
-	* all currently follow anycast behaviour (one to one of many)
-		+ or at least, they should, if we can make the necessary things atomic/safe
+	* All currently follow anycast behaviour (one to one of many)
+		+ Or at least, they should; I haven't verified atomicity of the operations to guarantee this
+		+ This is on a per-message basis; there may be many senders over multiple messages.
 	* COCHANNEL 
-		+ shared circular buffer.
+		+ Shared circular buffer, by default 4096B to align with page size.
 	* COCARRIER 
-		+ single-copy message passing 
-		+ message is copied into a read only buffer to which sender relinquishes store capability over
-		+ receive operation grants recipient a load capability.
+		+ Single-copy message passing
+		+ Message is copied into a read only buffer to which sender relinquishes store capability over
+		+ Receive operation grants recipient a load capability.
 	* COPIPE 
-		+ intended to be synchronous, behave mostly like a pipe.
-		+ might replace COCHANNEL if these start converging for name recognition.
+		+ Intended to be synchronous, behave mostly like a pipe.
+		+ Might replace COCHANNEL if these start converging for name recognition.
 3. comutexes
-	* cross-process mutexes 
-	* very much unfinished, do not work, and are not real... yet.
-		+ there is some code that definitely doesn't work because I don't know how to atomic compare-and-swap capabilities
-	* I am not 100% decided on how/if we should do these yet
-		+ we need *something* like this, even if it's cmpset based or similar
-		+ might just be calls into the microkernel
-		+ might use capability sealing/unsealing as locking/unlocking
-			- could very easily manage shared objects this way
-			- might want to split these into two things
+	* Cross-process mutexes 
+	* These need a bit of reworking at present, there were two lines of thinking that converged with remnants of the abandoned parts in the actual implementation
+	* Locking, setup, and unlocking go through the microkernel
+	* When they're locked, the write capability to the lock variable is sealed
+	* The sealing capability is kept by both the microkernel and the sealing thread
+		+ The microkernel keeps it in case the thread exits without releasing the comutex
+	* Could very easily manage shared objects similarly
+		+ This could form the basis of another IPC primitive.
 	* The current line of thinking is:
 		+ Setup of mutual exclusion locks will be managed by the microkernel, similar to POSIX semaphores.
+		+ Comutexes are named in the microkernel.
+		+ Sealing is used to avoid syscall-based checks for thread ID or similar.
 
 ## Current outstanding questions:
 
-1. How to make certain operations atomic so that we don't mess up during key stages
-	* atomic compare and swap for capabilities? does this exist?
-2. How to ensure that we clean up after threads when they exit
-	* atexit only works in normal exits
-	* microkernel could maintain a list of threads that have called into it
-		* periodically check whether these have exited
-		* atexit could delete a thread from this list after cleanup
-3. *Should* COCHANNEL messages be read-only?
-	* when do we deallocate the buffers? memory leakage is a concern.
-	* programs might want to do things with the data besides read, and we should try and support this.
 
-## What we would like from cocall/should find a way to implement:
+1. How can we ensure that we clean up after threads when they exit?
+	* atexit only works for 'normal' exits
+	* Microkernel could maintain a list of threads that have called into it
+		+ Periodically check whether these have exited?
+			- Perhaps by inspecting SCBs
+		+ atexit could delete a thread from this list after cleanup
+2. *Should* COCARRIER messages be read-only?
+	* When do we deallocate the buffers? memory leakage is a concern.
+	* Programs might want to do things with the data besides read, and we should try and support this.
+		+ This might be fine, as they can simply copy messages out if they want to do this. 
+3. Why doesn't it work? :/
+	* We currently get a seal violation on attempting to cocall into the lookup functions. 
+	* This might be an easy fix, will be talking to Ed about this.
+
+
+## What we would like from cocall et al/should find a way to implement:
 
 1. Not losing the switcher code/data capabilities down the back of the sofa
 	* cosetup(2) gives us these even if we do lose them, but this is a syscall
-	* not super vital, but would make the semantics friendlier IMO
+	* Not super vital, but would make the semantics friendlier IMO
 
-## Changes we have made to cocall/other aspects
+## Changes we have made to cocall et al
 
-1. re-register dead names
-2. "reference" counting for coports
-	* keep track of how many people could be using a coport
-	* if that number hits 0, we can consider removing it
+1. re-register dead names (https://github.com/CTSRD-CHERI/cheribsd/pull/392)
+	* Previously, coregister(2) didn't allow you to use names registered previously by now dead threads
+		- This made testing a bit of a pain, so I reworked the bit where this happens to check if the thread has died.
 
-## Definitely TODO:
+## Probably TODO:
 
 1. Apply principle of least privileges to coport_t struct members.
+	* When implementing comutexes, I separated out some struct members based on their required permissions. I think this is a good idea and would like to apply this to coports.
 2. Smooth things out; I believe there are currently a lot of rough edges
-	* particularly around who has capabilities to what
-	* Some operations which currently happen 'locally' might be better implemented as calls to the microkernel
+	* Particularly around who has capabilities to what
+	* Some operations which currently happen 'locally' might be better implemented as calls to the microkernel 
+		+ This was done for the comutex implementation
+3. "Reference" counting for coports
+	* Keep track of how many 'users' could be using a coport
+	* if that number hits 0, we can consider removing it
 
 ## Possibly TODO:
 
 1. Develop an interface for programs to use the multi-consumer cocall we use to handle calls to the microkernel
 	* effectively, service registration
-	* microkernel receives the call, returns a string
+	* microkernel receives the call, returns a string or capability like colookup(2)
