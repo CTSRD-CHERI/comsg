@@ -57,6 +57,6 @@ int ukern_lookup(void * __capability * __capability code,
 	}
 	//error=colookup(lookup_data->target,target_cap);
 	*target_cap=lookup_data->cap;
-	free(lookup_data);
+	//free(lookup_data);
 	return 0;
 }

@@ -1,32 +1,40 @@
 #include "comesg_kern.h"
 
 #include <err.h>
+#include <stdatomic.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "coport.h"
 #include "coport_utils.h"
 #include "coproc.h"
 #include "sys_comsg.h"
+#include "ukern_mman.h"
 
 
 #define DEBUG
 
 worker_map_entry_t worker_map[U_FUNCTIONS];
-int next_worker_i = 0;
+_Atomic int next_worker_i = 0;
 
-unsigned int next_port_index = 0;
+_Atomic unsigned int next_port_index = 0;
 comutex_tbl_t comutex_table;
 coport_tbl_t coport_table;
 
+
+const int COPORT_TBL_LEN = (MAX_COPORTS*sizeof(coport_tbl_entry_t));
+const int COMTX_TBL_LEN = (MAX_COMUTEXES*sizeof(comutex_tbl_entry_t));
+
+
 int generate_id(void)
 {
-	static int id_counter = 0;
 	// TODO: Replace this with something smarter.
-	return ++id_counter;
+	return random();
 }
 
 int rand_string(char * buf,unsigned int len)
@@ -48,7 +56,7 @@ int rand_string(char * buf,unsigned int len)
 	return 0;
 }
 
-int add_port(coport_tbl_entry_t * entry)
+int add_port(coport_tbl_entry_t entry)
 {
 	int entry_index;
 	pthread_mutex_lock(&coport_table.lock);
@@ -57,13 +65,13 @@ int add_port(coport_tbl_entry_t * entry)
 		pthread_mutex_unlock(&coport_table.lock);
 		return 1;
 	}
-	memcpy(&coport_table.table[coport_table.index],entry,sizeof(coport_tbl_entry_t));
-	entry_index=++coport_table.index;
+	coport_table.table[coport_table.index]=entry;
+	entry_index=coport_table.index++;
 	pthread_mutex_unlock(&coport_table.lock);
 	return entry_index;
 }
 
-int add_mutex(comutex_tbl_entry_t * entry)
+int add_mutex(comutex_tbl_entry_t entry)
 {
 	int entry_index;
 	
@@ -73,8 +81,8 @@ int add_mutex(comutex_tbl_entry_t * entry)
 		pthread_mutex_unlock(&comutex_table.lock);
 		return 1;
 	}
-	memcpy(&comutex_table.table[comutex_table.index],entry,sizeof(comutex_tbl_entry_t));
-	entry_index=++comutex_table.index;
+	comutex_table.table[comutex_table.index]=entry;
+	entry_index=comutex_table.index++;
 	pthread_mutex_unlock(&comutex_table.lock);
 	return entry_index;
 }
@@ -90,9 +98,11 @@ int lookup_port(char * port_name,coport_t ** port_buf)
 		if(strcmp(port_name,coport_table.table[i].name)==0)
 		{
 			*port_buf=&coport_table.table[i].port;
+			*port_buf=cheri_csetbounds(*port_buf,sizeof(coport_t));
 			return 0;
-		}
+		}	
 	}
+	//printf("port %s not found",port_name);
 	*port_buf=NULL;
 	return 1;
 }
@@ -159,9 +169,7 @@ void *coport_open(void *args)
 	coport_tbl_entry_t table_entry;
 	coport_t port,*prt;
 
-
 	char port_name[COPORT_NAME_LEN];
-	coport_type_t type;
 
 	void * __capability sw_code;
 	void * __capability sw_data;
@@ -169,37 +177,70 @@ void *coport_open(void *args)
 	void * __capability target;
 
 	coport_args=malloc(sizeof(cocall_coopen_t));
-	memset(coport_args,0,sizeof(cocall_coopen_t));
+	//port=malloc(sizeof(coport_t));
+	//memset(port,0,sizeof(coport_t));
 
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	data->cap=target;
 	update_worker_args(data,U_COOPEN);
 	for (;;)
 	{
-		error=coaccept(sw_code,sw_data,&caller_cookie,coport_args,sizeof(coport_args));
+		error=coaccept(sw_code,sw_data,&caller_cookie,coport_args,sizeof(cocall_coopen_t));
+		atomic_thread_fence(memory_order_acquire);
+		//printf("coopening...\n");
 		/* check args are acceptable */
 		strcpy(port_name,coport_args->args.name);
+		//printf("coport name:%s\n", coport_args->args.name);
 		/* check if port exists */
-		lookup=lookup_port(port_name,&prt);
+		/* if it doesn't, we need to be sure we don't get into a race to create it */
+		pthread_mutex_lock(&coport_table.lock);
+		lookup=lookup_port(coport_args->args.name,&prt);
 		if(lookup==1)
 		{
+			
 			/* if it doesn't, set up coport */
-			type=coport_args->args.type;
-			error=init_port(type,&port);
-			table_entry.port=port;
-			table_entry.id=generate_id();
-			strcpy(table_entry.name,port_name);
-			index=add_port(&table_entry);
+			//printf("type read:%u\n",coport_args->args.type);
+			//printf("initing port...\n");
+			error=init_port(coport_args->args.type,&port);
 			if(error!=0)
 			{
 				err(1,"unable to init_port");
 			}
-			prt=&coport_table.table[index].port;
+			//printf("inited port.\n");
+			table_entry.port=port;
+			table_entry.id=generate_id();
+			strcpy(table_entry.name,port_name);
+			index=add_port(table_entry);
+			//printf("coport %s added to table\n",coport_args->args.name);
+			//printf("buffer_perms: %lx\n",cheri_getperm(port->buffer));
+			prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(coport_t));
 		}
+		pthread_mutex_unlock(&coport_table.lock);
 		coport_args->port=prt;
+		atomic_thread_fence(memory_order_release);
 	}
-	free(coport_args);
+	//free(coport_args);
 	return 0;
+}
+
+void create_comutex(comutex_t * cmtx,char * name)
+{
+	int error;
+	sys_comutex_t * sys_mtx;
+	comutex_tbl_entry_t table_entry;
+
+	sys_mtx=ukern_malloc(sizeof(sys_comutex_t));
+	error=sys_comutex_init(name,sys_mtx);
+	
+	table_entry.id=generate_id();
+	table_entry.mtx=*sys_mtx;
+
+	cmtx->mtx=sys_mtx->user_mtx;
+	strcpy(cmtx->name,name);
+
+	error=add_mutex(table_entry);
+
+	return;
 }
 
 void *comutex_setup(void *args)
@@ -228,19 +269,22 @@ void *comutex_setup(void *args)
 		/* check args are acceptable */
 
 		/* check if mutex exists */
+		pthread_mutex_lock(&comutex_table.lock);
 		lookup=lookup_mutex(comutex_args.args.name,&mtx);
 		if(lookup==1)
 		{
 			/* if it doesn't, set up mutex */
+			mtx=ukern_malloc(sizeof(sys_comutex_t));
 			error=sys_comutex_init(comutex_args.args.name,mtx);
 			table_entry.mtx=*mtx;
 			table_entry.id=generate_id();
-			index=add_mutex(&table_entry);
+			index=add_mutex(table_entry);
 			if(error!=0)
 			{
 				err(1,"unable to init_port");
 			}
 		}
+		pthread_mutex_unlock(&comutex_table.lock);
 		strcpy(comutex_args.mutex->name,mtx->name);
 		comutex_args.mutex->mtx=mtx->user_mtx;
 		comutex_args.mutex->key=NULL;
@@ -363,7 +407,8 @@ void *manage_requests(void *args)
 	{
 		err(1,"Function workers not registered");
 	}
-	lookup=malloc(sizeof(cocall_lookup_t));
+	lookup=ukern_malloc(sizeof(cocall_lookup_t));
+	memset(lookup,0,sizeof(cocall_lookup_t));
 	for(;;)
 	{
 		for(int j = 0; j < WORKER_COUNT; j++)
@@ -371,10 +416,7 @@ void *manage_requests(void *args)
 			//printf("coaccepting for %s\n",data->func_name);
 			error=coaccept(sw_code,sw_data,&cookie,lookup,sizeof(cocall_lookup_t));
 			//printf("Lookup of %s is size %lu",workers[j].name,sizeof(cocall_lookup_t));
-			printf("a:validity: %u\n",cheri_gettag(workers[j].cap));
 			lookup->cap=workers[j].cap;
-			printf("b:validity: %u\n",cheri_gettag(lookup->cap));
-
 		}
 	}
 }
@@ -391,31 +433,42 @@ int coaccept_init(
 	{
 		err(1,"ERROR: Could not cosetup.\n");
 	}
-	printf("Attempting to coregister with name %s\n",target_name);
+	//printf("Attempting to coregister with name %s\n",target_name);
 
 	error=coregister(target_name,target_cap);
 	if (error!=0)
 	{
 		err(1,"ERROR: Could not coregister with name %s.\n",target_name);
 	}
-	printf("Successfully coregistered with name %s\n",target_name);
-	printf("validity: %u\n",cheri_gettag(*target_cap));
+	//printf("Successfully coregistered with name %s\n",target_name);
+	//printf("validity: %u\n",cheri_gettag(*target_cap));
 
 	return 0;
 }
 
 int coport_tbl_setup(void)
 {
-	int error=pthread_mutex_init(&coport_table.lock,0);
+	pthread_mutexattr_t lock_attr;
+	pthread_mutexattr_init(&lock_attr);
+	pthread_mutexattr_settype(&lock_attr,PTHREAD_MUTEX_RECURSIVE);
+	int error=pthread_mutex_init(&coport_table.lock,&lock_attr);
 	coport_table.index=0;
+	coport_table.table=ukern_malloc(COPORT_TBL_LEN);
+	mlock(coport_table.table,COPORT_TBL_LEN);
+
 	/* reserve a superpage or two for this, entries should be small */
 	/* reserve a few superpages for ports */
 	return error;
 }
 int comutex_tbl_setup(void)
 {
-	int error=pthread_mutex_init(&comutex_table.lock,0);
+	pthread_mutexattr_t lock_attr;
+	pthread_mutexattr_init(&lock_attr);
+	pthread_mutexattr_settype(&lock_attr,PTHREAD_MUTEX_RECURSIVE);
+	int error=pthread_mutex_init(&comutex_table.lock,&lock_attr);
 	comutex_table.index=0;
+	comutex_table.table=ukern_malloc(COMTX_TBL_LEN);
+	mlock(comutex_table.table,COMTX_TBL_LEN);
 	/* reserve a superpage or two for this, entries should be small */
 	/* reserve a few superpages for ports */
 	return error;
@@ -431,16 +484,16 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
 	char * thread_name;
 
 	/* split into threads */
-	thread_name=malloc(THREAD_STRING_LEN*sizeof(char));
-	threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
+	thread_name=ukern_malloc(THREAD_STRING_LEN*sizeof(char));
+	threads=(pthread_t *) ukern_malloc(WORKER_COUNT*sizeof(pthread_t));
 	w_i=++next_worker_i;
 	strcpy(worker_map[w_i].func_name,name);
 	//	printf("workers for %s\n",name);
 
 	for (int i = 0; i < WORKER_COUNT; i++)
 	{
-		thread=malloc(sizeof(pthread_t));
-		args=malloc(sizeof(worker_args_t));
+		thread=ukern_malloc(sizeof(pthread_t));
+		args=ukern_malloc(sizeof(worker_args_t));
 		rand_string(thread_name,THREAD_STRING_LEN);
 		strcpy(args->name,thread_name);
 		args->cap=NULL;
@@ -469,6 +522,8 @@ int main(int argc, const char *argv[])
 	int verbose;
 	int error;
 	request_handler_args_t * handler_args;
+
+	pthread_t memory_manager;
 	pthread_t coopen_threads[WORKER_COUNT];
 	pthread_t counlock_threads[WORKER_COUNT];
 	pthread_t comutex_init_threads[WORKER_COUNT];
@@ -502,6 +557,15 @@ int main(int argc, const char *argv[])
 	/*  */
 	/* set up table */
 	printf("Starting comesg microkernel...\n");
+	printf("Starting memory manager...\n");
+	pthread_attr_init(&thread_attrs);
+	pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
+
+	while(jobs_queue.max_len!=(WORKER_COUNT*U_FUNCTIONS)+2)
+	{
+		__asm("nop");
+	}
+
 	error=coport_tbl_setup();
 	error+=comutex_tbl_setup();
 	if(error!=0)
@@ -528,24 +592,24 @@ int main(int argc, const char *argv[])
 
 	/* listen for coopen requests */
 	printf("Spawning request handlers...\n");
-	handler_args=malloc(sizeof(request_handler_args_t));
+	handler_args=ukern_malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COOPEN);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&coopen_handler,&thread_attrs,manage_requests,handler_args);
 
 	
-	handler_args=malloc(sizeof(request_handler_args_t));
+	handler_args=ukern_malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COUNLOCK);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&counlock_handler,&thread_attrs,manage_requests,handler_args);
 	
 
-	handler_args=malloc(sizeof(request_handler_args_t));
+	handler_args=ukern_malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COMUTEX_INIT);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,handler_args);
 
-	handler_args=malloc(sizeof(request_handler_args_t));
+	handler_args=ukern_malloc(sizeof(request_handler_args_t));
 	strcpy(handler_args->func_name,U_COLOCK);
 	pthread_attr_init(&thread_attrs);
 	pthread_create(&colock_handler,&thread_attrs,manage_requests,handler_args);

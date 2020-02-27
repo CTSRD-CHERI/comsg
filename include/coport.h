@@ -4,14 +4,10 @@
 #include <cheri/cheric.h>
 #include <sys/mman.h>
 #include <sys/param.h>
+#include <stdatomic.h>
 
 #include "comutex.h"
 #include "sys_comsg.h"
-	
-#define COPORT_OPEN 0
-#define COPORT_READY 1
-#define COPORT_BUSY 2
-#define COPORT_CLOSED -1
 
 
 #define COPORT_MMAP_FLAGS (MAP_ANONYMOUS | MAP_SHARED | MAP_ALIGNED_CHERI)
@@ -23,9 +19,12 @@
 				can obtain a read-only capability. sender loses write capability
 				to the sent message
 	COPIPE	  -	synchronous message passing ipc. as yet unimplemented.
+				might be a blocking one with no buffer using call into ukern
+				on both sides to copy straight from dest to source	
 */
-
+typedef enum {COSEND, CORECV} coport_op_t;
 typedef enum {COCHANNEL, COCARRIER, COPIPE} coport_type_t;
+typedef enum {COPORT_CLOSED=-1,COPORT_OPEN=0,COPORT_BUSY=1,COPORT_READY=2,COPORT_DONE=3} coport_status_t;
 
 /* 
  * TODO-PBB: Rework so we can have fine-grained, least-privilege protection of 
@@ -38,13 +37,17 @@ typedef enum {COCHANNEL, COCARRIER, COPIPE} coport_type_t;
  */
 typedef struct _coport_t
 {
-	void * buffer;
+	void * __capability buffer;
 	u_int length;
 	u_int start;
 	u_int end;
-	u_int status;
+	_Atomic coport_status_t status;
 	coport_type_t type;
-	comutex_t lock;
+	comutex_t read_lock;
+	comutex_t write_lock;
 } coport_t;
+
+
+
 
 #endif

@@ -22,7 +22,7 @@ int counlock(comutex_t * mtx)
 	return call_data.result;
 }
 
-int colock(comutex_t * mtx, void * key)
+int colock(comutex_t * mtx, _Atomic(void * __capability) key)
 {
 	colock_args_t call_data;
 	void * sw_code;
