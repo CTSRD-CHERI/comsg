@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#define MESSAGE_STR "come here!"
 static const char * port_name = "benchmark_port";
 //static const char * ts_port_name = "timestamp_port";
 
@@ -23,17 +24,18 @@ static const char * port_name = "benchmark_port";
 
 static void send_data()
 {
-	char buf[10] = {"come here!"};
+	char * buf;
 	struct timespec start_timestamp,end_timestamp;
 
 	coport_t port;
 	int status;
 
-	status=coopen(port_name,COCHANNEL,&port);
-	buf[0]=0;
+	status=coopen(port_name,COCARRIER,&port);
 
+	buf=malloc(sizeof(char)*strlen(MESSAGE_STR));
+	strcpy(buf,MESSAGE_STR);
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
-	cosend(&port,buf,strlen(buf));
+	cosend(&port,"come here!",strlen("come here!"));
 	clock_gettime(CLOCK_REALTIME,&end_timestamp);
 
 }
@@ -50,7 +52,7 @@ static void send_timestamp(struct timespec * timestamp)
 	*/
 	static void receive_data()
 {
-	char * buf=NULL;
+	char * buf;
 	struct timespec start,end;
 
 	coport_t port;

@@ -27,6 +27,13 @@ default : ukernel cochatter
 	--cheribsd-purecap/subdir usr.bin --cheribsd/subdir usr.bin \
 	cheribsd cheribsd-purecap disk-image-purecap
 
+run : ukernel cochatter
+	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)
+	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)
+	/Users/peter/Projects/CHERI/cheribuild/cheribuild.py --skip-update --force \
+	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
+	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
+	cheribsd cheribsd-purecap disk-image-purecap run-purecap
 
 ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o coproc.o
 	$(CC) $(CFLAGS) $(LLDFLAGS) $(LIB_PARAMS) $(INC_PARAMS)  \

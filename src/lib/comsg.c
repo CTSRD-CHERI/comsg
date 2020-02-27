@@ -6,6 +6,7 @@
 #include <err.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "coproc.h"
 #include "coport.h"
@@ -19,7 +20,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	void * __capability func;
 
 	cocall_coopen_t * __capability call;
-
+	coport_t * port;
 
 	uint error;
 
@@ -32,10 +33,12 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	strcpy(call->args.name,coport_name);
 	call->args.type=type;
 	//call->args=args;
-	call->port=(void * __capability)NULL;
+	printf("cocall_open_t has size %lu\n",sizeof(cocall_coopen_t));
+	memset(&call->port,0,sizeof(coport_t));
 	error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
-	prt=call->port;
-	free(call);
+	port=malloc(sizeof(coport_t));
+	memcpy(port,&call->port,sizeof(coport_t));
+	prt=port;
 	return 0;
 }
 
@@ -125,6 +128,6 @@ int corecv(coport_t * port, void ** buf, size_t len)
 
 int coclose(coport_t * port)
 {
-	port->buffer=NULL;
+	free(port);
 	return 0;
 }

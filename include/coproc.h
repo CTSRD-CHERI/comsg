@@ -23,7 +23,7 @@ typedef struct _coopen_args_t
 typedef struct _cocall_coopen_t
 {
 	coopen_args_t args;
-	coport_t * __capability port; 
+	coport_t port; 
 } __attribute__((__aligned__(16))) cocall_coopen_t;
 
 typedef struct _comutex_init_args_t

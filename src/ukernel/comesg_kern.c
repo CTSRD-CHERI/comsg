@@ -157,7 +157,7 @@ void *coport_open(void *args)
 	worker_args_t * data = args;
 	cocall_coopen_t * coport_args;
 	coport_tbl_entry_t table_entry;
-	coport_t port,*prt;
+	coport_t port, *prt;
 
 
 	char port_name[COPORT_NAME_LEN];
@@ -169,14 +169,14 @@ void *coport_open(void *args)
 	void * __capability target;
 
 	coport_args=malloc(sizeof(cocall_coopen_t));
-	memset(coport_args,0,sizeof(cocall_coopen_t));
 
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	data->cap=target;
 	update_worker_args(data,U_COOPEN);
 	for (;;)
 	{
-		error=coaccept(sw_code,sw_data,&caller_cookie,coport_args,sizeof(coport_args));
+		error=coaccept(sw_code,sw_data,&caller_cookie,coport_args,sizeof(cocall_coopen_t));
+		//printf("coopening...\n");
 		/* check args are acceptable */
 		strcpy(port_name,coport_args->args.name);
 		/* check if port exists */
@@ -184,9 +184,13 @@ void *coport_open(void *args)
 		if(lookup==1)
 		{
 			/* if it doesn't, set up coport */
+			//printf("reading type...\n");
 			type=coport_args->args.type;
+			//printf("type read:%u\n",type);
+			//printf("initing port...\n");
 			error=init_port(type,&port);
-			table_entry.port=port;
+			//printf("inited port.\n");
+			memcpy(&table_entry.port,&port,sizeof(port));
 			table_entry.id=generate_id();
 			strcpy(table_entry.name,port_name);
 			index=add_port(&table_entry);
@@ -196,7 +200,7 @@ void *coport_open(void *args)
 			}
 			prt=&coport_table.table[index].port;
 		}
-		coport_args->port=prt;
+		coport_args->port=*prt;
 	}
 	free(coport_args);
 	return 0;
