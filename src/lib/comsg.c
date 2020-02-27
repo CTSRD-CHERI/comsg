@@ -14,32 +14,28 @@
 int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 {
 	/* request new coport from microkernel */
-	static void * switcher_code;
-	static void * switcher_data;
-	static void * func;
-	static int lookup_err;
+	void * __capability switcher_code;
+	void * __capability switcher_data;
+	void * __capability func;
 
-	cocall_coopen_t * call;
-	coopen_args_t args;
-	coport_t * temp_port;
+	cocall_coopen_t * __capability call;
+
 
 	uint error;
 
 	/* cocall setup */
 	//TODO-PBB: Only do this once.
-	lookup_err=ukern_lookup(&switcher_code,&switcher_data,U_COOPEN,&func);
+	error=ukern_lookup(&switcher_code,&switcher_data,U_COOPEN,&func);
 
 	call=malloc(sizeof(cocall_coopen_t));
-	temp_port=malloc(sizeof(coport_t));
-	strcpy(args.name,coport_name);
-	args.type=type;
-	call->args=args;
-	call->port=temp_port;
-
+	memset(call,0,sizeof(cocall_coopen_t));
+	strcpy(call->args.name,coport_name);
+	call->args.type=type;
+	//call->args=args;
+	call->port=(void * __capability)NULL;
 	error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
 	prt=call->port;
 	free(call);
-	free(temp_port);
 	return 0;
 }
 

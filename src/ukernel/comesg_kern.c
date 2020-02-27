@@ -155,11 +155,12 @@ void *coport_open(void *args)
 	int lookup;
 
 	worker_args_t * data = args;
-	cocall_coopen_t coport_args;
+	cocall_coopen_t * coport_args;
 	coport_tbl_entry_t table_entry;
-	coport_t * port;
+	coport_t port,*prt;
 
-	char * port_name;
+
+	char port_name[COPORT_NAME_LEN];
 	coport_type_t type;
 
 	void * __capability sw_code;
@@ -167,24 +168,25 @@ void *coport_open(void *args)
 	void * __capability caller_cookie;
 	void * __capability target;
 
+	coport_args=malloc(sizeof(cocall_coopen_t));
+	memset(coport_args,0,sizeof(cocall_coopen_t));
+
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	data->cap=target;
 	update_worker_args(data,U_COOPEN);
 	for (;;)
 	{
-		error=coaccept(sw_code,sw_data,&caller_cookie,&coport_args,sizeof(coport_args));
+		error=coaccept(sw_code,sw_data,&caller_cookie,coport_args,sizeof(coport_args));
 		/* check args are acceptable */
-		port_name=coport_args.args.name;
+		strcpy(port_name,coport_args->args.name);
 		/* check if port exists */
-
-		lookup=lookup_port(port_name,&port);
+		lookup=lookup_port(port_name,&prt);
 		if(lookup==1)
 		{
-			port=malloc(sizeof(coport_t));
 			/* if it doesn't, set up coport */
-			type=coport_args.args.type;
-			error=init_port(type,port);
-			table_entry.port=*port;
+			type=coport_args->args.type;
+			error=init_port(type,&port);
+			table_entry.port=port;
 			table_entry.id=generate_id();
 			strcpy(table_entry.name,port_name);
 			index=add_port(&table_entry);
@@ -192,10 +194,11 @@ void *coport_open(void *args)
 			{
 				err(1,"unable to init_port");
 			}
-			port=&coport_table.table[index].port;
+			prt=&coport_table.table[index].port;
 		}
-		coport_args.port=port;
+		coport_args->port=prt;
 	}
+	free(coport_args);
 	return 0;
 }
 
@@ -368,7 +371,10 @@ void *manage_requests(void *args)
 			//printf("coaccepting for %s\n",data->func_name);
 			error=coaccept(sw_code,sw_data,&cookie,lookup,sizeof(cocall_lookup_t));
 			//printf("Lookup of %s is size %lu",workers[j].name,sizeof(cocall_lookup_t));
+			printf("a:validity: %u\n",cheri_gettag(workers[j].cap));
 			lookup->cap=workers[j].cap;
+			printf("b:validity: %u\n",cheri_gettag(lookup->cap));
+
 		}
 	}
 }
@@ -393,6 +399,8 @@ int coaccept_init(
 		err(1,"ERROR: Could not coregister with name %s.\n",target_name);
 	}
 	printf("Successfully coregistered with name %s\n",target_name);
+	printf("validity: %u\n",cheri_gettag(*target_cap));
+
 	return 0;
 }
 
