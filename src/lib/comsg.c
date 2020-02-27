@@ -6,6 +6,7 @@
 #include <err.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "coproc.h"
 #include "coport.h"
@@ -14,12 +15,12 @@
 int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 {
 	/* request new coport from microkernel */
-	void * switcher_code;
-	void * switcher_data;
-	void * func;
+	void * __capability switcher_code;
+	void * __capability switcher_data;
+	void * __capability func;
 
-
-	cocall_coopen_t call;
+	cocall_coopen_t * __capability call;
+	coport_t * port;
 
 	uint error;
 
@@ -27,12 +28,17 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	//TODO-PBB: Only do this once.
 	error=ukern_lookup(&switcher_code,&switcher_data,U_COOPEN,&func);
 
-	strcpy(call.args.name,coport_name);
-	call.args.type=type;
-
-	error=cocall(switcher_code,switcher_data,func,&call,sizeof(call));
-	prt=call.port;
-
+	call=malloc(sizeof(cocall_coopen_t));
+	memset(call,0,sizeof(cocall_coopen_t));
+	strcpy(call->args.name,coport_name);
+	call->args.type=type;
+	//call->args=args;
+	printf("cocall_open_t has size %lu\n",sizeof(cocall_coopen_t));
+	memset(&call->port,0,sizeof(coport_t));
+	error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
+	port=malloc(sizeof(coport_t));
+	memcpy(port,&call->port,sizeof(coport_t));
+	prt=port;
 	return 0;
 }
 
@@ -42,6 +48,7 @@ int cosend(coport_t * port, const void * buf, size_t len)
 	//we need some atomicity on changes toe end and start
 	if(port->type==COCHANNEL)
 	{
+		//doesn't measure circular properly
 		if((port->length-(port->end-port->start))<len)
 		{
 			err(1,"message too big/buffer is full");
@@ -69,12 +76,17 @@ int cosend(coport_t * port, const void * buf, size_t len)
 	return 0;
 }
 
-int corecv(coport_t * port, void * buf, size_t len)
+int corecv(coport_t * port, void ** buf, size_t len)
 {
 	//we need more atomicity on changes to end
 	int old_start;
 	if(port->type==COCHANNEL)
 	{
+		if (port->start==port->length)
+		{
+			//check for synchronicity
+			err(1,"no message in buffer");
+		}
 		if(port->length<len)
 		{
 			err(1,"message too big");
@@ -90,6 +102,7 @@ int corecv(coport_t * port, void * buf, size_t len)
 	}
 	else if(port->type==COCARRIER)
 	{
+		char * msg_buf = port->buffer;
 		//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
 		//len is advisory
 		//perhaps we should allocate buf in COCHANNEL rather than expect 
@@ -97,8 +110,8 @@ int corecv(coport_t * port, void * buf, size_t len)
 		old_start=port->start;
 		port->start=port->start+CHERICAP_SIZE;
 		//pop next cap from buffer into buf (index indicated by start)
-		buf=(char *)port->buffer+old_start;
-		memcpy((char *)port->buffer+old_start,(void *)NULL,CHERICAP_SIZE);
+		memcpy(buf,&msg_buf[old_start],CHERICAP_SIZE);
+		memset(&msg_buf[old_start],0,CHERICAP_SIZE);
 		//perhaps inspect length and perms for safety
 		if(cheri_getlen(buf)!=len)
 		{
@@ -115,6 +128,6 @@ int corecv(coport_t * port, void * buf, size_t len)
 
 int coclose(coport_t * port)
 {
-	port->buffer=NULL;
+	free(port);
 	return 0;
 }

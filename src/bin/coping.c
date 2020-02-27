@@ -86,7 +86,7 @@ main(int argc, char **argv)
 
 	if (vflag)
 		fprintf(stderr, "%s: colooking up \"%s\"...\n", getprogname(), argv[0]);
-	error = colookup(argv[0], &lookedup);
+	error = colookup("coopen", &lookedup);
 	if (error != 0) {
 		if (errno == ESRCH) {
 			warnx("received ESRCH; this usually means there's nothing coregistered for \"%s\"", argv[0]);

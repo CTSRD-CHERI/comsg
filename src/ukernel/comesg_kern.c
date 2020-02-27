@@ -15,8 +15,7 @@
 
 #define DEBUG
 
-worker_args_t worker_strings[U_FUNCTIONS][WORKER_COUNT];
-char worker_lookup[U_FUNCTIONS][LOOKUP_STRING_LEN];
+worker_map_entry_t worker_map[U_FUNCTIONS];
 int next_worker_i = 0;
 
 unsigned int next_port_index = 0;
@@ -121,6 +120,34 @@ int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf)
 	return 1;
 }
 
+void update_worker_args(worker_args_t * args, const char * function_name)
+{
+	int i,j;
+	for(i = 0; i<=U_FUNCTIONS; i++)
+	{
+		if (strcmp(worker_map[i].func_name,function_name)==0)
+		{
+			break;
+		}
+		else if (i==U_FUNCTIONS)
+		{
+			err(1,"function name %s not found in map",function_name);
+		}
+	}
+	for(j = 0; j<=WORKER_COUNT;j++)
+	{
+		if (strcmp(worker_map[i].workers[j].name,args->name)==0)
+		{
+			worker_map[i].workers[j].cap=args->cap;
+			return;
+		}
+		else if (j==WORKER_COUNT)
+		{
+			err(1,"worker %s not found in map",args->name);
+		}
+	}
+}
+
 void *coport_open(void *args)
 {
 	int error;
@@ -128,11 +155,12 @@ void *coport_open(void *args)
 	int lookup;
 
 	worker_args_t * data = args;
-	cocall_coopen_t coport_args;
+	cocall_coopen_t * coport_args;
 	coport_tbl_entry_t table_entry;
-	coport_t * port;
+	coport_t port, *prt;
 
-	char * port_name;
+
+	char port_name[COPORT_NAME_LEN];
 	coport_type_t type;
 
 	void * __capability sw_code;
@@ -140,22 +168,29 @@ void *coport_open(void *args)
 	void * __capability caller_cookie;
 	void * __capability target;
 
+	coport_args=malloc(sizeof(cocall_coopen_t));
+
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
+	data->cap=target;
+	update_worker_args(data,U_COOPEN);
 	for (;;)
 	{
-		error=coaccept(sw_code,sw_data,&caller_cookie,&coport_args,sizeof(coport_args));
+		error=coaccept(sw_code,sw_data,&caller_cookie,coport_args,sizeof(cocall_coopen_t));
+		//printf("coopening...\n");
 		/* check args are acceptable */
-		port_name=coport_args.args.name;
+		strcpy(port_name,coport_args->args.name);
 		/* check if port exists */
-
-		lookup=lookup_port(port_name,&port);
+		lookup=lookup_port(port_name,&prt);
 		if(lookup==1)
 		{
-			port=malloc(sizeof(coport_t));
 			/* if it doesn't, set up coport */
-			type=coport_args.args.type;
-			error=init_port(type,port);
-			table_entry.port=*port;
+			//printf("reading type...\n");
+			type=coport_args->args.type;
+			//printf("type read:%u\n",type);
+			//printf("initing port...\n");
+			error=init_port(type,&port);
+			//printf("inited port.\n");
+			memcpy(&table_entry.port,&port,sizeof(port));
 			table_entry.id=generate_id();
 			strcpy(table_entry.name,port_name);
 			index=add_port(&table_entry);
@@ -163,10 +198,11 @@ void *coport_open(void *args)
 			{
 				err(1,"unable to init_port");
 			}
-			port=&coport_table.table[index].port;
+			prt=&coport_table.table[index].port;
 		}
-		coport_args.port=port;
+		coport_args->port=*prt;
 	}
+	free(coport_args);
 	return 0;
 }
 
@@ -186,7 +222,10 @@ void *comutex_setup(void *args)
 	void * __capability caller_cookie;
 	void * __capability target;
 	
+
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
+	data->cap=target;
+	update_worker_args(data,U_COMUTEX_INIT);
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,&comutex_args,sizeof(comutex_args));
@@ -230,6 +269,8 @@ void *comutex_lock(void *args)
 	void * __capability target;
 
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
+	data->cap=target;
+	update_worker_args(data,U_COLOCK);
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,&colock_args,sizeof(colock_args));
@@ -264,6 +305,8 @@ void *comutex_unlock(void *args)
 	int lookup;
 
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
+	data->cap=target;
+	update_worker_args(data,U_COUNLOCK);
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,&colock_args,sizeof(colock_args));
@@ -313,9 +356,9 @@ void *manage_requests(void *args)
 	workers_index=-1;
 	for(int i = 0; i < U_FUNCTIONS; i++)
 	{
-		if(strcmp(worker_lookup[i],data->func_name)==0)
+		if(strcmp(worker_map[i].func_name,data->func_name)==0)
 		{
-			workers=worker_strings[i];
+			workers=worker_map[i].workers;
 			workers_index=i;
 			break;
 		}
@@ -329,10 +372,13 @@ void *manage_requests(void *args)
 	{
 		for(int j = 0; j < WORKER_COUNT; j++)
 		{
-			printf("coaccepting for %s",data->func_name);
+			//printf("coaccepting for %s\n",data->func_name);
 			error=coaccept(sw_code,sw_data,&cookie,lookup,sizeof(cocall_lookup_t));
-			printf("Lookup of %s is size %lu",workers[j].name,sizeof(cocall_lookup_t));
-			strcpy(lookup->target,workers[j].name);
+			//printf("Lookup of %s is size %lu",workers[j].name,sizeof(cocall_lookup_t));
+			printf("a:validity: %u\n",cheri_gettag(workers[j].cap));
+			lookup->cap=workers[j].cap;
+			printf("b:validity: %u\n",cheri_gettag(lookup->cap));
+
 		}
 	}
 }
@@ -357,6 +403,8 @@ int coaccept_init(
 		err(1,"ERROR: Could not coregister with name %s.\n",target_name);
 	}
 	printf("Successfully coregistered with name %s\n",target_name);
+	printf("validity: %u\n",cheri_gettag(*target_cap));
+
 	return 0;
 }
 
@@ -390,7 +438,7 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
 	thread_name=malloc(THREAD_STRING_LEN*sizeof(char));
 	threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
 	w_i=++next_worker_i;
-	strcpy(worker_lookup[w_i],name);
+	strcpy(worker_map[w_i].func_name,name);
 	//	printf("workers for %s\n",name);
 
 	for (int i = 0; i < WORKER_COUNT; i++)
@@ -399,13 +447,14 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
 		args=malloc(sizeof(worker_args_t));
 		rand_string(thread_name,THREAD_STRING_LEN);
 		strcpy(args->name,thread_name);
+		args->cap=NULL;
 		//printf("%s",thread_name);
 		e=pthread_attr_init(&thread_attrs);
 		//printf("thr_name %s\n",args->name);
 		e=pthread_create(thread,&thread_attrs,func,args);
 		if (e==0)
 		{
-			memcpy(&worker_strings[w_i][i],&args,sizeof(worker_args_t));
+			worker_map[w_i].workers[i]=*args;
 			threads[i]=*thread;
 		}
 		pthread_attr_destroy(&thread_attrs);

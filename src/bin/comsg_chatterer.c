@@ -6,7 +6,9 @@
 #include <stdlib.h>
 #include <err.h>
 #include <string.h>
+#include <stdio.h>
 
+#define MESSAGE_STR "come here!"
 static const char * port_name = "benchmark_port";
 //static const char * ts_port_name = "timestamp_port";
 
@@ -22,19 +24,20 @@ static const char * port_name = "benchmark_port";
 
 static void send_data()
 {
-	u_int * buf;
-	struct timespec start_timestamp;
+	char * buf;
+	struct timespec start_timestamp,end_timestamp;
 
 	coport_t port;
 	int status;
 
-	buf=(u_int *)malloc(4096/sizeof(u_int));
+	status=coopen(port_name,COCARRIER,&port);
 
-	status=coopen(port_name,COCHANNEL,&port);
-	buf[0]=0;
-
+	buf=malloc(sizeof(char)*strlen(MESSAGE_STR));
+	strcpy(buf,MESSAGE_STR);
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
-	cosend(&port,buf,4096);
+	cosend(&port,"come here!",strlen("come here!"));
+	clock_gettime(CLOCK_REALTIME,&end_timestamp);
+
 }
 /*
 static void send_timestamp(struct timespec * timestamp)
@@ -49,19 +52,18 @@ static void send_timestamp(struct timespec * timestamp)
 	*/
 	static void receive_data()
 {
-	u_int * buf;
+	char * buf;
 	struct timespec start,end;
 
 	coport_t port;
 	int status;
 
-	buf=(u_int *)malloc(4096/sizeof(u_int));
-
-	status=coopen(port_name,COCHANNEL,&port);
+	status=coopen(port_name,COCARRIER,&port);
 
 	clock_gettime(CLOCK_REALTIME,&start);
-	corecv(&port,buf,4096);
+	corecv(&port,(void **)&buf,30);
 	clock_gettime(CLOCK_REALTIME,&end);
+	printf("message received:%s",buf);
 }
 
 int main(int argc, char const *argv[])
@@ -71,12 +73,12 @@ int main(int argc, char const *argv[])
 		err(1,"must supply either -s or -r");
 	}
 
-	if(strcmp(argv[1],"-r"))
+	if(strcmp(argv[1],"-r")==0)
 	{
 		receive_data();
 
 	}
-	else if (strcmp(argv[1],"-s"))
+	else if (strcmp(argv[1],"-s")==0)
 	{
 		send_data();
 	}

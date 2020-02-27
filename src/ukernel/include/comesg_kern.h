@@ -16,7 +16,14 @@
 typedef struct _worker_args_t 
 {
 	char name[LOOKUP_STRING_LEN];
+	void * __capability cap;
 } worker_args_t;
+
+typedef struct _worker_map_entry_t
+{
+	char func_name[LOOKUP_STRING_LEN];
+	worker_args_t workers[WORKER_COUNT];
+} worker_map_entry_t;
 
 typedef struct _request_handler_args_t
 {
@@ -58,6 +65,7 @@ int add_port(coport_tbl_entry_t * entry);
 int add_mutex(comutex_tbl_entry_t * entry);
 int lookup_port(char * port_name,coport_t ** port_buf);
 int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf);
+void update_worker_args(worker_args_t * args, const char * function_name);
 void *coport_open(void *args);
 void *comutex_setup(void *args);
 void *comutex_lock(void *args);
@@ -77,6 +85,6 @@ int main(int argc, const char *argv[]);
 
 
 extern coport_tbl_t coport_table;
-
+extern comutex_tbl_t comutex_table;
 
 #endif
