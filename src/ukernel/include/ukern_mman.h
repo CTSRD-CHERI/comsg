@@ -1,8 +1,10 @@
 #ifndef _UKERN_MMAN_H
 #define _UKERN_MMAN_H
 
+#include <sys/param.h>
+
 #define DEFAULT_BUFFER_SIZE 4096
-#define UKERN_MAP_LEN 
+#define UKERN_MAP_LEN (1UL<<PDRSHIFT)
 #define UKERN_MMAP_FLAGS (\
 	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
 	| MAP_ALIGNED_SUPER )
