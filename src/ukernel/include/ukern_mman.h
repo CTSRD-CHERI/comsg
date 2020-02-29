@@ -18,7 +18,10 @@
 #define UKERN_RESERVE_FLAGS( UKERN_MMAP_FLAGS | MAP_GUARD )
 #define UKERN_EXTEND_FLAGS ( UKERN_MMAP_FLAGS | MAP_FIXED )
 #define UKERN_MMAP_PROT ( PROT_READ | PROT_WRITE )
+
 #define BUFFER_TABLE_SIZE (WORKER_COUNT * U_FUNCTIONS * MAX_COPORTS)
+
+#define BUFFER_PREALLOC_COUNT (UKERN_MAP_LEN/DEFAULT_BUFFER_SIZE)
 
 #define RESERVE_PAGES 1
 #define RESERVE_SIZE ( RESERVE_PAGES * UKERN_MAP_LEN )
@@ -34,7 +37,7 @@ typedef struct _buffer_table_entry
 {
 	int size;
 	_ATOMIC int free;
-	int region_index;
+	region_table_entry_t * region;
 	void * buffer;
 } __attribute__((__aligned__(16))) buffer_table_entry_t;
 
