@@ -11,25 +11,25 @@ static buffer_table_t buffer_table;
 static region_table_t region_table;
 
 
-int reserve_buffer_space()
+int reserve_buffer_space(void)
 {
-	void * s_page, *next_page;
+	void *next_page,*new_page;
 
 	unsigned int buffer_size;
 	unsigned int old_size;
 
-	region_table_entry_t entry;
+	region_table_entry_t entry, *table;
 
 	pthread_mutex_lock(region_table.lock);
 	old_size=region_table.length*UKERN_MAP_LEN;
 	region_table.table=realloc(region_table.table,old_size+ALLOCATION_SIZE);
-
-	s_page=MAP_UKERN(0,UKERN_MAP_LEN);
+	table=region_table.table;
 	for (int i = 1; i <= RESERVE_PAGES; i++)
 	{
-		next_page=RESERVE_UKERN(s_page+(i*UKERN_MAP_LEN),UKERN_MAP_LEN);
+		next_page=table[region_table.last].mem;
+		new_page=RESERVE_UKERN((i*UKERN_MAP_LEN),UKERN_MAP_LEN);
 
-		entry.mem=next_page;
+		entry.mem=new_page;
 		entry.type=REGION_RESERVED;
 		entry.start_free=0;
 		entry.end_free=0;
@@ -56,19 +56,30 @@ void * map_reservation(int index)
 
 }
 
-int allocate_buffers(void ** buffer_array)
+int allocate_buffers(int buffers,)
 {
-	void * raw_mem_page, * buf_cap, * raw_mem_cursor;
-	int error = reserve_buffer_space(&raw_mem);
-	int buf_count = UKERN_MAP_LEN/DEFAULT_BUFFER_SIZE;
-	raw_mem_cursor=raw_mem_page;
+	void * raw_mem_page, * raw_mem_cursor;
+	void * __capability buf_cap;
+	buffer_table_entry_t buffer;
+
+	raw_mem_cursor=find_available_memory;
 	for (int i = 0; i < buf_count; i++)
 	{
-		buf_cap=cheri_csetbounds(raw_mem_cursor,DEFAULT_BUFFER_SIZE);
-		buf_cap=cheri_andperms(buf_cap,BUFFER_PERMS);
-		raw_mem_cursor=cheri_setoffset(raw_mem_page,DEFAULT_BUFFER_SIZE);
-		buffer_array[i]=buf_cap;
+		buf_cap=allocate_buffer(&raw_mem_cursor,DEFAULT_BUFFER_SIZE);
+		buffer.size=DEFAULT_BUFFER_SIZE;
+		buffer.buffer=buf_cap;
+		buffer.free=TRUE;
+		buffer_array[i]=buffer;
 	}
+}
+
+void * allocate_memory_buffer(void ** cap,size_t length)
+{
+	void * buf_cap;
+	buf_cap=cheri_csetbounds(cap,length);
+	buf_cap=cheri_andperms(buf_cap,length);
+	cap=cheri_setoffset(cap,length);
+	return buf_cap;
 }
 
 void * find_available_memory(size_t len)
@@ -77,9 +88,9 @@ void * find_available_memory(size_t len)
 	{
 		if(region_table.type==REGION_RESERVED)
 		{
-
+			
 		}
-		if region_table.table[i].sta
+		if (region_table.table[i].start_free)
 	}
 }
 
@@ -120,5 +131,5 @@ int region_table_setup(void)
 	region_table.last=0;
 	region_table.table=NULL;
 
-	return pthread_mutex_init(&buffer_table.lock,&mtx_attr);
+	return pthread_mutex_init(&region_table.lock,&mtx_attr);
 }
