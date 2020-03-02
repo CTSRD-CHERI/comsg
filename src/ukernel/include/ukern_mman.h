@@ -9,6 +9,8 @@
 #include <cheri/cherireg.h>
 
 #define DEFAULT_BUFFER_SIZE 4096
+#define MAX_BUFFER_SIZE (1UL<<PDRSHIFT)
+
 #define BUFFER_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | \
 	CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
 #define UKERN_MAP_LEN (1UL<<PDRSHIFT)
@@ -33,12 +35,14 @@
 #define REGION_MAPPED 1
 #define REGION_RESERVED 2
 
+#define BUFFER_ACTIVE 1
+#define BUFFER_FREED 2
+
 typedef struct _buffer_table_entry
 {
-	int size;
-	_ATOMIC int free;
+	int type;
 	region_table_entry_t * region;
-	void * buffer;
+	void * __capability mem;
 } __attribute__((__aligned__(16))) buffer_table_entry_t;
 
 typedef struct _buffer_table
@@ -53,10 +57,8 @@ typedef struct _buffer_table
 typedef struct _region_table_entry
 {
 	pthread_mutex_t lock;
-	void * mem;
+	void __capability * mem;
 	int type;
-	int start_free;
-	int end_free;
 	int size;
 } region_table_entry_t;
 
