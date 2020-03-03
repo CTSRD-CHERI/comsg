@@ -6,12 +6,8 @@
 #include "coport.h"
 #include "sys_comsg.h"
 #include "sys_comutex.h"
+#include "ukern_params.h"
 
-#define WORKER_COUNT 1
-#define THREAD_STRING_LEN 16
-#define KEYSPACE 93
-#define MAX_COPORTS 10
-#define MAX_COMUTEXES 20
 
 typedef struct _worker_args_t 
 {

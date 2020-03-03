@@ -20,7 +20,6 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	void * __capability func;
 
 	cocall_coopen_t * __capability call;
-	coport_t * port;
 
 	uint error;
 
@@ -36,9 +35,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t * prt)
 	printf("cocall_open_t has size %lu\n",sizeof(cocall_coopen_t));
 	memset(&call->port,0,sizeof(coport_t));
 	error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
-	port=malloc(sizeof(coport_t));
-	memcpy(port,&call->port,sizeof(coport_t));
-	prt=port;
+	memcpy(prt,&call->port,sizeof(coport_t));
 	return 0;
 }
 
