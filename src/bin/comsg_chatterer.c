@@ -1,5 +1,6 @@
 #include "comsg.h"
 #include "coport.h"
+#include <inttypes.h>
 #include <time.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -8,7 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#define MESSAGE_STR "come here!"
+static const char * message_str = "come here!";
 static const char * port_name = "benchmark_port";
 //static const char * ts_port_name = "timestamp_port";
 
@@ -24,20 +25,18 @@ static const char * port_name = "benchmark_port";
 
 static void send_data()
 {
-	char * buf;
 	struct timespec start_timestamp,end_timestamp;
 
-	coport_t port;
+	coport_t * port;
 	int status;
 
 	status=coopen(port_name,COCARRIER,&port);
 
-	buf=malloc(sizeof(char)*strlen(MESSAGE_STR));
-	strcpy(buf,MESSAGE_STR);
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
-	cosend(&port,"come here!",strlen("come here!"));
+	cosend(&port,message_str,strlen(message_str));
 	clock_gettime(CLOCK_REALTIME,&end_timestamp);
-
+	timespecsub(&end_timestamp,&start_timestamp);
+	printf("transferred %lu bytes in %jd.%09jds\n", strlen(message_str), (intmax_t)end_timestamp.tv_sec, (intmax_t)end_timestamp.tv_nsec);
 }
 /*
 static void send_timestamp(struct timespec * timestamp)
@@ -55,13 +54,13 @@ static void send_timestamp(struct timespec * timestamp)
 	char * buf;
 	struct timespec start,end;
 
-	coport_t port;
+	coport_t * port;
 	int status;
 
 	status=coopen(port_name,COCARRIER,&port);
 
 	clock_gettime(CLOCK_REALTIME,&start);
-	corecv(&port,(void **)&buf,30);
+	corecv(&port,(void **)&buf,16);
 	clock_gettime(CLOCK_REALTIME,&end);
 	printf("message received:%s",buf);
 }

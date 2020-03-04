@@ -6,8 +6,7 @@ LIB_PARAMS=$(foreach l, $(LIB),	 -l$l)
 INC_PARAMS=$(foreach i, $(INC), -I$i)
 
 
-
-
+BUILD_TIME:=$(shell date "+%Y/%m/%d %H:%M:%S")
 DEBUG=-v -ggdb 
 CFLAGS=$(DEBUG) --target=mips64-unknown-freebsd13 -integrated-as -G0 \
 	-msoft-float -cheri=128 -mcpu=cheri128 \
@@ -31,6 +30,7 @@ default : ukernel cochatter
 run : ukernel cochatter
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)
 	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)
+	git commit -a --message="$(BUILD_TIME)"
 	/Users/peter/Projects/CHERI/cheribuild/cheribuild.py --skip-update --force \
 	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \

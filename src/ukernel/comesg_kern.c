@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "coport.h"
 #include "coport_utils.h"
@@ -25,9 +26,8 @@ coport_tbl_t coport_table;
 
 int generate_id(void)
 {
-	static int id_counter = 0;
 	// TODO: Replace this with something smarter.
-	return ++id_counter;
+	return random();
 }
 
 int rand_string(char * buf,unsigned int len)
@@ -49,7 +49,7 @@ int rand_string(char * buf,unsigned int len)
 	return 0;
 }
 
-int add_port(coport_tbl_entry_t * entry)
+int add_port(coport_tbl_entry_t entry)
 {
 	int entry_index;
 	pthread_mutex_lock(&coport_table.lock);
@@ -58,13 +58,13 @@ int add_port(coport_tbl_entry_t * entry)
 		pthread_mutex_unlock(&coport_table.lock);
 		return 1;
 	}
-	memcpy(&coport_table.table[coport_table.index],entry,sizeof(coport_tbl_entry_t));
-	entry_index=++coport_table.index;
+	coport_table.table[coport_table.index]=entry;
+	entry_index=coport_table.index++;
 	pthread_mutex_unlock(&coport_table.lock);
 	return entry_index;
 }
 
-int add_mutex(comutex_tbl_entry_t * entry)
+int add_mutex(comutex_tbl_entry_t entry)
 {
 	int entry_index;
 	
@@ -74,8 +74,8 @@ int add_mutex(comutex_tbl_entry_t * entry)
 		pthread_mutex_unlock(&comutex_table.lock);
 		return 1;
 	}
-	memcpy(&comutex_table.table[comutex_table.index],entry,sizeof(comutex_tbl_entry_t));
-	entry_index=++comutex_table.index;
+	comutex_table.table[comutex_table.index]=entry;
+	entry_index=comutex_table.index++;
 	pthread_mutex_unlock(&comutex_table.lock);
 	return entry_index;
 }
@@ -158,11 +158,9 @@ void *coport_open(void *args)
 	worker_args_t * data = args;
 	cocall_coopen_t * coport_args;
 	coport_tbl_entry_t table_entry;
-	coport_t port, *prt;
-
+	coport_t port,*prt;
 
 	char port_name[COPORT_NAME_LEN];
-	coport_type_t type;
 
 	void * __capability sw_code;
 	void * __capability sw_data;
@@ -170,6 +168,8 @@ void *coport_open(void *args)
 	void * __capability target;
 
 	coport_args=malloc(sizeof(cocall_coopen_t));
+	//port=malloc(sizeof(coport_t));
+	//memset(port,0,sizeof(coport_t));
 
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	data->cap=target;
@@ -177,32 +177,32 @@ void *coport_open(void *args)
 	for (;;)
 	{
 		error=coaccept(sw_code,sw_data,&caller_cookie,coport_args,sizeof(cocall_coopen_t));
-		printf("coopening...\n");
+		//printf("coopening...\n");
 		/* check args are acceptable */
 		strcpy(port_name,coport_args->args.name);
-		printf("coport name:%s", port_name);
+		//printf("coport name:%s\n", coport_args->args.name);
 		/* check if port exists */
-		lookup=lookup_port(port_name,&prt);
+		lookup=lookup_port(coport_args->args.name,&prt);
 		if(lookup==1)
 		{
 			/* if it doesn't, set up coport */
-			printf("reading type...\n");
-			type=coport_args->args.type;
-			printf("type read:%u\n",type);
-			printf("initing port...\n");
-			error=init_port(type,&port);
-			printf("inited port.\n");
-			memcpy(&table_entry.port,&port,sizeof(port));
-			table_entry.id=generate_id();
-			strcpy(table_entry.name,port_name);
-			index=add_port(&table_entry);
+			//printf("type read:%u\n",coport_args->args.type);
+			//printf("initing port...\n");
+			error=init_port(coport_args->args.type,&port);
 			if(error!=0)
 			{
 				err(1,"unable to init_port");
 			}
+			//printf("inited port.\n");
+			table_entry.port=port;
+			table_entry.id=generate_id();
+			strcpy(table_entry.name,port_name);
+			index=add_port(table_entry);
+			//printf("coport %s added to table\n",coport_args->args.name);
+			//printf("buffer_perms: %lx\n",cheri_getperm(port->buffer));
 			prt=&coport_table.table[index].port;
 		}
-		coport_args->port=*prt;
+		coport_args->port=prt;
 	}
 	//free(coport_args);
 	return 0;
@@ -241,7 +241,7 @@ void *comutex_setup(void *args)
 			error=sys_comutex_init(comutex_args.args.name,mtx);
 			table_entry.mtx=*mtx;
 			table_entry.id=generate_id();
-			index=add_mutex(&table_entry);
+			index=add_mutex(table_entry);
 			if(error!=0)
 			{
 				err(1,"unable to init_port");
@@ -370,6 +370,7 @@ void *manage_requests(void *args)
 		err(1,"Function workers not registered");
 	}
 	lookup=malloc(sizeof(cocall_lookup_t));
+	memset(lookup,0,sizeof(cocall_lookup_t));
 	for(;;)
 	{
 		for(int j = 0; j < WORKER_COUNT; j++)
@@ -377,10 +378,7 @@ void *manage_requests(void *args)
 			//printf("coaccepting for %s\n",data->func_name);
 			error=coaccept(sw_code,sw_data,&cookie,lookup,sizeof(cocall_lookup_t));
 			//printf("Lookup of %s is size %lu",workers[j].name,sizeof(cocall_lookup_t));
-			printf("a:validity: %u\n",cheri_gettag(workers[j].cap));
 			lookup->cap=workers[j].cap;
-			printf("b:validity: %u\n",cheri_gettag(lookup->cap));
-
 		}
 	}
 }
@@ -414,6 +412,8 @@ int coport_tbl_setup(void)
 {
 	int error=pthread_mutex_init(&coport_table.lock,0);
 	coport_table.index=0;
+	coport_table.table=mmap(0,COPORT_TBL_LEN,TBL_PERMS,TBL_FLAGS,-1,0);
+
 	/* reserve a superpage or two for this, entries should be small */
 	/* reserve a few superpages for ports */
 	return error;
@@ -422,6 +422,7 @@ int comutex_tbl_setup(void)
 {
 	int error=pthread_mutex_init(&comutex_table.lock,0);
 	comutex_table.index=0;
+	comutex_table.table=mmap(0,COMTX_TBL_LEN,TBL_PERMS,TBL_FLAGS,-1,0);
 	/* reserve a superpage or two for this, entries should be small */
 	/* reserve a few superpages for ports */
 	return error;

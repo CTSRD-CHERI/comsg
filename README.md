@@ -59,8 +59,11 @@
 	* Programs might want to do things with the data besides read, and we should try and support this.
 		+ This might be fine, as they can simply copy messages out if they want to do this. 
 3. Why doesn't it work? :/
-	* We currently get a seal violation on attempting to cocall into the lookup functions. 
-	* This might be an easy fix, will be talking to Ed about this.
+	* VM issues
+		+ COCARRIER messages are unmapped on sender exit()
+			- Abdicate ownership?
+			- Transfer ownership?
+			- Accept this - maybe this should happen?
 
 
 ## What we would like from cocall et al/should find a way to implement:

@@ -2,12 +2,23 @@
 #define _COMESG_KERN
 
 #include <pthread.h>
+#include <cheri/cherireg.h>
 
 #include "coport.h"
 #include "sys_comsg.h"
 #include "sys_comutex.h"
 #include "ukern_params.h"
 
+#define COPORT_TBL_LEN (MAX_COPORTS*sizeof(coport_t))
+#define COMTX_TBL_LEN (MAX_COMUTEXES*sizeof(coport_t))
+
+#define TBL_FLAGS (\
+	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
+	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
+#define TBL_PERMS ( PROT_READ | PROT_WRITE )
+/*#define TBL_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | \
+	CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL |\
+	CHERI_PERM_STORE_LOCAL_CAP )*/
 
 typedef struct _worker_args_t 
 {
@@ -29,16 +40,15 @@ typedef struct _request_handler_args_t
 typedef struct _coport_tbl_entry_t
 {
 	unsigned int id;
-	char name[COPORT_NAME_LEN];
-	unsigned int status;
 	coport_t port;
+	char name[COPORT_NAME_LEN];
 } coport_tbl_entry_t;
 
 typedef struct _coport_tbl_t
 {
-	coport_tbl_entry_t table[MAX_COPORTS];
 	pthread_mutex_t lock;
 	int index;
+	coport_tbl_entry_t * table;
 } coport_tbl_t;
 
 typedef struct _comutex_tbl_entry_t
@@ -50,15 +60,15 @@ typedef struct _comutex_tbl_entry_t
 typedef struct _comutex_tbl_t
 {
 	int index;
-	comutex_tbl_entry_t table[MAX_COMUTEXES];
 	pthread_mutex_t lock;
+	comutex_tbl_entry_t * table;
 } comutex_tbl_t;
 
 
 int generate_id(void);
 int rand_string(char * buf,unsigned int len);
-int add_port(coport_tbl_entry_t * entry);
-int add_mutex(comutex_tbl_entry_t * entry);
+int add_port(coport_tbl_entry_t entry);
+int add_mutex(comutex_tbl_entry_t entry);
 int lookup_port(char * port_name,coport_t ** port_buf);
 int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf);
 void update_worker_args(worker_args_t * args, const char * function_name);

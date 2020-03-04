@@ -16,14 +16,14 @@ typedef struct _cocall_lookup_t
 
 typedef struct _coopen_args_t
 {
-	char name[COPORT_NAME_LEN];
 	coport_type_t type;
+	char name[COPORT_NAME_LEN];
 } coopen_args_t;
 
 typedef struct _cocall_coopen_t
 {
 	coopen_args_t args;
-	coport_t port; 
+	coport_t * port; 
 } __attribute__((__aligned__(16))) cocall_coopen_t;
 
 typedef struct _comutex_init_args_t
