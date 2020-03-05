@@ -64,6 +64,7 @@
 			- Abdicate ownership?
 			- Transfer ownership?
 			- Accept this - maybe this should happen?
+			- ATEXIT checks/usurpation of ownership by ukernel of pending msgs
 
 
 ## What we would like from cocall et al/should find a way to implement:

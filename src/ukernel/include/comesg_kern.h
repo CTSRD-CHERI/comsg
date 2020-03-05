@@ -2,6 +2,7 @@
 #define _COMESG_KERN
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <cheri/cherireg.h>
 
 #include "coport.h"
@@ -9,8 +10,6 @@
 #include "sys_comutex.h"
 #include "ukern_params.h"
 
-#define COPORT_TBL_LEN (MAX_COPORTS*sizeof(coport_t))
-#define COMTX_TBL_LEN (MAX_COMUTEXES*sizeof(coport_t))
 
 #define TBL_FLAGS (\
 	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
@@ -23,7 +22,7 @@
 typedef struct _worker_args_t 
 {
 	char name[LOOKUP_STRING_LEN];
-	void * __capability cap;
+	_Atomic(void * __capability) cap;
 } worker_args_t;
 
 typedef struct _worker_map_entry_t
@@ -47,7 +46,7 @@ typedef struct _coport_tbl_entry_t
 typedef struct _coport_tbl_t
 {
 	pthread_mutex_t lock;
-	int index;
+	_Atomic int index;
 	coport_tbl_entry_t * table;
 } coport_tbl_t;
 
@@ -59,7 +58,7 @@ typedef struct _comutex_tbl_entry_t
 
 typedef struct _comutex_tbl_t
 {
-	int index;
+	_Atomic int index;
 	pthread_mutex_t lock;
 	comutex_tbl_entry_t * table;
 } comutex_tbl_t;

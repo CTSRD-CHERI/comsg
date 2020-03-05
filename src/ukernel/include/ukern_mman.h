@@ -46,40 +46,40 @@ typedef enum {BUFFER_ALLOCATE, BUFFER_FREE} queue_action_t;
 typedef struct _region_table_entry
 {
 	pthread_mutex_t lock;
-	void * __capability mem;
+	_Atomic(void *  __capability) mem;
 	region_type_t type;
-	size_t size;
-	size_t free;
+	_Atomic size_t size;
+	_Atomic size_t free;
 } region_table_entry_t;
 
 typedef struct _region_table
 {
 	pthread_mutex_t lock;
-	int next;
-	int length;
-	region_table_entry_t * table;
+	_Atomic int next;
+	_Atomic int length;
+	region_table_entry_t *  table;
 } region_table_t;
 
 typedef struct _buffer_table_entry
 {
-	int type;
+	_Atomic int type;
 	region_table_entry_t * region;
-	void * __capability mem;
+	_Atomic(void * __capability) mem;
 } buffer_table_entry_t;
 
 typedef struct _buffer_table
 {
 	pthread_mutex_t lock;
-	int next;
-	int length;
+	_Atomic int next;
+	_Atomic int length;
 	buffer_table_entry_t * table;
 } buffer_table_t;
 
 typedef struct _work_queue_item
 {
 	queue_action_t action;
-	size_t len;
-	void * __capability subject;
+	_Atomic size_t len;
+	_Atomic(void * __capability) subject;
 	pthread_mutex_t lock;
 	pthread_cond_t processed;
 } work_queue_item_t;
@@ -89,16 +89,16 @@ typedef struct _work_queue
 	pthread_mutex_t lock;
 	pthread_cond_t not_empty;
 	pthread_cond_t not_full;
-	int max_len;
-	int end;
-	int start;
-	int count;
+	_Atomic int max_len;
+	_Atomic int end;
+	_Atomic int start;
+	_Atomic int count;
 	work_queue_item_t * items;
 } work_queue_t;
 
-static buffer_table_t buffer_table;
-static region_table_t region_table;
-static work_queue_t jobs_queue;
+buffer_table_t buffer_table;
+region_table_t region_table;
+work_queue_t jobs_queue;
 //void extend_region_table(void);
 int reserve_region(void);
 int map_region(void);

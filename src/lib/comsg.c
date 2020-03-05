@@ -12,7 +12,7 @@
 #include "coport.h"
 #include "comsg.h"
 
-int coopen(const char * coport_name, coport_type_t type, coport_t ** prt)
+int coopen(const char * coport_name, coport_type_t type, coport_t* *prt)
 {
 	/* request new coport from microkernel */
 	void * __capability switcher_code;
@@ -41,90 +41,97 @@ int coopen(const char * coport_name, coport_type_t type, coport_t ** prt)
 	return 0;
 }
 
-int cosend(coport_t ** p, const void * buf, size_t len)
+int cosend(coport_t * port, const void * buf, size_t len)
 {
 	unsigned int old_end;
-	coport_t * port;
-	port=*p;
+	_Atomic(void *) msg_cap;
+	void ** dest_buf;
+	unsigned int used_space = port->end-port->start;
+
 	//we need some atomicity on changes toe end and start
-	if(port->type==COCHANNEL)
+	switch(port->type)
 	{
-		//doesn't measure circular properly
-		if((port->length-(port->end-port->start))<len)
-		{
-			err(1,"message too big/buffer is full");
-		}
-		old_end=port->end;
-		port->end=port->end+len;
-		memcpy((char *)port->buffer+old_end, buf, len);
-	}
-	else if(port->type==COCARRIER)
-	{
-		void * msg_cap;
-		void ** dest_buf;
-		//map buffer of size len
-		//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
-		msg_cap=malloc(len);
-		//copy data from buf
-		memcpy(msg_cap,buf,len);
-		//reduce capability to buffer to read only
-		msg_cap=cheri_andperm(msg_cap,CHERI_PERM_GLOBAL|CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP);
-		//append capability to buffer
-		old_end=port->end;
-		port->end=port->end+CHERICAP_SIZE;
-		dest_buf=(void **)port->buffer;
-		dest_buf[old_end]=msg_cap;
+		case COCHANNEL:
+			//doesn't measure circular properly?
+			if((port->length-used_space)<len)
+			{
+				err(1,"message too big/buffer is full");
+			}
+			old_end=port->end;
+			port->end=port->end+len;
+			memcpy((char *)port->buffer+old_end, buf, len);
+			break;
+		case COCARRIER:
+			
+			//map buffer of size len
+			//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
+			//ALSO VM ISSUES IF SENDER EXITS EARLY
+			msg_cap=calloc(len,1);
+			//copy data from buf
+			memcpy(msg_cap,buf,len);
+			//reduce capability to buffer to read only
+			msg_cap=cheri_andperm(msg_cap,COCARRIER_PERMS);
+			//append capability to buffer
+			old_end=port->end;
+			port->end=port->end+CHERICAP_SIZE;
+			dest_buf=(void **)port->buffer;
+			dest_buf[old_end]=msg_cap;
+			break;
+		default:
+			err(1,"unimplemented coport type");
 	}
 	return 0;
 }
 
-int corecv(coport_t ** p, void ** buf, size_t len)
+int corecv(coport_t * port, void ** buf, size_t len)
 {
 	//we need more atomicity on changes to end
 	int old_start;
-	coport_t * port;
-	port=*p;
-	if(port->type==COCHANNEL)
+	unsigned char ** msg_buf;
+	switch(port->type)
 	{
-		if (port->start==port->length)
-		{
-			//check for synchronicity
-			err(1,"no message in buffer");
-		}
-		if(port->length<len)
-		{
-			err(1,"message too big");
-		}
-		if(port->buffer==NULL)
-		{
-			err(1,"coport is closed");
-		}
-		old_start=port->start;
-		port->start=port->start+len;
-		memcpy(buf,(char *)port->buffer+old_start, len);
-		port->start=port->start+len;
-	}
-	else if(port->type==COCARRIER)
-	{
-		unsigned char ** msg_buf = port->buffer;
-		//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
-		//len is advisory
-		//perhaps we should allocate buf in COCHANNEL rather than expect 
-		//an allocated buffer
-		old_start=port->start;
-		port->start=port->start+CHERICAP_SIZE;
-		//pop next cap from buffer into buf (index indicated by start)
-		*buf=msg_buf[old_start];
-		memset(&msg_buf[old_start],0,CHERICAP_SIZE);
-		//perhaps inspect length and perms for safety
-		if(cheri_getlen(buf)!=len)
-		{
-			warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
-		}
-		if((cheri_getperm(buf)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
-		{
-			err(1,"received capability does not grant read permissions");
-		}
+		case COCHANNEL:
+			if (port->start==port->length)
+			{
+				//check for synchronicity
+				err(1,"no message in buffer");
+			}
+			if(port->length<len)
+			{
+				err(1,"message too big");
+			}
+			if(port->buffer==NULL)
+			{
+				err(1,"coport is closed");
+			}
+			old_start=port->start;
+			port->start=port->start+len;
+			memcpy(*buf,(char *)port->buffer+old_start, len);
+			port->start=port->start+len;
+			break;
+		case COCARRIER:
+			msg_buf = port->buffer;
+			//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
+			//len is advisory
+			//perhaps we should allocate buf in COCHANNEL rather than expect 
+			//an allocated buffer
+			old_start=port->start/CHERICAP_SIZE;
+			port->start=port->start+CHERICAP_SIZE;
+			//pop next cap from buffer into buf (index indicated by start)
+			*buf=msg_buf[old_start];
+			msg_buf[old_start]=cheri_cleartag(msg_buf[old_start]);
+			//perhaps inspect length and perms for safety
+			if(cheri_getlen(buf)!=len)
+			{
+				warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
+			}
+			if((cheri_getperm(buf)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
+			{
+				err(1,"received capability does not grant read permissions");
+			}
+			break;
+		default:
+			break;
 	}
 	return 0;
 	

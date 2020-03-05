@@ -42,13 +42,13 @@ ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o coproc.o \
 	-o $(OUTDIR)/comesg_ukernel $(foreach o, $^, $(BUILDDIR)/$o)
 
 cochatter : comsg_chatterer.o comsg.o coproc.o comutex.o
-	$(CC) $(CFLAGS) $(LLDFLAGS) $(LIB_PARAMS) $(INC_PARAMS) \
+	$(CC) $(CFLAGS)  $(LLDFLAGS) $(LIB_PARAMS) $(INC_PARAMS) \
 	-o $(OUTDIR)/cochatter $(foreach o, $^, $(BUILDDIR)/$o)
 
 comsg_chatterer.o : src/bin/comsg_chatterer.c include/comsg.h \
 	src/ukernel/include/sys_comsg.h include/coport.h \
 	include/comutex.h include/coproc.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/bin/comsg_chatterer.c \
+	$(CC) $(CFLAGS)   $(INC_PARAMS) -c src/bin/comsg_chatterer.c \
 	-o $(BUILDDIR)/comsg_chatterer.o
 	$(foreach c, $^, cp $c /Users/peter/Projects/CHERI/cheribsd/usr.bin/cochatter;)
 
@@ -78,7 +78,7 @@ comutex.o: src/lib/comutex.c include/comutex.h \
 
 sys_comutex.o: src/ukernel/sys_comutex.c include/comutex.h \
 	src/ukernel/include/sys_comsg.h src/ukernel/include/sys_comutex.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/ukernel/sys_comutex.c \
+	$(CC) $(CFLAGS)  $(INC_PARAMS) -c src/ukernel/sys_comutex.c \
 	-o $(BUILDDIR)/sys_comutex.o
 	cp $< /Users/peter/Projects/CHERI/cheribsd/usr.bin/comesg_ukernel
 	cp $< /Users/peter/Projects/CHERI/cheribsd/usr.bin/cochatter

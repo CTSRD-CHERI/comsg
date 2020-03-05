@@ -2,6 +2,7 @@
 #include <sys/param.h>
 #include <cheri/cheric.h>
 
+#include <stdatomic.h>
 #include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,11 +14,12 @@
 
 #include "ukern_mman.h"
 #include "ukern_params.h"
+#include "sys_comsg.h"
 
+buffer_table_t buffer_table;
+region_table_t region_table;
+work_queue_t jobs_queue;
 
-static buffer_table_t buffer_table;
-static region_table_t region_table;
-static work_queue_t jobs_queue;
 
 int reserve_region(void)
 {
@@ -62,6 +64,7 @@ int map_region(void)
 	pthread_mutex_lock(&region_table.lock);
 
 	new_page=MAP_UKERN(NULL,UKERN_MAP_LEN);
+	mlock(new_page,UKERN_MAP_LEN);
 	if(errno!=0)
 	{
 		err(errno,"mapping region failed\n");
@@ -275,7 +278,7 @@ int buffer_table_setup(void)
 	
 	buffer_table.length=0;
 	buffer_table.next=0;
-	buffer_table.table=calloc(MAX_COPORTS*2,sizeof(buffer_table_entry_t));
+	buffer_table.table=calloc(MAX_COPORTS*U_FUNCTIONS*WORKER_COUNT*MAX_COMUTEXES,sizeof(buffer_table_entry_t));
 
 	return pthread_mutex_init(&buffer_table.lock,&mtx_attr);
 }
@@ -302,10 +305,10 @@ int work_queue_setup(int len)
 	pthread_mutexattr_init(&mtx_attr);
 	pthread_condattr_init(&cond_attr);
 
-	jobs_queue.end=0;
+	jobs_queue.end=-1; //first item will move to position 0 
 	jobs_queue.start=0;
 	jobs_queue.count=0;
-	jobs_queue.items=malloc(sizeof(work_queue_item_t)*len);
+	jobs_queue.items=calloc(len,sizeof(work_queue_item_t));
 	jobs_queue.max_len=len;
 
 	error=pthread_mutex_init(&jobs_queue.lock,&mtx_attr);
@@ -325,8 +328,7 @@ work_queue_item_t * queue_put_job(work_queue_t * queue,work_queue_item_t * job)
 	queue->end=(queue->end+1)%queue->max_len;
 	queue->items[queue->end]=*job;
 	q_job=&queue->items[queue->end];
-	pthread_mutex_lock(&q_job->lock);
-	queue->count++;
+	queue->count+=1;
 	pthread_cond_signal(&queue->not_empty);
 	pthread_mutex_unlock(&queue->lock);
 	return q_job;
@@ -342,38 +344,49 @@ work_queue_item_t * queue_get_job(work_queue_t * queue)
 	}
 	job=&queue->items[queue->start];
 	queue->start=(queue->start+1)%queue->max_len;
-	queue->count--;
+	queue->count-=1;
 	pthread_cond_signal(&queue->not_full);
 	pthread_mutex_unlock(&queue->lock);
 	return job;
 }
 
-void * ukern_malloc(size_t len)
+void * ukern_malloc(size_t length)
 {
 	work_queue_item_t malloc_job;
-	work_queue_item_t *queued_job;
+	_Atomic(work_queue_item_t *) q_job;
 	pthread_mutexattr_t mtx_attr;
 	pthread_condattr_t cond_attr;
 	void * __capability memory;
+
+	if(length<=0)
+	{
+		err(1,"cannot request buffer of length less than 1");
+	}
+	else if (length>UKERN_MAP_LEN)
+	{
+		err(1,"cannot request buffer or length greater than UKERN_MAP_LEN");
+	}
 
 	pthread_mutexattr_init(&mtx_attr);
 	pthread_condattr_init(&cond_attr);
 
 	malloc_job.action=BUFFER_ALLOCATE;
-	malloc_job.len=len;
+	malloc_job.len=length;
 	malloc_job.subject=NULL;
 
 	pthread_mutex_init(&malloc_job.lock,&mtx_attr);
 	pthread_cond_init(&malloc_job.processed,&cond_attr);
 
-	queued_job=queue_put_job(&jobs_queue,&malloc_job);
-	while(queued_job->subject==NULL)
+	pthread_mutex_lock(&malloc_job.lock);
+	//same lock as q_job
+	q_job=queue_put_job(&jobs_queue,&malloc_job);	
+	while(q_job->subject==NULL)
 	{
 		//printf("waiting for job completion...\n");
-		pthread_cond_wait(&queued_job->processed,&queued_job->lock);
+		pthread_cond_wait(&q_job->processed,&q_job->lock);
 	}
-	memory=queued_job->subject;
-	pthread_mutex_unlock(&queued_job->lock);
+	memory=q_job->subject;
+	pthread_mutex_unlock(&q_job->lock);
 	return memory;
 }
 
@@ -386,9 +399,9 @@ void * ukern_mman(void *args)
 	{
 		warn("ukern_mman takes no args");
 	}
-	error=buffer_table_setup();
+	error=work_queue_setup((WORKER_COUNT*U_FUNCTIONS)+2);
+	error+=buffer_table_setup();
 	error+=region_table_setup();
-	error+=work_queue_setup(WORKER_COUNT);
 	if (error!=0)
 	{
 		err(1,"queue/table setup failed\n");
@@ -415,14 +428,12 @@ void * ukern_mman(void *args)
 			default:
 				err(1,"invalid operation %d specified",task->action);
 		}
-		if(task->subject!=NULL)
-		{
-			pthread_cond_signal(&task->processed);
-			pthread_mutex_unlock(&task->lock);
-		}
-		else
+		if(task->subject==NULL)
 		{
 			err(1,"could not assign buffer");
 		}
+		pthread_cond_signal(&task->processed);
+		pthread_mutex_unlock(&task->lock);
+		
 	}
 }

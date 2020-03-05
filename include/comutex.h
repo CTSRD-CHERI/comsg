@@ -37,11 +37,11 @@ typedef struct _comutex_t
 {
 	comtx_t * mtx;
 	char * name;
-	void * key;
+	_Atomic(void * __capability) key;
 } comutex_t;
 
 int counlock(comutex_t * mtx);
-int colock(comutex_t * mtx, void * key);
+int colock(comutex_t * mtx, _Atomic(void * __capability) key);
 int comutex_init(char * mtx_name, comutex_t * mutex);
 
 #endif
