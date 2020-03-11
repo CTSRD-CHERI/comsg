@@ -217,6 +217,26 @@ void *coport_open(void *args)
 	return 0;
 }
 
+void create_comutex(comutex_t * cmtx,char * name)
+{
+	int error;
+	sys_comutex_t * sys_mtx;
+	comutex_tbl_entry_t table_entry;
+
+	sys_mtx=ukern_malloc(sizeof(sys_comutex_t));
+	error=sys_comutex_init(name,sys_mtx);
+	
+	table_entry.id=generate_id();
+	table_entry.mtx=*sys_mtx;
+
+	cmtx->mtx=sys_mtx->user_mtx;
+	strcpy(cmtx->name,name);
+
+	error=add_mutex(table_entry);
+
+	return;
+}
+
 void *comutex_setup(void *args)
 {
 	worker_args_t * data=args;
@@ -247,6 +267,7 @@ void *comutex_setup(void *args)
 		if(lookup==1)
 		{
 			/* if it doesn't, set up mutex */
+			mtx=ukern_malloc(sizeof(sys_comutex_t));
 			error=sys_comutex_init(comutex_args.args.name,mtx);
 			table_entry.mtx=*mtx;
 			table_entry.id=generate_id();

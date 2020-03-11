@@ -27,14 +27,19 @@ default : ukernel cochatter
 	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	cheribsd cheribsd-purecap disk-image-purecap
 
-run : ukernel cochatter
+run : ukernel cochatter ipc
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)
 	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)
+	cp $(OUTDIR)/ipc-dynamic $(CHERI_FSDIR)
 	git commit -a --message="$(BUILD_TIME)"
 	/Users/peter/Projects/CHERI/cheribuild/cheribuild.py --skip-update --force \
 	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	cheribsd cheribsd-purecap disk-image-purecap run-purecap
+
+ipc : src/bin/ipc.c
+	$(CC) ${CFLAGS} -o $(OUTDIR)/ipc-dynamic -DPROGNAME=\"ipc-dynamic\" src/bin/ipc.c -dynamic \
+            -lpthread
 
 ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o coproc.o \
 	ukern_mman.o

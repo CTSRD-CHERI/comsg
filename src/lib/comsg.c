@@ -3,6 +3,7 @@
 #include <cheri/cherireg.h>
 
 #include <unistd.h>
+#include <stdatomic.h>
 #include <err.h>
 #include <string.h>
 #include <stdlib.h>
@@ -44,14 +45,15 @@ int coopen(const char * coport_name, coport_type_t type, coport_t* *prt)
 int cosend(coport_t * port, const void * buf, size_t len)
 {
 	unsigned int old_end;
+	coport_status_t status_val;
 	_Atomic(void *) msg_cap;
 	void ** dest_buf;
-	unsigned int used_space = port->end-port->start;
-
+	unsigned int used_space;
 	//we need some atomicity on changes toe end and start
 	switch(port->type)
 	{
 		case COCHANNEL:
+			used_space = port->end-port->start;
 			//doesn't measure circular properly?
 			if((port->length-used_space)<len)
 			{
@@ -77,6 +79,22 @@ int cosend(coport_t * port, const void * buf, size_t len)
 			dest_buf=(void **)port->buffer;
 			dest_buf[old_end]=msg_cap;
 			break;
+		case COPIPE:
+			for(;;)
+			{
+				status_val=COPORT_READY;
+				if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_BUSY))
+				{
+					break;
+				}
+			}
+			if(cheri_getlen(port->buffer)<len)
+			{
+				err(1,"recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
+			}
+			memcpy(port->buffer,buf,len);
+			port->status=COPORT_DONE;
+			break;
 		default:
 			err(1,"unimplemented coport type");
 	}
@@ -88,13 +106,18 @@ int corecv(coport_t * port, void ** buf, size_t len)
 	//we need more atomicity on changes to end
 	int old_start;
 	unsigned char ** msg_buf;
+	coport_status_t status_val;
 	switch(port->type)
 	{
 		case COCHANNEL:
 			if (port->start==port->length)
 			{
 				//check for synchronicity
-				err(1,"no message in buffer");
+				warn("no message in buffer, blocking...");
+				while(port->start==port->length)
+				{
+					__asm("nop");
+				}
 			}
 			if(port->length<len)
 			{
@@ -104,10 +127,21 @@ int corecv(coport_t * port, void ** buf, size_t len)
 			{
 				err(1,"coport is closed");
 			}
+			
+			for(;;)
+			{
+				status_val=COPORT_OPEN;
+				if(atomic_compare_exchange_strong(&port->status,&status_val,COPORT_BUSY))
+				{
+					break;
+				}
+			}
 			old_start=port->start;
 			port->start=port->start+len;
 			memcpy(*buf,(char *)port->buffer+old_start, len);
 			port->start=port->start+len;
+
+			port->status=COPORT_OPEN;
 			break;
 		case COCARRIER:
 			msg_buf = port->buffer;
@@ -121,7 +155,7 @@ int corecv(coport_t * port, void ** buf, size_t len)
 			*buf=msg_buf[old_start];
 			msg_buf[old_start]=cheri_cleartag(msg_buf[old_start]);
 			//perhaps inspect length and perms for safety
-			if(cheri_getlen(buf)!=len)
+			if(cheri_getlen(*buf)!=len)
 			{
 				warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
 			}
@@ -129,6 +163,27 @@ int corecv(coport_t * port, void ** buf, size_t len)
 			{
 				err(1,"received capability does not grant read permissions");
 			}
+			break;
+		case COPIPE:
+			for(;;)
+			{
+				status_val=COPORT_OPEN;
+				if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_BUSY))
+				{
+					break;
+				}
+			}
+			port->buffer=*buf;
+			port->status=COPORT_READY;
+			for(;;)
+			{
+				status_val=COPORT_DONE;
+				if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_OPEN))
+				{
+					break;
+				}
+			}
+			cheri_cleartag(port->buffer);
 			break;
 		default:
 			break;

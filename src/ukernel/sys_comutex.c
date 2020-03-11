@@ -7,6 +7,7 @@
 #include <err.h>
 
 #include "comutex.h"
+#include "ukern_mman.h"
 #include "sys_comutex.h"
 
 
@@ -95,7 +96,7 @@ int sys_colock(sys_comutex_t * mutex,void * key)
 	//TODO-PBB: convert to sleep with signal?
 	while(sys_cotrylock(mutex,key)==0)
 	{
-		//spin
+		__asm("nop");
 	}
 	return 0;
 }
@@ -132,9 +133,9 @@ int sys_comutex_init(char * name, sys_comutex_t * m)
 	comtx_t * mtx;
 	atomic_int * val;
 
-	val=(_Atomic int *)malloc(sizeof(int));
+	val=(_Atomic int *)ukern_malloc(sizeof(int));
 	*val=COMUTEX_UNLOCKED;
-	mtx=(comtx_t *)malloc(sizeof(comtx_t));
+	mtx=(comtx_t *)ukern_malloc(sizeof(comtx_t));
 
 	mtx->lock=cheri_andperm(val,LOCK_PERMS);
 	mtx->check_lock=cheri_andperm(val,CHECK_LOCK_PERMS);

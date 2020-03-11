@@ -72,6 +72,7 @@
 1. Not losing the switcher code/data capabilities down the back of the sofa
 	* cosetup(2) gives us these even if we do lose them, but this is a syscall
 	* Not super vital, but would make the semantics friendlier IMO
+2. The error condition for a dead callee in cheri_cocall.S does not work
 
 ## Changes we have made to cocall et al
 

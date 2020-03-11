@@ -24,7 +24,7 @@
 */
 typedef enum {COSEND, CORECV} coport_op_t;
 typedef enum {COCHANNEL, COCARRIER, COPIPE} coport_type_t;
-typedef enum {COPORT_CLOSED=-1,COPORT_OPEN=0,COPORT_READY=1,COPORT_BUSY=2} coport_status_t;
+typedef enum {COPORT_CLOSED=-1,COPORT_OPEN=0,COPORT_BUSY=1,COPORT_READY=2,COPORT_DONE=3} coport_status_t;
 
 /* 
  * TODO-PBB: Rework so we can have fine-grained, least-privilege protection of 
@@ -43,8 +43,11 @@ typedef struct _coport_t
 	_Atomic u_int end;
 	_Atomic coport_status_t status;
 	coport_type_t type;
-	comutex_t lock;
+	comutex_t read_lock;
+	comutex_t write_lock;
 } coport_t;
+
+
 
 
 #endif

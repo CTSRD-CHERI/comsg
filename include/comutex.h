@@ -36,8 +36,8 @@ typedef struct _comtx_t
 typedef struct _comutex_t
 {
 	comtx_t * mtx;
-	char * name;
 	_Atomic(void * __capability) key;
+	char * name;
 } comutex_t;
 
 int counlock(comutex_t * mtx);
