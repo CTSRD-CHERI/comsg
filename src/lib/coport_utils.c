@@ -2,6 +2,7 @@
 
 #include <cheri/cheric.h>
 #include <sys/mman.h>
+#include <stdatomic.h>
 #include <err.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,8 +27,8 @@ int init_port(coport_type_t type, coport_t * p)
 	}
 	p->buffer=ukern_malloc(p->length);
 	memset(p->buffer,0,p->length);
-	printf("got memory from ukern_mman subsystem\n");
-	p->status=COPORT_OPEN;
+	//printf("got memory from ukern_mman subsystem\n");
+	atomic_store_explicit(&p->status,COPORT_OPEN,memory_order_relaxed);
 	p->start=0;
 	p->end=0;
 	p->type=type;

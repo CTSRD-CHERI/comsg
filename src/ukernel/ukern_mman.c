@@ -415,9 +415,7 @@ void * ukern_mman(void *args)
 			err(1,"no task returned");
 		}
 		pthread_mutex_lock(&task->lock);
-
-		printf("operation %d specified\n",task->action);
-		switch (task->action)
+			switch (task->action)
 		{
 			case BUFFER_ALLOCATE:
 				task->subject=buffer_malloc(task->len);

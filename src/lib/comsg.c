@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdatomic.h>
 #include <err.h>
+#include <time.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,6 +13,16 @@
 #include "coproc.h"
 #include "coport.h"
 #include "comsg.h"
+
+#define	timespecsub(vvp, uvp)						\
+	do {								\
+		(vvp)->tv_sec -= (uvp)->tv_sec;				\
+		(vvp)->tv_nsec -= (uvp)->tv_nsec;			\
+		if ((vvp)->tv_nsec < 0) {				\
+			(vvp)->tv_sec--;				\
+			(vvp)->tv_nsec += 1000000000;			\
+		}							\
+	} while (0)
 
 int coopen(const char * coport_name, coport_type_t type, coport_t* *prt)
 {
@@ -48,26 +59,52 @@ int cosend(coport_t * port, const void * buf, size_t len)
 	coport_status_t status_val;
 	_Atomic(void *) msg_cap;
 	void ** dest_buf;
-	unsigned int used_space;
-	//we need some atomicity on changes toe end and start
+	//struct timespec start, end;
+	
 	switch(port->type)
 	{
 		case COCHANNEL:
-			used_space = port->end-port->start;
-			//doesn't measure circular properly?
-			if((port->length-used_space)<len)
+			for(;;)
+			{
+				status_val=COPORT_OPEN;
+				if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+				{
+					break;
+				}
+			}
+			atomic_thread_fence(memory_order_acquire);
+			if((port->length-((port->end-port->start)%port->length))<len)
 			{
 				err(1,"message too big/buffer is full");
 			}
 			old_end=port->end;
-			port->end=port->end+len;
-			memcpy((char *)port->buffer+old_end, buf, len);
+			port->end=(port->end+len)%port->length;
+			if(old_end+len>port->length)
+			{
+				memcpy((char *)port->buffer+old_end, buf, port->length-old_end);
+				memcpy((char *)port->buffer+old_end, (const char *)buf+port->length-old_end, (old_end+len)%port->length);
+
+			}
+			else
+			{
+				memcpy((char *)port->buffer+old_end, buf, len);
+			}
+			atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
 			break;
 		case COCARRIER:
-			
+			for(;;)
+			{
+				status_val=COPORT_OPEN;
+				if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+				{
+					break;
+				}
+			}
+			atomic_thread_fence(memory_order_acquire);
 			//map buffer of size len
 			//POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
 			//ALSO VM ISSUES IF SENDER EXITS EARLY
+			//Perhaps mmap? Perhaps ukern mmap offers memory?
 			msg_cap=calloc(len,1);
 			//copy data from buf
 			memcpy(msg_cap,buf,len);
@@ -78,26 +115,33 @@ int cosend(coport_t * port, const void * buf, size_t len)
 			port->end=port->end+CHERICAP_SIZE;
 			dest_buf=(void **)port->buffer;
 			dest_buf[old_end]=msg_cap;
+			atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
 			break;
 		case COPIPE:
 			for(;;)
 			{
 				status_val=COPORT_READY;
-				if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_BUSY))
+				if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
 				{
 					break;
 				}
 			}
+			atomic_thread_fence(memory_order_acquire);
 			if(cheri_getlen(port->buffer)<len)
 			{
 				err(1,"recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
 			}
+			//clock_gettime(CLOCK_REALTIME,&start);
 			memcpy(port->buffer,buf,len);
-			port->status=COPORT_DONE;
+			//clock_gettime(CLOCK_REALTIME,&end);
+			//timespecsub(&end,&start);
+			//printf("memcpy time:%jd.%09jds\n",(intmax_t)end.tv_sec,(intmax_t)end.tv_nsec);
+			atomic_store_explicit(&port->status,COPORT_DONE,memory_order_relaxed);
 			break;
 		default:
 			err(1,"unimplemented coport type");
 	}
+	atomic_thread_fence(memory_order_release);
 	return 0;
 }
 
@@ -107,6 +151,15 @@ int corecv(coport_t * port, void ** buf, size_t len)
 	int old_start;
 	unsigned char ** msg_buf;
 	coport_status_t status_val;
+	for(;;)
+	{
+		status_val=COPORT_OPEN;
+		if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+		{
+			break;
+		}
+	}
+	atomic_thread_fence(memory_order_acquire);
 	switch(port->type)
 	{
 		case COCHANNEL:
@@ -131,7 +184,7 @@ int corecv(coport_t * port, void ** buf, size_t len)
 			for(;;)
 			{
 				status_val=COPORT_OPEN;
-				if(atomic_compare_exchange_strong(&port->status,&status_val,COPORT_BUSY))
+				if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
 				{
 					break;
 				}
@@ -140,8 +193,7 @@ int corecv(coport_t * port, void ** buf, size_t len)
 			port->start=port->start+len;
 			memcpy(*buf,(char *)port->buffer+old_start, len);
 			port->start=port->start+len;
-
-			port->status=COPORT_OPEN;
+			atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
 			break;
 		case COCARRIER:
 			msg_buf = port->buffer;
@@ -165,16 +217,9 @@ int corecv(coport_t * port, void ** buf, size_t len)
 			}
 			break;
 		case COPIPE:
-			for(;;)
-			{
-				status_val=COPORT_OPEN;
-				if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_BUSY))
-				{
-					break;
-				}
-			}
 			port->buffer=*buf;
-			port->status=COPORT_READY;
+			atomic_store_explicit(&port->status,COPORT_READY,memory_order_relaxed);
+			atomic_thread_fence(memory_order_release);
 			for(;;)
 			{
 				status_val=COPORT_DONE;
@@ -183,11 +228,12 @@ int corecv(coport_t * port, void ** buf, size_t len)
 					break;
 				}
 			}
-			cheri_cleartag(port->buffer);
+			port->buffer=cheri_cleartag(port->buffer);
 			break;
 		default:
 			break;
 	}
+	atomic_thread_fence(memory_order_release);
 	return 0;
 	
 }

@@ -50,8 +50,10 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Others
 .DS_Store
 setup.sh
-tests/get_perms.c
-tests/get_voidstar_perms
-output/
+output
+build
+tests

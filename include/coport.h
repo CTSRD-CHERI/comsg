@@ -37,10 +37,10 @@ typedef enum {COPORT_CLOSED=-1,COPORT_OPEN=0,COPORT_BUSY=1,COPORT_READY=2,COPORT
  */
 typedef struct _coport_t
 {
-	_Atomic(void * __capability) buffer;
+	void * __capability buffer;
 	u_int length;
-	_Atomic u_int start;
-	_Atomic u_int end;
+	u_int start;
+	u_int end;
 	_Atomic coport_status_t status;
 	coport_type_t type;
 	comutex_t read_lock;
