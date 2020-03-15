@@ -1,6 +1,5 @@
 # comesg
 
-## Summary 
 This is a proof-of-concept userspace microkernel facilitating syscall-free IPC using CHERI co-processes. It was developed by Peter Blandford-Baker for the MPhil in Advanced Computer Science at the Cambridge Computer Lab.
 
 A lot of this code needs tidying, stylising, and neatening. Some parts are untested (comutexes, multiple workers). It can be built for the cocall branch of CheriBSD. If you want it to work, you will also need a version of the coprocess switcher that lets you copy capabilities across protection boundaries from the coaccepting process to the cocalling process.
