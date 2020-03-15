@@ -6,7 +6,7 @@ A lot of this code needs tidying, stylising, and neatening. Some parts are untes
 
 ## Getting Started
 
-Set the environment variable CHERI_ROOT to the directory containing the directories containing CheriBSD, cheribuild, and the extra-files directory. Alternatively, set CHERI_FSDIR, CHERIBSD_DIR, CHERIBUILD_DIR to the extra-files, Cheribsd, and cheribuild directories respectively. Your CC should be a version of clang able to target 128-bit purecap CheriBSD running on CHERI-MIPS.
+Set (and export) the environment variable CHERI_ROOT to the directory containing the directories containing CheriBSD, cheribuild, and the extra-files directory. Alternatively, set CHERI_FSDIR, CHERIBSD_DIR, CHERIBUILD_DIR to the extra-files, Cheribsd, and cheribuild directories respectively. Your CC should be a version of clang able to target 128-bit purecap CheriBSD running on CHERI-MIPS.
 
 The command: 
 
@@ -14,7 +14,7 @@ The command:
 
 will build the code and run QEMU/CheriBSD-purecap. 
 
-WARNING: By default, the `--force` option is enabled which will replace your purecap disk image. If you don't want to do this, set the FORCE environment variable to an empty value.
+WARNING: By default, the `--force` option is enabled which will replace your purecap disk image. If you don't want to do this, set (and export) the FORCE environment variable to an empty value.
 
 An example script setting the environment variables you need can be found in example-setup.sh. Modify this and source it if you want to avoid hassle :)
 
