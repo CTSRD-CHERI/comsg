@@ -12,8 +12,9 @@
 
 static char * message_str;
 static const char * one_k_str = "SIqfubhhJOVdGGMvw09vqHs7S8miUyi1JBaFNGbtKYy4vUs6QeB1JdrMAlWOcC5llzZ5XogADMOvIyNP9R0deF6Coi8RDsf1HUQFVZXYskgmUODJb0uB88DkY2h2qS1dMEX06tTaUWCTDOwRWt9qtgtD8OfBH0uKp6ABwt5vbCjchd7npp12jXBDdAzzkC81DOTdYGMsuuZ6iqMQt0CwkesUj4HSJ7exSaD5hQn47hpr2cinaATAlmfd8G1oKlYWCcXszmGAPkZm4qpE6lA51dTMNmR9kXvnONnMFWesrjI8XmA7qss71oSUgIu10WCnJ7YJA97lg40fCQ647lZCZKdsqGF7XZAgJEkAwSmZ7apdVK4zmlK8JXkdKCuecHxEJk3NDLdN83qvonYiJE7aoZHmibjwHMiJDAtmPKlaJBnKS5yLNXRExHLH5GXvjrvRIdDzCtQZStt4ZW8PickMMcDczSyP7Kr0OwjPaX3dSgU6PFRX3hKbYGyXx28VdzeAZ2ynvv1b5i13Hg9xW6oeidFVFw0SsuTg9gVmbYRr9F20LdDxGaJBMofsX6SbHx66JmtsgztP0DWAQxxviSRlUBi8fYvgxHqRfyYyGEFi5V1GMbPtpIKB6EZ2ixOt63VcXTK2egU4dzDcOlgognDz8253LFn0e02hNRX0nRRkamJ0xMkS9tzBW8NhdxG2iQ0zWbAyHzPWmFYQOvrXPm0u5yS2drByXmz5y9S8LvnBAZ1vlaLAylyMIxy8z6clpCIZqTovP3X0Eg6xPuLg4xQpXvxwx3U2WryMcDWRmAJWW7XL6JfzipyZTI9GGPiNp73Hs9CwSlQMpJDh9ByvzsWKmDKm3YUHLDwqe7XdmBbQfOkEKyjrQPr10TvNA0euXw0TTu6dmziZLSGrLv1DFLcuxzQ9CZkg1bkFX8RUzREjG8NmdGa0YLRdru2FWLqC1rCG6c3aD2qp2v0SuVUlJe9qj5aUsFjOlq5s9XGJJepCb6TTeHKP8jsHL7jnJQXIR9O0";
-static int message_len = 10;
-static int runs = 1;
+static unsigned long int message_len = 10;
+static unsigned long int runs = 1;
+static unsigned long int total_size = 10;
 static const char * port_name = "benchmark_port";
 static coport_t * port;
 
@@ -50,7 +51,7 @@ static void send_timestamp(struct timespec * timestamp)
 void send_data(void)
 {
 	struct timespec start_timestamp,end_timestamp;
-
+	double ipc_time;
 	int status;
 	unsigned int message_start;
 
@@ -62,7 +63,7 @@ void send_data(void)
 	}
 	mlock(&message_str,message_len);
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
-	for(int j = 0; j<runs; j++)
+	for(unsigned int j = 0; j<runs; j++)
 	{
 		cosend(port,message_str,message_len);
 	}
@@ -70,8 +71,9 @@ void send_data(void)
 	munlock(&message_str,message_len);
 	message_start=port->start;
 	timespecsub(&end_timestamp,&start_timestamp);
-	printf("transferred %d bytes in %jd.%09jds\n", message_len*runs, (intmax_t)end_timestamp.tv_sec, (intmax_t)end_timestamp.tv_nsec);
-	printf("%.2FKB/s\n",(strlen(message_str)/((float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000)/1024.0));
+	ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
+	printf("transferred %lu bytes in %lf\n", total_size, ipc_time);
+	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
 	if(coport_type==COCARRIER)
 	{
 		while (port->start==message_start)
@@ -85,7 +87,7 @@ void receive_data(void)
 {
 	static char * buffer = NULL;
 	struct timespec start, end;
-
+	float ipc_time;
 	int status;
 
 	status=coopen(port_name,coport_type,&port);
@@ -111,7 +113,7 @@ void receive_data(void)
 	}
 	mlock(buffer,message_len);
 	clock_gettime(CLOCK_REALTIME,&start);
-	for(int j = 0; j<runs; j++)
+	for(unsigned int j = 0; j<runs; j++)
 	{
 		corecv(port,(void **)&buffer,message_len);
 	}
@@ -123,8 +125,9 @@ void receive_data(void)
 	}
 	//printf("message received:%s\n",(char *)buffer);
 	timespecsub(&end,&start);
-	printf("transferred %d bytes in %jd.%09jds\n", message_len*runs, (intmax_t)end.tv_sec, (intmax_t)end.tv_nsec);
-	printf("%.2FKB/s\n",(strlen(message_str)/((float)end.tv_sec + (float)end.tv_nsec / 1000000000)/1024.0));
+	ipc_time=(float)end.tv_sec + (float)end.tv_nsec / 1000000000;
+	printf("transferred %lu bytes in %lf\n", total_size, ipc_time);
+	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
 
 	//if(port->type!=COCARRIER) free(buffer);
 }	
@@ -175,7 +178,8 @@ int main(int argc, char * const argv[])
 				break;
 		}
 	}
-	int i;
+	total_size = message_len * runs;
+	unsigned int i;
 	if (message_len%1024==0)
 	{
 		message_str=calloc(message_len+1,sizeof(char));
