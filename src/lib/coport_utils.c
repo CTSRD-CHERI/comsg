@@ -14,7 +14,7 @@
 #include "sys_comutex.h"
 
 
-int init_port(coport_type_t type, coport_t * p)
+int init_port(coport_type_t type, sys_coport_t* p)
 {
 
 	if(type==COPIPE)

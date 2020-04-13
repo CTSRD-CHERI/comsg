@@ -24,7 +24,7 @@
 		}							\
 	} while (0)
 
-int coopen(const char * coport_name, coport_type_t type, coport_t* *prt)
+int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 {
 	/* request new coport from microkernel */
 	void * __capability switcher_code;
@@ -53,7 +53,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t* *prt)
 	return 0;
 }
 
-int cosend(coport_t * port, const void * buf, size_t len)
+int cosend(coport_t port, const void * buf, size_t len)
 {
 	unsigned int old_end;
 	coport_status_t status_val;
@@ -145,7 +145,7 @@ int cosend(coport_t * port, const void * buf, size_t len)
 	return 0;
 }
 
-int corecv(coport_t * port, void ** buf, size_t len)
+int corecv(coport_t port, void ** buf, size_t len)
 {
 	//we need more atomicity on changes to end
 	int old_start;
@@ -238,7 +238,7 @@ int corecv(coport_t * port, void ** buf, size_t len)
 	
 }
 
-int coclose(coport_t * port)
+int coclose(coport_t port)
 {
 	free(port);
 	return 0;

@@ -45,7 +45,9 @@ typedef struct _coport_t
 	coport_type_t type;
 	comutex_t read_lock;
 	comutex_t write_lock;
-} coport_t;
+} sys_coport_t;
+
+typedef sys_coport_t *coport_t;
 
 
 

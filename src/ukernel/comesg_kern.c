@@ -87,7 +87,7 @@ int add_mutex(comutex_tbl_entry_t entry)
 	return entry_index;
 }
 
-int lookup_port(char * port_name,coport_t ** port_buf)
+int lookup_port(char * port_name,sys_coport_t ** port_buf)
 {
 	if (strlen(port_name)>COPORT_NAME_LEN)
 	{
@@ -98,7 +98,7 @@ int lookup_port(char * port_name,coport_t ** port_buf)
 		if(strcmp(port_name,coport_table.table[i].name)==0)
 		{
 			*port_buf=&coport_table.table[i].port;
-			*port_buf=cheri_csetbounds(*port_buf,sizeof(coport_t));
+			*port_buf=cheri_csetbounds(*port_buf,sizeof(sys_coport_t));
 			return 0;
 		}	
 	}
@@ -167,7 +167,7 @@ void *coport_open(void *args)
 	worker_args_t * data = args;
 	cocall_coopen_t * coport_args;
 	coport_tbl_entry_t table_entry;
-	coport_t port,*prt;
+	sys_coport_t port,*prt;
 
 	char port_name[COPORT_NAME_LEN];
 
@@ -177,8 +177,8 @@ void *coport_open(void *args)
 	void * __capability target;
 
 	coport_args=malloc(sizeof(cocall_coopen_t));
-	//port=malloc(sizeof(coport_t));
-	//memset(port,0,sizeof(coport_t));
+	//port=malloc(sizeof(sys_coport_t));
+	//memset(port,0,sizeof(sys_coport_t));
 
 	error=coaccept_init(&sw_code,&sw_data,data->name,&target);
 	data->cap=target;
@@ -213,7 +213,7 @@ void *coport_open(void *args)
 			index=add_port(table_entry);
 			//printf("coport %s added to table\n",coport_args->args.name);
 			//printf("buffer_perms: %lx\n",cheri_getperm(port->buffer));
-			prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(coport_t));
+			prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
 		}
 		pthread_mutex_unlock(&coport_table.lock);
 		coport_args->port=prt;
