@@ -14,6 +14,7 @@
 #include "coport.h"
 #include "comsg.h"
 
+#ifdef BENCHMARK_MEMCPY
 #define	timespecsub(vvp, uvp)						\
 	do {								\
 		(vvp)->tv_sec -= (uvp)->tv_sec;				\
@@ -23,6 +24,7 @@
 			(vvp)->tv_nsec += 1000000000;			\
 		}							\
 	} while (0)
+#endif
 
 int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 {
@@ -131,12 +133,20 @@ int cosend(coport_t port, const void * buf, size_t len)
 			{
 				err(1,"recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
 			}
-			//clock_gettime(CLOCK_REALTIME,&start);
+			#ifdef BENCHMARK_MEMCPY
+			clock_gettime(CLOCK_REALTIME,&start);
+			#endif
 			memcpy(port->buffer,buf,len);
-			//clock_gettime(CLOCK_REALTIME,&end);
-			//timespecsub(&end,&start);
-			//printf("memcpy time:%jd.%09jds\n",(intmax_t)end.tv_sec,(intmax_t)end.tv_nsec);
+			#ifdef BENCHMARK_MEMCPY
+			clock_gettime(CLOCK_REALTIME,&end);
+			#endif
 			atomic_store_explicit(&port->status,COPORT_DONE,memory_order_relaxed);
+
+			#ifdef BENCHMARK_MEMCPY
+			timespecsub(&end,&start);
+			printf("memcpy time:%jd.%09jds\n",(intmax_t)end.tv_sec,(intmax_t)end.tv_nsec);
+			#endif
+
 			break;
 		default:
 			err(1,"unimplemented coport type");
@@ -238,8 +248,8 @@ int corecv(coport_t port, void ** buf, size_t len)
 	
 }
 
-int coclose(coport_t port)
+int coclose(coport_t * port)
 {
-	free(port);
+	port=NULL;
 	return 0;
 }
