@@ -72,6 +72,7 @@ int lookup_port(char * port_name,sys_coport_t** port_buf);
 int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf);
 void update_worker_args(worker_args_t * args, const char * function_name);
 void create_comutex(comutex_t * cmtx,char * name);
+void *cocarrier_send(void *args);
 void *coport_open(void *args);
 void *comutex_setup(void *args);
 void *comutex_lock(void *args);

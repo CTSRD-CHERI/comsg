@@ -35,7 +35,5 @@ int init_port(coport_type_t type, sys_coport_t* p)
 	//memset(&p->read_lock,0,sizeof(comutex_t));
 	//memset(&p->write_lock,0,sizeof(comutex_t));
 
-
-
 	return 0;
 }

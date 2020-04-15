@@ -16,7 +16,7 @@ static unsigned long int message_len = 10;
 static unsigned long int runs = 1;
 static unsigned long int total_size = 10;
 static const char * port_name = "benchmark_port";
-static coport_t * port;
+static coport_t port;
 
 //static const char * message_str = "";
 

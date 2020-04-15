@@ -158,6 +158,11 @@ void update_worker_args(worker_args_t * args, const char * function_name)
 	}
 }
 
+void *cocarrier_send(void *args)
+{
+	//todo implement
+}
+
 void *coport_open(void *args)
 {
 	int error;
