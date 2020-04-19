@@ -37,11 +37,10 @@
 #define RESERVE_UKERN(a,b) mmap(a,b,UKERN_MMAP_PROT,UKERN_RESERVE_FLAGS,-1,0)
 
 
-#define BUFFER_ACTIVE 0
-#define BUFFER_FREED 1
+typedef enum {BUFFER_ACTIVE=0,BUFFER_FREED=1} buffer_type_t;
 
 typedef enum {REGION_NONE,REGION_RESERVED,REGION_MAPPED} region_type_t;
-typedef enum {BUFFER_ALLOCATE, BUFFER_FREE} queue_action_t;
+typedef enum {BUFFER_ALLOCATE, BUFFER_FREE, MESSAGE_BUFFER_ALLOCATE, MESSAGE_BUFFER_FREE} queue_action_t;
 
 typedef struct _region_table_entry
 {
@@ -62,7 +61,7 @@ typedef struct _region_table
 
 typedef struct _buffer_table_entry
 {
-	_Atomic int type;
+	_Atomic buffer_type_t type;
 	region_table_entry_t * region;
 	_Atomic(void * __capability) mem;
 } buffer_table_entry_t;
@@ -106,14 +105,20 @@ int map_reservation(int index);
 int check_region(int entry_index, size_t len);
 region_table_entry_t * ukern_find_memory(int hint,void ** dest_cap, size_t len);
 int map_new_region(void);
-void * get_buffer_memory(region_table_entry_t ** region_dst,size_t len);
-void * buffer_malloc(size_t len);
-void * buffer_free(void * __capability buf);
+void * __capability get_buffer_memory(region_table_entry_t ** region_dst,size_t len);
+void * __capability buffer_malloc(size_t len);
+void buffer_free(void * __capability buf);
 int buffer_table_setup(void);
 int region_table_setup(void);
 int work_queue_setup(int len);
-work_queue_item_t * queue_put_job(work_queue_t * queue,work_queue_item_t * job);
+work_queue_item_t queue_do_job(work_queue_t * queue,work_queue_item_t job);
+work_queue_item_t * queue_put_job(work_queue_t * queue,work_queue_item_t job);
 work_queue_item_t * queue_get_job(work_queue_t * queue);
 void * ukern_mman(void *args);
-void * ukern_malloc(size_t len);
+void * __capability ukern_do_malloc(size_t length, queue_action_t type);
+void * __capability ukern_fast_malloc(size_t length);
+void * __capability ukern_malloc(size_t len);
+void ukern_do_free(void * __capability buf_cap, queue_action_t type);
+void ukern_fast_free(void * __capability buf_cap);
+void ukern_free(void * __capability buf_cap);
 #endif

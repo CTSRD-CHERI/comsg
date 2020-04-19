@@ -16,7 +16,7 @@ static unsigned long int message_len = 10;
 static unsigned long int runs = 1;
 static unsigned long int total_size = 10;
 static const char * port_name = "benchmark_port";
-static coport_t port;
+static coport_t port = (void * __capability)-1;
 
 //static const char * message_str = "";
 
@@ -61,14 +61,12 @@ void send_data(void)
 	{
 		err(1,"port closed before sending");
 	}
-	mlock(&message_str,message_len);
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
 	for(unsigned int j = 0; j<runs; j++)
 	{
 		cosend(port,message_str,message_len);
 	}
 	clock_gettime(CLOCK_REALTIME,&end_timestamp);
-	munlock(&message_str,message_len);
 	message_start=port->start;
 	timespecsub(&end_timestamp,&start_timestamp);
 	ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
@@ -111,14 +109,12 @@ void receive_data(void)
 	{
 		err(1,"port closed before receiving");
 	}
-	mlock(buffer,message_len);
 	clock_gettime(CLOCK_REALTIME,&start);
 	for(unsigned int j = 0; j<runs; j++)
 	{
 		corecv(port,(void **)&buffer,message_len);
 	}
 	clock_gettime(CLOCK_REALTIME,&end);
-	munlock(buffer,message_len);
 	if(buffer==NULL)
 	{
 		err(1,"buffer not written to");

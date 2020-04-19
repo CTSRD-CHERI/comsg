@@ -21,6 +21,10 @@ region_table_t region_table;
 work_queue_t jobs_queue;
 
 
+// TODO-PBB
+// Improve free implementation so it actually works
+// Perhaps by tracking how free a region is
+
 int reserve_region(void)
 {
 	void * __capability new_page;
@@ -64,6 +68,7 @@ int map_region(void)
 	pthread_mutex_lock(&region_table.lock);
 
 	new_page=MAP_UKERN(NULL,UKERN_MAP_LEN);
+	memset(new_page,0,UKERN_MAP_LEN);
 	mlock(new_page,UKERN_MAP_LEN);
 	if(errno!=0)
 	{
@@ -129,6 +134,8 @@ int check_region(int entry_index, size_t len)
 	pthread_mutex_unlock(&entry->lock);
 	return false;
 }
+
+
 
 region_table_entry_t * ukern_find_memory(int hint,void ** dest_cap, size_t len)
 {
@@ -198,6 +205,10 @@ region_table_entry_t * ukern_find_memory(int hint,void ** dest_cap, size_t len)
 				return entry;
 			}
 			pthread_mutex_unlock(&entry->lock);
+			/*if(entry->size!=entry->free)
+			{
+				//walk some data structure looking for free buffers that might suit our purposes
+			}*/
 		}
 	}
 	pthread_mutex_unlock(&region_table.lock);
@@ -245,14 +256,17 @@ void * buffer_malloc(size_t len)
 	pthread_mutex_lock(&buffer_table.lock);
 	buffer_table.table[buffer_table.next]=buf_entry;
 	buffer_idx=buffer_table.next++;
+	buffer_table.length++;
 	pthread_mutex_unlock(&buffer_table.lock);
+	memset(buf_entry.mem,0,len);
 	return buf_entry.mem;
 }
 
-void * buffer_free(void * __capability buf)
+void buffer_free(void * __capability buf)
 {
 	/* just a placeholder really */
 	/* later i want to add facility to reuse/clean up old buffers */
+	//later is now
 	buffer_table_entry_t buf_entry;
 	pthread_mutex_lock(&buffer_table.lock);
 	for (int i = 0; i < buffer_table.length; ++i)
@@ -263,11 +277,13 @@ void * buffer_free(void * __capability buf)
 			if(buf_entry.type==BUFFER_ACTIVE)
 			{
 				buf_entry.type=BUFFER_FREED;
+				memset(buf_entry.mem,0,cheri_getlen(buf_entry.mem));
+				break;
 			}
 		}
 	}
 	pthread_mutex_unlock(&buffer_table.lock);
-	return cheri_cleartag(buf);
+	return;
 }
 
 int buffer_table_setup(void)
@@ -299,11 +315,22 @@ int region_table_setup(void)
 int work_queue_setup(int len)
 {
 	int error;
-	pthread_mutexattr_t mtx_attr;
-	pthread_condattr_t cond_attr;
+	pthread_mutexattr_t q_mtx_attr;
+	pthread_condattr_t q_cond_attr;
+	pthread_mutexattr_t i_mtx_attr;
+	pthread_condattr_t i_cond_attr;
 
-	pthread_mutexattr_init(&mtx_attr);
-	pthread_condattr_init(&cond_attr);
+	pthread_mutexattr_init(&q_mtx_attr);
+	pthread_mutexattr_setpshared(&q_mtx_attr,PTHREAD_PROCESS_PRIVATE);
+	pthread_condattr_init(&q_cond_attr);
+	pthread_condattr_setpshared(&q_cond_attr,PTHREAD_PROCESS_PRIVATE);
+
+
+	pthread_mutexattr_init(&i_mtx_attr);
+	pthread_mutexattr_setpshared(&i_mtx_attr,PTHREAD_PROCESS_PRIVATE);
+	pthread_condattr_init(&i_cond_attr);
+	pthread_condattr_setpshared(&i_cond_attr,PTHREAD_PROCESS_PRIVATE);
+
 
 	jobs_queue.end=-1; //first item will move to position 0 
 	jobs_queue.start=0;
@@ -311,13 +338,19 @@ int work_queue_setup(int len)
 	jobs_queue.items=calloc(len,sizeof(work_queue_item_t));
 	jobs_queue.max_len=len;
 
-	error=pthread_mutex_init(&jobs_queue.lock,&mtx_attr);
-	error+=pthread_cond_init(&jobs_queue.not_empty,&cond_attr);
-	error+=pthread_cond_init(&jobs_queue.not_full,&cond_attr);
+	error=pthread_mutex_init(&jobs_queue.lock,&q_mtx_attr);
+	error+=pthread_cond_init(&jobs_queue.not_empty,&q_cond_attr);
+	error+=pthread_cond_init(&jobs_queue.not_full,&q_cond_attr);
+
+	for(int i=0;i<jobs_queue.max_len;i++)
+	{
+		pthread_mutex_init(&jobs_queue.items[i].lock,&i_mtx_attr);
+		pthread_cond_init(&jobs_queue.items[i].processed,&i_cond_attr);
+	}
 	return error;
 }
 
-work_queue_item_t * queue_put_job(work_queue_t * queue,work_queue_item_t * job)
+work_queue_item_t * queue_put_job(work_queue_t * queue,work_queue_item_t job)
 {
 	work_queue_item_t * q_job;
 	pthread_mutex_lock(&queue->lock);
@@ -326,7 +359,7 @@ work_queue_item_t * queue_put_job(work_queue_t * queue,work_queue_item_t * job)
 		pthread_cond_wait(&queue->not_full,&queue->lock);
 	}
 	queue->end=(queue->end+1)%queue->max_len;
-	queue->items[queue->end]=*job;
+	queue->items[queue->end]=job;
 	q_job=&queue->items[queue->end];
 	queue->count+=1;
 	pthread_cond_signal(&queue->not_empty);
@@ -350,12 +383,41 @@ work_queue_item_t * queue_get_job(work_queue_t * queue)
 	return job;
 }
 
-void * ukern_malloc(size_t length)
+work_queue_item_t queue_do_job(work_queue_t * queue,work_queue_item_t job)
+{
+	work_queue_item_t * q_job;
+	pthread_mutex_lock(&queue->lock);
+	while(queue->count==queue->max_len)
+	{
+		pthread_cond_wait(&queue->not_full,&queue->lock);
+	}
+	queue->end=(queue->end+1)%queue->max_len;
+	q_job=&queue->items[queue->end];
+	pthread_mutex_lock(&q_job->lock);
+	q_job->action=job.action;
+	q_job->len=job.len;
+	q_job->subject=job.subject;
+	queue->count+=1;
+	pthread_cond_signal(&queue->not_empty);
+	pthread_mutex_unlock(&queue->lock);
+	while(q_job->subject==job.subject)
+	{
+		//printf("waiting for job completion...\n");
+		pthread_cond_wait(&q_job->processed,&q_job->lock);
+	}
+	job.subject=q_job->subject;
+	pthread_mutex_unlock(&q_job->lock);
+	return job;
+}
+
+void * __capability ukern_malloc(size_t length)
+{
+	return ukern_do_malloc(length,BUFFER_ALLOCATE);
+}
+
+void * __capability ukern_do_malloc(size_t length, queue_action_t type)
 {
 	work_queue_item_t malloc_job;
-	_Atomic(work_queue_item_t *) q_job;
-	pthread_mutexattr_t mtx_attr;
-	pthread_condattr_t cond_attr;
 	void * __capability memory;
 
 	if(length<=0)
@@ -367,27 +429,48 @@ void * ukern_malloc(size_t length)
 		err(1,"cannot request buffer or length greater than UKERN_MAP_LEN");
 	}
 
-	pthread_mutexattr_init(&mtx_attr);
-	pthread_condattr_init(&cond_attr);
-
-	malloc_job.action=BUFFER_ALLOCATE;
+	malloc_job.action=type;
 	malloc_job.len=length;
 	malloc_job.subject=NULL;
 
-	pthread_mutex_init(&malloc_job.lock,&mtx_attr);
-	pthread_cond_init(&malloc_job.processed,&cond_attr);
-
-	pthread_mutex_lock(&malloc_job.lock);
 	//same lock as q_job
-	q_job=queue_put_job(&jobs_queue,&malloc_job);	
-	while(q_job->subject==NULL)
-	{
-		//printf("waiting for job completion...\n");
-		pthread_cond_wait(&q_job->processed,&q_job->lock);
-	}
-	memory=q_job->subject;
-	pthread_mutex_unlock(&q_job->lock);
+	malloc_job=queue_do_job(&jobs_queue,malloc_job);	
+	memory=malloc_job.subject;
 	return memory;
+}
+
+void * __capability ukern_fast_malloc(size_t length)
+{
+	return ukern_do_malloc(length,MESSAGE_BUFFER_ALLOCATE);
+}
+
+void ukern_do_free(void * __capability buf_cap,queue_action_t type)
+{
+	work_queue_item_t free_job;
+
+	if(cheri_gettag(buf_cap)==0)
+	{
+		err(1,"trying to free via untagged capability");
+	}
+
+	free_job.action=type;
+	free_job.len=0;
+	free_job.subject=buf_cap;
+
+	free_job=queue_do_job(&jobs_queue,free_job);
+	return;
+}
+
+void ukern_free(void * __capability buf_cap)
+{
+	ukern_do_free(buf_cap,BUFFER_FREE);
+	return;
+}
+
+void ukern_fast_free(void * __capability buf_cap)
+{
+	ukern_do_free(buf_cap,MESSAGE_BUFFER_FREE);
+	return;
 }
 
 void * ukern_mman(void *args)
@@ -415,20 +498,27 @@ void * ukern_mman(void *args)
 			err(1,"no task returned");
 		}
 		pthread_mutex_lock(&task->lock);
-			switch (task->action)
+		switch (task->action)
 		{
 			case BUFFER_ALLOCATE:
 				task->subject=buffer_malloc(task->len);
 				break;
 			case BUFFER_FREE:
-				task->subject=buffer_free(task->subject);
+				buffer_free(task->subject);
+				task->subject=NULL;
+				break;
+			case MESSAGE_BUFFER_ALLOCATE:
+				//message buffers have a much shorter lifespan than coport data structures
+				//and are subject to fewer requirements WRT sharing as they are only ever
+				//accessed by the microkernel
+				task->subject=calloc(1,task->len);
+				break;
+			case MESSAGE_BUFFER_FREE:
+				free(task->subject);
+				task->subject=NULL;
 				break;
 			default:
 				err(1,"invalid operation %d specified",task->action);
-		}
-		if(task->subject==NULL)
-		{
-			err(1,"could not assign buffer");
 		}
 		pthread_cond_signal(&task->processed);
 		pthread_mutex_unlock(&task->lock);

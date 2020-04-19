@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <cheri/cherireg.h>
+#include <stdbool.h>
+#include <sys/queue.h>
 
 #include "coport.h"
 #include "sys_comsg.h"
@@ -39,13 +41,12 @@ typedef struct _request_handler_args_t
 typedef struct _coport_tbl_entry_t
 {
 	unsigned int id;
-	sys_coport_tport;
+	sys_coport_t port;
 	char name[COPORT_NAME_LEN];
 } coport_tbl_entry_t;
 
 typedef struct _coport_tbl_t
 {
-	pthread_mutex_t lock;
 	_Atomic int index;
 	coport_tbl_entry_t * table;
 } coport_tbl_t;
@@ -58,7 +59,7 @@ typedef struct _comutex_tbl_entry_t
 
 typedef struct _comutex_tbl_t
 {
-	_Atomic int index;
+	int index;
 	pthread_mutex_t lock;
 	comutex_tbl_entry_t * table;
 } comutex_tbl_t;
@@ -68,10 +69,17 @@ int generate_id(void);
 int rand_string(char * buf,unsigned int len);
 int add_port(coport_tbl_entry_t entry);
 int add_mutex(comutex_tbl_entry_t entry);
-int lookup_port(char * port_name,sys_coport_t** port_buf);
+int lookup_port(char * port_name,sys_coport_t ** port_buf);
 int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf);
 void update_worker_args(worker_args_t * args, const char * function_name);
 void create_comutex(comutex_t * cmtx,char * name);
+bool valid_coport(sys_coport_t * addr);
+bool valid_cocarrier(sys_coport_t * addr);
+bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e);
+void *copoll_deliver(void *args);
+void *cocarrier_poll(void *args);
+void *cocarrier_register(void *args);
+void *cocarrier_recv(void *args);
 void *cocarrier_send(void *args);
 void *coport_open(void *args);
 void *comutex_setup(void *args);

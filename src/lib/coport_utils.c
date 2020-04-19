@@ -20,17 +20,25 @@ int init_port(coport_type_t type, sys_coport_t* p)
 	if(type==COPIPE)
 	{
 		p->length=CHERICAP_SIZE;
+		p->buffer=NULL;
+		p->end=0;
+	}
+	else if(type==COCARRIER)
+	{
+		p->length=0;
+		p->end=-1;
+		p->buffer=ukern_malloc(COCARRIER_SIZE);
 	}
 	else
 	{
 		p->length=COPORT_BUF_LEN;
+		p->buffer=ukern_malloc(COPORT_BUF_LEN);
 	}
-	p->buffer=ukern_malloc(p->length);
-	memset(p->buffer,0,p->length);
+	
+	//memset(p->buffer,0,p->length);
 	//printf("got memory from ukern_mman subsystem\n");
-	atomic_store_explicit(&p->status,COPORT_OPEN,memory_order_relaxed);
+	p->status=COPORT_OPEN;
 	p->start=0;
-	p->end=0;
 	p->type=type;
 	//memset(&p->read_lock,0,sizeof(comutex_t));
 	//memset(&p->write_lock,0,sizeof(comutex_t));
