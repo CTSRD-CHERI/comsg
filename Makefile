@@ -5,14 +5,14 @@ LIB_PARAMS=$(foreach l, $(LIB),	 -l$l)
 INC_PARAMS=$(foreach i, $(INC), -I$i)
 
 BUILD_TIME:=$(shell date "+%Y/%m/%d %H:%M:%S")
-DEBUG=-v -ggdb 
+DEBUG=-v -g
 CFLAGS=$(DEBUG) -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
 	-mabi=purecap -fPIE -mstack-alignment=16 -fpic
 BUILDDIR=build
 OUTDIR=output
 LLDFLAGS=-pie -fuse-ld=lld
 ifndef FORCE
-FORCE=--force
+FORCE=--force --clean
 endif
 ifdef CHERI_ROOT
 CHERI_FSDIR=$(CHERI_ROOT)/extra-files

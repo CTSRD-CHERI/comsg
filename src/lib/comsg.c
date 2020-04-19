@@ -217,7 +217,7 @@ int corecv(coport_t port, void ** buf, size_t len)
 			*buf=msg_buf[old_start];
 			msg_buf[old_start]=cheri_cleartag(msg_buf[old_start]);
 			//perhaps inspect length and perms for safety
-			if(cheri_getlen(*buf)!=len)
+			if(cheri_getlen(buf)!=len)
 			{
 				warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
 			}
@@ -238,7 +238,7 @@ int corecv(coport_t port, void ** buf, size_t len)
 					break;
 				}
 			}
-			port->buffer=cheri_cleartag(port->buffer);
+			port->buffer=NULL;
 			break;
 		default:
 			break;
@@ -248,8 +248,17 @@ int corecv(coport_t port, void ** buf, size_t len)
 	
 }
 
-int coclose(coport_t * port)
+int coclose(coport_t port)
 {
 	port=NULL;
+	return 0;
+}
+
+int copoll(coport_t port)
+{
+	if (port)
+	{
+		return 0;
+	}
 	return 0;
 }
