@@ -27,13 +27,14 @@
 void * __capability seal_cap;
 int sealed_otype;
 
+pthread_mutex_t global_copoll_lock;
+
 worker_map_entry_t worker_map[U_FUNCTIONS];
 _Atomic int next_worker_i = 0;
 
 _Atomic unsigned int next_port_index = 0;
 comutex_tbl_t comutex_table;
 coport_tbl_t coport_table;
-
 
 const int COPORT_TBL_LEN = (MAX_COPORTS*sizeof(coport_tbl_entry_t));
 const int COMTX_TBL_LEN = (MAX_COMUTEXES*sizeof(comutex_tbl_entry_t));
@@ -218,6 +219,7 @@ bool valid_cocarrier(sys_coport_t * addr)
 
 void *cocarrier_poll(void *args)
 {
+	int i;
     int error;
     int tbl_index;
     int list_index;
@@ -225,8 +227,9 @@ void *cocarrier_poll(void *args)
     int status;
 
     worker_args_t * data = args;
-    cocarrier_poll_t * cocarrier_poll_args;
-    sys_coport_t * cocarrier;   
+    copoll_args_t * copoll_args;
+    sys_coport_t * cocarrier;
+    pollcoport_t * targets;
 
     void * __capability sw_code;
     void * __capability sw_data;
@@ -237,23 +240,28 @@ void *cocarrier_poll(void *args)
     pthread_mutexattr_t mtx_attr;
     pthread_cond_t wake;
     pthread_condattr_t c_attr;
+    coport_listener_t ** listen_entries;
 
-    pthread_mutexattr_init(&mtx_attr);
-    pthread_mutex_init(&sleep,&mtx_attr);
     pthread_condattr_init(&c_attr);
     pthread_cond_init(&wake,&c_attr);
-
+    
     error=coaccept_init(&sw_code,&sw_data,data->name,&target);
     data->cap=target;
     error+=update_worker_args(data,U_COCARRIER_POLL);
     for (;;)
     {
-        error=coaccept(sw_code,sw_data,&caller_cookie,cocarrier_poll_args,sizeof(cocarrier_poll_args));
-        for(int i = 0; i<MAX_COPORTS;i++)
+        error=coaccept(sw_code,sw_data,&caller_cookie,copoll_args,sizeof(copoll_args_t));
+        listen_entries=ukern_fast_malloc(CHERICAP_SIZE*copoll_args->ncoports);        
+        targets=ukern_fast_malloc(sizeof(pollcoport_t)*copoll_args->ncoports);
+        memcpy(targets,copoll_args->cocarriers,sizeof(pollcoport_t)*copoll_args->ncoports);
+        pthread_mutex_lock(&global_copoll_lock);
+        for(int i = 0; i<copoll_args->ncoports;i++)
         {
-            cocarrier=cocarrier_poll_args->cocarriers[i];
+            cocarrier=targets[i].coport;
             if(cocarrier==NULL)
             {
+            	//there is a cap on how many coports can exist
+            	//and in future i expect to impose one on how many can be polled
                 break;
             }
             if(!(valid_cocarrier(cocarrier)))
@@ -262,23 +270,29 @@ void *cocarrier_poll(void *args)
                 cocarrier_send_args->error=EINVAL;
                 continue;
             }
-            //cocarrier=cheri_unseal(cocarrier,seal_cap);
-            table_offset=cheri_getbase(cocarrier)-cheri_getbase(coport_table.table);
-            index=table_offset/sizeof(coport_tbl_entry_t);
-            if(&coport_table.table[index].listeners->next>=&coport_table.table[index].listeners->length)
-            {
-                cocarrier_poll_args->status=-1;
-                cocarrier_poll_args->error=EAGAIN;
-                break;
-            }
-            list_index=atomic_fetch_add(&coport_table.table[index].listeners->next,1);
-            coport_table.table[index].listeners->count++;
-            coport_table.table[index].listeners->list[list_index]=
+            cocarrier=cheri_unseal(cocarrier,seal_cap);
+            listen_entries[i]=ukern_fast_malloc(sizeof(coport_listener_t));
+            listen_entries[i]->wakeup=wake;
+            listen_entries[i]->eventmask=targets[i]->events;
+            LIST_INSERT_HEAD(&cocarrier->listeners,listen_entries[i],entries);
         }
-        if(cocarrier_poll_args->status==-1)
+        if(copoll_args->status==-1)
         {
             //we need to clean up
-        } 
+            for (int j = 0; j < i; ++j)
+            {
+            	LIST_REMOVE(listen_entries[j],entries);
+            	ukern_fast_free(listen_entries[j]);
+            }
+            pthread_mutex_unlock(&global_copoll_lock);
+            ukern_fast_free(listen_entries);
+            ukern_fast_free(targets);
+            copoll_args->error=EINVAL;
+            continue;
+        }
+        pthread_cond_wait(&sleep,&global_copoll_lock);
+        /*do stuff*/
+        pthread_mutex_unlock(&global_copoll_lock);
     }
     
 
@@ -349,6 +363,7 @@ void *cocarrier_send(void *args)
         {
             if(index==cocarrier->start)
             {
+            	//buffer is full - return error
                 cocarrier_send_args->status=-1;
                 cocarrier_send_args->error=EAGAIN;
                 atomic_thread_fence(memory_order_release);
@@ -358,7 +373,10 @@ void *cocarrier_send(void *args)
         }
         cocarrier_buf[index]=msg_buf;
         //check if anyone is waiting on messages to arrive
-        //signal if necessary
+        if(!LIST_EMPTY(&cocarrier->listeners))
+        {
+        	//dostuff
+        }
         //maintain circularity
         cocarrier->end=index;
         cocarrier->length++;
@@ -421,17 +439,13 @@ void *coport_open(void *args)
                 err(1,"unable to init_port");
             }
             //printf("inited port.\n");
+            if(port.type==COCARRIER)
+            {
+                LIST_INIT(&port.listeners);
+            }
             table_entry.port=port;
             table_entry.id=generate_id();
             strcpy(table_entry.name,coport_args->args.name);
-            if(port.type==COCARRIER)
-            {
-                table_entry.listeners=ukern_malloc(sizeof(coport_listener_array_t));
-            }
-            else
-            {
-                table_entry.listeners=NULL;
-            }
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
             //printf("buffer_perms: %lx\n",cheri_getperm(port->buffer));
@@ -672,22 +686,14 @@ int coaccept_init(
 
 int coport_tbl_setup(void)
 {
-    /*pthread_mutexattr_t lock_attr;
+    pthread_mutexattr_t lock_attr;
     pthread_mutexattr_init(&lock_attr);
-    pthread_mutexattr_settype(&lock_attr,PTHREAD_MUTEX_RECURSIVE);
-    int error=pthread_mutex_init(&coport_table.lock,&lock_attr);*/
-    //coport_tbl_entry_t null_port_entry;
-    //sys_coport_t null_port;
+    pthread_mutex_init(&global_copoll_lock,&lock_attr);
 
     coport_table.index=0;
     coport_table.table=ukern_malloc(COPORT_TBL_LEN);
     mlock(coport_table.table,COPORT_TBL_LEN);
-    /*init_port(COPIPE,&null_port);
-    null_port.status=COPORT_CLOSED;
-    null_port_entry.id=generate_id();
-    strcpy(null_port_entry.name,"");
-    add_port(null_port_entry);*/
-
+    
     /* reserve a superpage or two for this, entries should be small */
     /* reserve a few superpages for ports */
     return 0;
@@ -808,6 +814,7 @@ int main(int argc, const char *argv[])
 
     error=coport_tbl_setup();
     error+=comutex_tbl_setup();
+
     error+=sysarch(CHERI_GET_SEALCAP,&seal_cap);
     sealed_otype=cheri_gettype(cheri_seal(&argc,seal_cap));
     memset(&worker_map,0,sizeof(worker_map_entry_t)*U_FUNCTIONS);

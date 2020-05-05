@@ -5,7 +5,7 @@
 #include <stdatomic.h>
 #include <cheri/cherireg.h>
 #include <stdbool.h>
-
+#include <sys/queue.h>
 
 #include "coport.h"
 #include "sys_comsg.h"
@@ -38,21 +38,11 @@ typedef struct _request_handler_args_t
 	char func_name[LOOKUP_STRING_LEN];
 } request_handler_args_t;
 
-typedef struct _coport_listener_array_t
-{
-	unsigned int count;
-	unsigned int length;
-	unsigned int next;
-	pthread_cond_t *list[MAX_COPOLL];
-} coport_listener_array_t;
-
 typedef struct _coport_tbl_entry_t
 {
 	unsigned int id;
 	sys_coport_t port;
 	char name[COPORT_NAME_LEN];
-	coport_listener_array_t * listeners;
-	
 } coport_tbl_entry_t;
 
 typedef struct _coport_tbl_t

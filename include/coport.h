@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <stdatomic.h>
+#include <pthread.h>
 
 #include "comutex.h"
 #include "sys_comsg.h"
@@ -36,9 +37,30 @@ typedef enum {COPORT_CLOSED=-1,COPORT_OPEN=0,COPORT_BUSY=1,COPORT_READY=2,COPORT
  *  - BUFFER: load cap but not store;
  *  - TYPE,LENGTH: load data only;
  *  - START,END,STATUS: store/load, but not caps;
- *  - LOCK: undetermined. likely load cap.
  */
+/*
 typedef struct _coport_t
+{
+	void * __capability buffer;
+	
+	struct {
+		u_int start;
+		u_int end;
+		_Atomic coport_status_t status;
+		u_int length;
+	} *;
+	coport_type_t type;
+} sys_coport_t;
+*/
+
+typedef struct _coport_listener
+{
+	LIST_ENTRY(coport_listener_t) entries;
+	pthread_cond_t wakeup;
+	coport_eventmask_t events; //unused
+} coport_listener_t;
+
+struct _coport
 {
 	void * __capability buffer;
 	u_int length;
@@ -46,9 +68,10 @@ typedef struct _coport_t
 	u_int end;
 	_Atomic coport_status_t status;
 	coport_type_t type;
-} sys_coport_t;
-
-typedef sys_coport_t *coport_t;
+	LIST_HEAD(, coport_listener_t) listeners;
+};
+typedef struct _coport sys_coport_t;
+typedef struct _coport *coport_t;
 
 
 
