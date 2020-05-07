@@ -1,6 +1,7 @@
 #ifndef _COPORT_H
 #define _COPORT_H
 
+#include <sys/queue.h>
 #include <cheri/cheric.h>
 #include <sys/mman.h>
 #include <sys/param.h>
@@ -54,11 +55,12 @@ typedef struct _coport_t
 } sys_coport_t;
 */
 
-typedef struct _coport_listener
+
+typedef struct __no_subobject_bounds _coport_listener 
 {
-	LIST_ENTRY(coport_listener_t) entries;
+	LIST_ENTRY(_coport_listener) entries;
 	pthread_cond_t wakeup;
-	coport_eventmask_t events; //unused
+	coport_eventmask_t eventmask; 
 	int revent;
 } coport_listener_t;
 
@@ -76,7 +78,7 @@ struct _coport
 		struct 
 		{
 			coport_eventmask_t event;
-			LIST_HEAD(, coport_listener_t) listeners;
+			LIST_HEAD(,_coport_listener) listeners;
 		};
 	};
 };

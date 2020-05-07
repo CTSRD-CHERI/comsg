@@ -48,7 +48,7 @@ typedef struct _coport_tbl_entry_t
 typedef struct _coport_tbl_t
 {
 	_Atomic int index;
-	coport_tbl_entry_t __capability * table;
+	coport_tbl_entry_t * table;
 } coport_tbl_t;
 
 typedef struct _comutex_tbl_entry_t
@@ -61,7 +61,7 @@ typedef struct _comutex_tbl_t
 {
 	int index;
 	pthread_mutex_t lock;
-	comutex_tbl_entry_t __capability * table;
+	comutex_tbl_entry_t * table;
 } comutex_tbl_t;
 
 
@@ -75,6 +75,9 @@ void update_worker_args(worker_args_t * args, const char * function_name);
 void create_comutex(comutex_t * cmtx,char * name);
 bool valid_coport(sys_coport_t * addr);
 bool valid_cocarrier(sys_coport_t * addr);
+bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e);
+void *copoll_deliver(void *args);
+void *cocarrier_poll(void *args);
 void *cocarrier_register(void *args);
 void *cocarrier_recv(void *args);
 void *cocarrier_send(void *args);

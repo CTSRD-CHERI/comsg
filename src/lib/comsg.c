@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "coproc.h"
 #include "coport.h"
@@ -51,8 +52,6 @@ int cosend(coport_t port, const void * buf, size_t len)
     cocall_cocarrier_send_t * call;
     unsigned int old_end;
     coport_status_t status_val;
-    _Atomic(void *) msg_cap;
-    void ** dest_buf;
     //struct timespec start, end;
     
     switch(port->type)
@@ -85,34 +84,6 @@ int cosend(coport_t port, const void * buf, size_t len)
             }
             atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
             break;
-        /*
-        case COCARRIER:
-            for(;;)
-            {
-                status_val=COPORT_OPEN;
-                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
-                {
-                    break;
-                }
-            }
-            atomic_thread_fence(memory_order_acquire);
-            //map buffer of size len
-            //POSSIBLE MEMORY LEAK HERE THAT I WOULD LIKE TO ADDRESS
-            //ALSO VM ISSUES IF SENDER EXITS EARLY
-            //Perhaps mmap? Perhaps ukern mmap offers memory?
-            msg_cap=calloc(len,1);
-            //copy data from buf
-            memcpy(msg_cap,buf,len);
-            //reduce capability to buffer to read only
-            msg_cap=cheri_andperm(msg_cap,COCARRIER_PERMS);
-            //append capability to buffer
-            old_end=port->end;
-            port->end=port->end+CHERICAP_SIZE;
-            dest_buf=(void **)port->buffer;
-            dest_buf[old_end]=msg_cap;
-            atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
-            break;
-        */
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
             call->cocarrier=port;
@@ -120,7 +91,7 @@ int cosend(coport_t port, const void * buf, size_t len)
             memcpy(call->message,buf,len);
 
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);
-            cocall(switcher_code,switcher_data,func,sizeof(cocall_cocarrier_send_t));
+            cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
             if(call->status!=0)
             {
                 err(call->error,"error occurred during cocarrier send");
@@ -154,7 +125,10 @@ int corecv(coport_t port, void ** buf, size_t len)
 {
     //we need more atomicity on changes to end
     int old_start;
-    unsigned char ** msg_buf;
+    void * __capability switcher_code;
+    void * __capability switcher_data;
+    void * __capability func;
+    cocall_cocarrier_send_t * call;
     coport_status_t status_val;
     for(;;)
     {
@@ -201,20 +175,22 @@ int corecv(coport_t port, void ** buf, size_t len)
             call->cocarrier=port;
             call->message=calloc(len,sizeof(char));
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
-            cocall(switcher_code,switcher_data,func,sizeof(cocall_cocarrier_send_t));
+            cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
             if(call->status!=0)
             {
                 err(call->error,"error occurred during cocarrier recv");
             }
-            *buf=msg_buf[old_start];
-             if(cheri_getlen(buf)!=len)
+            
+             if(cheri_getlen(call->message)!=len)
             {
                 warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
             }
-            if((cheri_getperm(buf)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
+            if((cheri_getperm(call->message)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
             {
                 err(1,"received capability does not grant read permissions");
             }
+            *buf=call->message;
+            free(call);
             break;
         case COPIPE:
             port->buffer=*buf;

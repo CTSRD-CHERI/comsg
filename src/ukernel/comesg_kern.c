@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/param.h>
 #include <sys/mman.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -227,16 +228,17 @@ bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e)
 
 void *copoll_deliver(void *args)
 {
+    coport_eventmask_t event;
 	sys_coport_t *cocarrier;
-	coport_listener_t * l,l_temp;
+	coport_listener_t *l,*l_temp;
 	pthread_mutex_lock(&global_copoll_lock);
 	for(;;)
 	{
 		pthread_cond_wait(&global_cosend_cond,&global_copoll_lock);
 		for (int i = 0; i < coport_table.index; ++i)
 		{
-			cocarrier=coport_table.table[i];
-			if(coport_table.table[i]->type!=COCARRIER)
+			cocarrier=&coport_table.table[i].port;
+			if(cocarrier->type!=COCARRIER)
 			{
 				cocarrier=NULL;
 				continue;
@@ -250,7 +252,7 @@ void *copoll_deliver(void *args)
 			{
 				LIST_FOREACH_SAFE(l,&cocarrier->listeners,entries,l_temp)
 				{
-					if(event_match(cocarrier,l->events))
+					if(event_match(cocarrier,l->eventmask))
 					{
 						pthread_cond_signal(&l->wakeup);
 						l->revent=cocarrier->event;
@@ -261,6 +263,7 @@ void *copoll_deliver(void *args)
 		}
 	}
 	pthread_mutex_unlock(&global_copoll_lock);
+    return args;
 }
 
 
@@ -268,10 +271,6 @@ void *cocarrier_poll(void *args)
 {
 	int i;
     int error;
-    int tbl_index;
-    int list_index;
-    int table_offset;
-    int status;
 
     int ncoports;
     struct timespec timeout_spec;
@@ -279,7 +278,7 @@ void *cocarrier_poll(void *args)
     bool got_woken_up;
 
     worker_args_t * data = args;
-    copoll_args_t * copoll_args;
+    copoll_args_t * copoll_args = calloc(1,sizeof(copoll_args));
     sys_coport_t * cocarrier;
     pollcoport_t * targets;
 
@@ -288,8 +287,6 @@ void *cocarrier_poll(void *args)
     void * __capability caller_cookie;
     void * __capability target;
 
-    pthread_mutex_t sleep;
-    pthread_mutexattr_t mtx_attr;
     pthread_cond_t wake;
     pthread_condattr_t c_attr;
     coport_listener_t ** listen_entries;
@@ -299,7 +296,7 @@ void *cocarrier_poll(void *args)
     
     error=coaccept_init(&sw_code,&sw_data,data->name,&target);
     data->cap=target;
-    error+=update_worker_args(data,U_COCARRIER_POLL);
+    update_worker_args(data,U_COCARRIER_POLL);
     for (;;)
     {
         error=coaccept(sw_code,sw_data,&caller_cookie,copoll_args,sizeof(copoll_args_t));
@@ -307,7 +304,7 @@ void *cocarrier_poll(void *args)
         targets=ukern_fast_malloc(sizeof(pollcoport_t)*copoll_args->ncoports);
         memcpy(targets,copoll_args->coports,sizeof(pollcoport_t)*copoll_args->ncoports);
         ncoports=copoll_args->ncoports;
-        for(int i = 0; i<ncoports;i++)
+        for(i = 0; i<ncoports;i++)
         {
             cocarrier=targets[i].coport;
             if(cocarrier==NULL)
@@ -318,15 +315,15 @@ void *cocarrier_poll(void *args)
             }
             if(!(valid_cocarrier(cocarrier)))
             {
-                cocarrier_send_args->status=-1;
-                cocarrier_send_args->error=EINVAL;
+                copoll_args->status=-1;
+                copoll_args->error=EINVAL;
                 continue;
             }
             cocarrier=cheri_unseal(cocarrier,seal_cap);
             listen_entries[i]=ukern_fast_malloc(sizeof(coport_listener_t));
             listen_entries[i]->wakeup=wake;
-            listen_entries[i]->event=NOEVENT;
-            listen_entries[i]->eventmask=targets[i]->events;
+            listen_entries[i]->revent=NOEVENT;
+            listen_entries[i]->eventmask=targets[i].events;
             
         }
         if(copoll_args->status==-1)
@@ -342,29 +339,29 @@ void *cocarrier_poll(void *args)
             continue;
         }
         pthread_mutex_lock(&global_copoll_lock);
-        for (int i = 0; i < ncoports; ++i)
+        for (i = 0; i < ncoports; ++i)
         {
         	LIST_INSERT_HEAD(&cocarrier->listeners,listen_entries[i],entries);
         }
         got_woken_up=false;
         timespec_get(&curtime_spec,TIME_UTC);
-        timeout_spec.tv_nsec=coport_args->timeout;
-        timespec_add(&curtime,&timeout_spec,&timeout_spec);
-        pthread_cond_timedwait(&sleep,&global_copoll_lock,&timeout_spec);
+        timeout_spec.tv_nsec=copoll_args->timeout;
+        timespecadd(&curtime_spec,&timeout_spec,&timeout_spec);
+        pthread_cond_timedwait(&wake,&global_copoll_lock,&timeout_spec);
         /*do stuff*/
-        for(int i = 0; i<ncoports;i++)
+        for(i = 0; i<ncoports;i++)
         {
         	cocarrier=copoll_args->coports[i].coport;
-        	if(listen_entries[i]->event!=NOEVENT)
+        	if(listen_entries[i]->revent!=NOEVENT)
         	{
-        		copoll_args->coports[i].revents=listen_entries[i]->event;
+        		copoll_args->coports[i].revents=listen_entries[i]->revent;
         		got_woken_up = true;
         	}
         	LIST_REMOVE(listen_entries[i],entries);
         }
         pthread_mutex_unlock(&global_copoll_lock);
         ukern_fast_free(targets);
-        for(int i = 0; i<ncoports;i++)
+        for(i = 0; i<ncoports;i++)
         {
         	ukern_fast_free(listen_entries[i]);
         }
@@ -389,7 +386,6 @@ void *cocarrier_recv(void *args)
     void * __capability target;
 
     sys_coport_t * cocarrier;
-    void * __capability msg_buf;
     void ** __capability cocarrier_buf;
 
     cocarrier_send_args=malloc(sizeof(cocall_cocarrier_send_t));
@@ -427,11 +423,10 @@ void *cocarrier_recv(void *args)
                 cocarrier_send_args->status=-1;
                 cocarrier_send_args->error=EAGAIN;
                 atomic_thread_fence(memory_order_release);
-                ukern_fast_free(msg_buf);
                 continue;
         }
-        len=min(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->buf));
-        memcpy(cocarrier_send_args->buf,cocarrier_buf[index],len);
+        len=MIN(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->message));
+        memcpy(cocarrier_send_args->message,cocarrier_buf[index],len);
         cocarrier->start++;
         cocarrier->length--;
         if(!LIST_EMPTY(&cocarrier->listeners))
@@ -840,7 +835,7 @@ int coport_tbl_setup(void)
 
     pthread_mutexattr_init(&lock_attr);
     pthread_mutex_init(&global_copoll_lock,&lock_attr);
-    pthread_condattr_init(&copoll_send_cond);
+    pthread_condattr_init(&cond_attr);
     pthread_cond_init(&global_cosend_cond,&cond_attr);
 
     coport_table.index=0;
