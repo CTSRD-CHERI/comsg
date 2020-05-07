@@ -210,7 +210,7 @@ bool valid_cocarrier(sys_coport_t * addr)
     {
         return false;
     }
-    else if(cheri_getsealed(addr)==0)
+    else if(!cheri_getsealed(addr))
     {
         return false;
     }
@@ -344,10 +344,17 @@ void *cocarrier_poll(void *args)
         	LIST_INSERT_HEAD(&cocarrier->listeners,listen_entries[i],entries);
         }
         got_woken_up=false;
-        timespec_get(&curtime_spec,TIME_UTC);
-        timeout_spec.tv_nsec=copoll_args->timeout;
-        timespecadd(&curtime_spec,&timeout_spec,&timeout_spec);
-        pthread_cond_timedwait(&wake,&global_copoll_lock,&timeout_spec);
+        if(copoll_args->timeout!=0)
+        {
+        	timespec_get(&curtime_spec,TIME_UTC);
+	        timeout_spec.tv_nsec=copoll_args->timeout;
+	        timespecadd(&curtime_spec,&timeout_spec,&timeout_spec);
+	        pthread_cond_timedwait(&wake,&global_copoll_lock,&timeout_spec);
+        }
+        else
+        {
+        	pthread_cond_wait(&wake,&global_copoll_lock);
+        }
         /*do stuff*/
         for(i = 0; i<ncoports;i++)
         {

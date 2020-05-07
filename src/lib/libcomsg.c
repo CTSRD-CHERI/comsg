@@ -2,6 +2,7 @@
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 
+#include <assert.h>
 #include <unistd.h>
 #include <stdatomic.h>
 #include <err.h>
@@ -11,9 +12,19 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <sys/cdefs.h>
+#include <sys/types.h>
+#include <machine/sysarch.h>
+
 #include "coproc.h"
 #include "coport.h"
 #include "comsg.h"
+
+//Sealing root
+static void * __capability libcomsg_sealroot;
+//Sealing cap for coport_t
+static otype_t libcomsg_coport_seal;
+static uint64_t libcomsg_otype;
 
 int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 {
@@ -39,7 +50,14 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
         //possible deferred call to malloc ends up in cocall, causing exceptions
         error=ukern_lookup(&switcher_code,&switcher_data,U_COOPEN,&func);
         error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
-        *prt=call->port;
+        if (!cheri_getsealed(call->port))
+        {
+            *prt=cheri_seal(call->port,libcomsg_coport_type);
+        }
+        else
+        {
+            *prt=call->port;
+        }
     }
     return 0;
 }
@@ -50,11 +68,22 @@ int cosend(coport_t port, const void * buf, size_t len)
     void * __capability switcher_data;
     void * __capability func;
     cocall_cocarrier_send_t * call;
+
     unsigned int old_end;
     coport_status_t status_val;
-    //struct timespec start, end;
-    
-    switch(port->type)
+    coport_type_t type;
+
+    assert(cheri_getsealed(port)!=0);
+    if(cheri_gettype(port)==libcomsg_otype)
+    {
+        port=cheri_unseal(port,libcomsg_coport_seal);
+        type=port->type;
+    }
+    else
+    {
+        type=COCARRIER;
+    }
+    switch(type)
     {
         case COCHANNEL:
             for(;;)
@@ -130,16 +159,29 @@ int corecv(coport_t port, void ** buf, size_t len)
     void * __capability func;
     cocall_cocarrier_send_t * call;
     coport_status_t status_val;
-    for(;;)
+    coport_type_t type;
+    
+    assert(cheri_getsealed(port)!=0);
+    if(cheri_gettype(port)!=libcomsg_otype)
     {
-        status_val=COPORT_OPEN;
-        if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+        type=COCARRIER;
+    }
+    else
+    {
+        port=cheri_unseal(port,libcomsg_coport_seal);
+        type=port->type;
+        for(;;)
         {
-            break;
+            status_val=COPORT_OPEN;
+            if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+            {
+                break;
+            }
         }
     }
+    
     atomic_thread_fence(memory_order_acquire);
-    switch(port->type)
+    switch(type)
     {
         case COCHANNEL:
             if (port->start==port->length)
@@ -227,4 +269,19 @@ int copoll(coport_t port)
         return 0;
     }
     return 0;
+}
+
+__attribute__ ((constructor)) static 
+void libcomsg_init(void)
+{
+    if (sysarch(CHERI_GET_SEALCAP,&libcomsg_sealroot) < 0)
+    {
+        libcomsg_sealroot=NULL;
+    }
+    assert((cheri_gettag(libcomsg_sealroot) != 0));    
+    assert(cheri_getlen(libcomsg_sealroot) != 0);
+    assert((cheri_getperm(libcomsg_sealroot) & CHERI_PERM_SEAL) != 0);
+    //XXX-PBB: Is 1 an okay value?
+    libcomsg_coport_seal=cheri_maketype(libcomsg_sealroot,1);
+    libcomsg_otype=cheri_gettype(cheri_seal(libcomsg_coport_seal,libcomsg_coport_seal));
 }
