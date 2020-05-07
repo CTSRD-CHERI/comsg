@@ -5,13 +5,16 @@
 #include <stdatomic.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <time.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <errno.h>
 #include <stdbool.h>
+
 
 #include <machine/sysarch.h>
 
@@ -251,7 +254,6 @@ void *copoll_deliver(void *args)
 					{
 						pthread_cond_signal(&l->wakeup);
 						l->revent=cocarrier->event;
-						LIST_REMOVE(l,entries);
 					}
 				}
 				event=NOEVENT;
@@ -270,6 +272,11 @@ void *cocarrier_poll(void *args)
     int list_index;
     int table_offset;
     int status;
+
+    int ncoports;
+    struct timespec timeout_spec;
+    struct timespec curtime_spec;
+    bool got_woken_up;
 
     worker_args_t * data = args;
     copoll_args_t * copoll_args;
@@ -298,9 +305,9 @@ void *cocarrier_poll(void *args)
         error=coaccept(sw_code,sw_data,&caller_cookie,copoll_args,sizeof(copoll_args_t));
         listen_entries=ukern_fast_malloc(CHERICAP_SIZE*copoll_args->ncoports);        
         targets=ukern_fast_malloc(sizeof(pollcoport_t)*copoll_args->ncoports);
-        memcpy(targets,copoll_args->cocarriers,sizeof(pollcoport_t)*copoll_args->ncoports);
-        pthread_mutex_lock(&global_copoll_lock);
-        for(int i = 0; i<copoll_args->ncoports;i++)
+        memcpy(targets,copoll_args->coports,sizeof(pollcoport_t)*copoll_args->ncoports);
+        ncoports=copoll_args->ncoports;
+        for(int i = 0; i<ncoports;i++)
         {
             cocarrier=targets[i].coport;
             if(cocarrier==NULL)
@@ -318,30 +325,52 @@ void *cocarrier_poll(void *args)
             cocarrier=cheri_unseal(cocarrier,seal_cap);
             listen_entries[i]=ukern_fast_malloc(sizeof(coport_listener_t));
             listen_entries[i]->wakeup=wake;
+            listen_entries[i]->event=NOEVENT;
             listen_entries[i]->eventmask=targets[i]->events;
-            LIST_INSERT_HEAD(&cocarrier->listeners,listen_entries[i],entries);
+            
         }
         if(copoll_args->status==-1)
         {
             //we need to clean up
             for (int j = 0; j < i; ++j)
             {
-            	LIST_REMOVE(listen_entries[j],entries);
             	ukern_fast_free(listen_entries[j]);
             }
-            pthread_mutex_unlock(&global_copoll_lock);
             ukern_fast_free(listen_entries);
             ukern_fast_free(targets);
             copoll_args->error=EINVAL;
             continue;
         }
-        pthread_cond_wait(&sleep,&global_copoll_lock);
+        pthread_mutex_lock(&global_copoll_lock);
+        for (int i = 0; i < ncoports; ++i)
+        {
+        	LIST_INSERT_HEAD(&cocarrier->listeners,listen_entries[i],entries);
+        }
+        got_woken_up=false;
+        timespec_get(&curtime_spec,TIME_UTC);
+        timeout_spec.tv_nsec=coport_args->timeout;
+        timespec_add(&curtime,&timeout_spec,&timeout_spec);
+        pthread_cond_timedwait(&sleep,&global_copoll_lock,&timeout_spec);
         /*do stuff*/
+        for(int i = 0; i<ncoports;i++)
+        {
+        	cocarrier=copoll_args->coports[i].coport;
+        	if(listen_entries[i]->event!=NOEVENT)
+        	{
+        		copoll_args->coports[i].revents=listen_entries[i]->event;
+        		got_woken_up = true;
+        	}
+        	LIST_REMOVE(listen_entries[i],entries);
+        }
         pthread_mutex_unlock(&global_copoll_lock);
+        ukern_fast_free(targets);
+        for(int i = 0; i<ncoports;i++)
+        {
+        	ukern_fast_free(listen_entries[i]);
+        }
+        ukern_fast_free(listen_entries);
     }
-    
-
-    return args;
+    return 0;
 }
 
 void *cocarrier_recv(void *args)
@@ -409,8 +438,8 @@ void *cocarrier_recv(void *args)
         {
         	pthread_mutex_lock(&global_copoll_lock);
         	cocarrier->event=DATA_CONSUMED;
-        	pthread_mutex_lock(&global_copoll_unlock);
         	pthread_cond_signal(&global_cosend_cond);
+        	pthread_mutex_unlock(&global_copoll_lock);
         }
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
         atomic_thread_fence(memory_order_release);
@@ -498,8 +527,8 @@ void *cocarrier_send(void *args)
         {
         	pthread_mutex_lock(&global_copoll_lock);
         	cocarrier->event=DATA_AVAILABLE;
-        	pthread_mutex_unlock(&global_copoll_lock);
         	pthread_cond_signal(&global_cosend_cond);
+        	pthread_mutex_unlock(&global_copoll_lock);
         }
         //release
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);

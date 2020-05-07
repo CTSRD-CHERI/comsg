@@ -2,7 +2,7 @@
 #define _COPROC_H
 
 #include <cheri/cheri.h>
-
+#include <time.h>
 
 #include "comutex.h"
 #include "coport.h"
@@ -72,7 +72,7 @@ typedef struct _copoll_args_t
 {
 	pollcoport_t * coports;
 	int ncoports;
-	int timeout;
+	int timeout; 
 	int status;
 	int error;
 } __attribute__((__aligned__(16))) copoll_args_t;
