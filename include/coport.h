@@ -26,6 +26,7 @@
 typedef enum {COSEND, CORECV} coport_op_t;
 typedef enum {COPIPE, COCARRIER, COCHANNEL} coport_type_t;
 typedef enum {COPORT_CLOSED=-1,COPORT_OPEN=0,COPORT_BUSY=1,COPORT_READY=2,COPORT_DONE=3} coport_status_t;
+typedef enum {NOEVENT=0,PORT_CLOSED=1,DATA_AVAILABLE=2,DATA_CONSUMED=4} coport_eventmask_t;
 
 #define COCARRIER_PERMS (CHERI_PERM_GLOBAL|CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP)
 
@@ -58,7 +59,9 @@ typedef struct _coport_listener
 	LIST_ENTRY(coport_listener_t) entries;
 	pthread_cond_t wakeup;
 	coport_eventmask_t events; //unused
+	int revent;
 } coport_listener_t;
+
 
 struct _coport
 {
@@ -68,12 +71,17 @@ struct _coport
 	u_int end;
 	_Atomic coport_status_t status;
 	coport_type_t type;
-	LIST_HEAD(, coport_listener_t) listeners;
+	union 
+	{
+		struct 
+		{
+			coport_eventmask_t event;
+			LIST_HEAD(, coport_listener_t) listeners;
+		};
+	};
 };
+
 typedef struct _coport sys_coport_t;
 typedef struct _coport *coport_t;
-
-
-
 
 #endif

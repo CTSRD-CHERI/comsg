@@ -28,6 +28,7 @@ void * __capability seal_cap;
 int sealed_otype;
 
 pthread_mutex_t global_copoll_lock;
+pthread_cond_t global_cosend_cond;
 
 worker_map_entry_t worker_map[U_FUNCTIONS];
 _Atomic int next_worker_i = 0;
@@ -216,6 +217,50 @@ bool valid_cocarrier(sys_coport_t * addr)
     return true;
 }
 
+bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e)
+{
+	return ((bool) cocarrier->event & e);
+}
+
+void *copoll_deliver(void *args)
+{
+	sys_coport_t *cocarrier;
+	coport_listener_t * l,l_temp;
+	pthread_mutex_lock(&global_copoll_lock);
+	for(;;)
+	{
+		pthread_cond_wait(&global_cosend_cond,&global_copoll_lock);
+		for (int i = 0; i < coport_table.index; ++i)
+		{
+			cocarrier=coport_table.table[i];
+			if(coport_table.table[i]->type!=COCARRIER)
+			{
+				cocarrier=NULL;
+				continue;
+			}
+			else if (LIST_EMPTY(&cocarrier->listeners))
+			{
+				cocarrier=NULL;
+				continue;
+			}
+			else
+			{
+				LIST_FOREACH_SAFE(l,&cocarrier->listeners,entries,l_temp)
+				{
+					if(event_match(cocarrier,l->events))
+					{
+						pthread_cond_signal(&l->wakeup);
+						l->revent=cocarrier->event;
+						LIST_REMOVE(l,entries);
+					}
+				}
+				event=NOEVENT;
+			}
+		}
+	}
+	pthread_mutex_unlock(&global_copoll_lock);
+}
+
 
 void *cocarrier_poll(void *args)
 {
@@ -301,6 +346,75 @@ void *cocarrier_poll(void *args)
 
 void *cocarrier_recv(void *args)
 {
+	int error;
+    uint index;
+    int status;
+    uint len;
+
+    worker_args_t * data = args;
+    cocall_cocarrier_send_t * cocarrier_send_args;
+
+    void * __capability sw_code;
+    void * __capability sw_data;
+    void * __capability caller_cookie;
+    void * __capability target;
+
+    sys_coport_t * cocarrier;
+    void * __capability msg_buf;
+    void ** __capability cocarrier_buf;
+
+    cocarrier_send_args=malloc(sizeof(cocall_cocarrier_send_t));
+
+    error=coaccept_init(&sw_code,&sw_data,data->name,&target);
+    data->cap=target;
+    update_worker_args(data,U_COCARRIER_RECV);
+    for(;;)
+    {
+    	error=coaccept(sw_code,sw_data,&caller_cookie,cocarrier_send_args,sizeof(cocall_cocarrier_send_t));
+        //perform checks
+        cocarrier=cocarrier_send_args->cocarrier;
+        if(!(valid_cocarrier(cocarrier)))
+        {
+            cocarrier_send_args->status=-1;
+            cocarrier_send_args->error=EINVAL;
+            continue;
+        }
+        cocarrier=cheri_unseal(cocarrier,seal_cap);
+        cocarrier_buf=cocarrier->buffer;
+        for(;;)
+        {
+            status=COPORT_OPEN;
+            if(atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+            {
+                break;
+            }
+        }
+        atomic_thread_fence(memory_order_acquire);
+        index=cocarrier->start;
+        if(cocarrier->length==0)
+        {
+
+            	//buffer is empty - return error
+                cocarrier_send_args->status=-1;
+                cocarrier_send_args->error=EAGAIN;
+                atomic_thread_fence(memory_order_release);
+                ukern_fast_free(msg_buf);
+                continue;
+        }
+        len=min(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->buf));
+        memcpy(cocarrier_send_args->buf,cocarrier_buf[index],len);
+        cocarrier->start++;
+        cocarrier->length--;
+        if(!LIST_EMPTY(&cocarrier->listeners))
+        {
+        	pthread_mutex_lock(&global_copoll_lock);
+        	cocarrier->event=DATA_CONSUMED;
+        	pthread_mutex_lock(&global_copoll_unlock);
+        	pthread_cond_signal(&global_cosend_cond);
+        }
+        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
+        atomic_thread_fence(memory_order_release);
+    }
     return args;
 }
 
@@ -366,24 +480,30 @@ void *cocarrier_send(void *args)
             	//buffer is full - return error
                 cocarrier_send_args->status=-1;
                 cocarrier_send_args->error=EAGAIN;
+                atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
                 atomic_thread_fence(memory_order_release);
                 ukern_fast_free(msg_buf);
                 continue;
             }
         }
+        if(cheri_gettag(cocarrier_buf[index]))
+        {
+        	ukern_fast_free(cocarrier_buf[index]);
+        }
         cocarrier_buf[index]=msg_buf;
+        cocarrier->end=index;
+        cocarrier->length++;
         //check if anyone is waiting on messages to arrive
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
-        	//dostuff
+        	pthread_mutex_lock(&global_copoll_lock);
+        	cocarrier->event=DATA_AVAILABLE;
+        	pthread_mutex_unlock(&global_copoll_lock);
+        	pthread_cond_signal(&global_cosend_cond);
         }
-        //maintain circularity
-        cocarrier->end=index;
-        cocarrier->length++;
         //release
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
         atomic_thread_fence(memory_order_release);
-
     }
     free(cocarrier_send_args);
     return 0;
@@ -687,8 +807,12 @@ int coaccept_init(
 int coport_tbl_setup(void)
 {
     pthread_mutexattr_t lock_attr;
+    pthread_condattr_t cond_attr;
+
     pthread_mutexattr_init(&lock_attr);
     pthread_mutex_init(&global_copoll_lock,&lock_attr);
+    pthread_condattr_init(&copoll_send_cond);
+    pthread_cond_init(&global_cosend_cond,&cond_attr);
 
     coport_table.index=0;
     coport_table.table=ukern_malloc(COPORT_TBL_LEN);
