@@ -93,7 +93,7 @@ endif
 libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c coproc.o \
 	include/coproc.h include/coport.h \
 	src/ukernel/include/sys_comsg.h include/comsg.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) $(LLDFLAGS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o
+	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
 	rm $(CHERIBSD_DIR)/lib/libcomsg/*.o
