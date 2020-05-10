@@ -95,7 +95,7 @@ libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c coproc.o \
 	src/ukernel/include/sys_comsg.h include/comsg.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o
 ifdef CHERIBSD_DIR
-	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg/;)
 	rm $(CHERIBSD_DIR)/lib/libcomsg/*.o
 ifdef CHERIBUILD_DIR
 	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \

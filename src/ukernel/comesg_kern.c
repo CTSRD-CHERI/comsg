@@ -210,7 +210,7 @@ bool valid_cocarrier(sys_coport_t * addr)
     {
         return false;
     }
-    else if(cheri_getsealed(addr)==0)
+    else if(!cheri_getsealed(addr))
     {
         return false;
     }
