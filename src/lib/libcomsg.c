@@ -24,7 +24,7 @@
 static void * __capability libcomsg_sealroot;
 //Sealing cap for coport_t
 static otype_t libcomsg_coport_seal;
-static uint64_t libcomsg_otype;
+static long libcomsg_otype;
 
 int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 {
@@ -52,7 +52,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
         error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
         if (!cheri_getsealed(call->port))
         {
-            *prt=cheri_seal(call->port,libcomsg_coport_type);
+            *prt=cheri_seal(call->port,libcomsg_coport_seal);
         }
         else
         {

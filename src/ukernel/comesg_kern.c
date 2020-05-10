@@ -381,7 +381,7 @@ void *cocarrier_recv(void *args)
 {
 	int error;
     uint index;
-    int status;
+    coport_status_t status;
     uint len;
 
     worker_args_t * data = args;
@@ -439,7 +439,7 @@ void *cocarrier_recv(void *args)
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
         	pthread_mutex_lock(&global_copoll_lock);
-        	cocarrier->event=DATA_CONSUMED;
+        	cocarrier->event=COPOLL_OUT;
         	pthread_cond_signal(&global_cosend_cond);
         	pthread_mutex_unlock(&global_copoll_lock);
         }
@@ -454,7 +454,7 @@ void *cocarrier_send(void *args)
     //todo implement
     int error;
     uint index;
-    int status;
+    coport_status_t status;
 
     worker_args_t * data = args;
     cocall_cocarrier_send_t * cocarrier_send_args;
@@ -528,7 +528,7 @@ void *cocarrier_send(void *args)
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
         	pthread_mutex_lock(&global_copoll_lock);
-        	cocarrier->event=DATA_AVAILABLE;
+        	cocarrier->event=COPOLL_OUT;
         	pthread_cond_signal(&global_cosend_cond);
         	pthread_mutex_unlock(&global_copoll_lock);
         }
