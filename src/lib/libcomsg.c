@@ -2,6 +2,7 @@
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 
+#include <assert.h>
 #include <unistd.h>
 #include <stdatomic.h>
 #include <err.h>
@@ -14,6 +15,14 @@
 #include "coproc.h"
 #include "coport.h"
 #include "comsg.h"
+
+#ifdef libcomsg
+//Sealing root
+static void * __capability libcomsg_sealroot;
+//Sealing cap for coport_t
+static void * __capability libcomsg_coport_type;
+
+#endif
 
 int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 {
@@ -227,4 +236,17 @@ int copoll(coport_t port)
         return 0;
     }
     return 0;
+}
+
+__attribute__ ((constructor)) static 
+void libcomsg_init(void)
+{
+    if (sysarch(CHERI_GET_SEALCAP,&libcomsg_sealroot) < 0)
+    {
+        libcomsg_sealroot=NULL;
+    }
+    assert((cheri_gettag(libcomsg_sealroot) != 0));    
+    assert(cheri_getlen(libcomsg_sealroot) != 0);
+    assert((cheri_getperm(libcomsg_sealroot) & CHERI_PERM_SEAL) != 0);
+    libcomsg_coport_type=cheri_maketype(libcomsg_sealroot,1);
 }

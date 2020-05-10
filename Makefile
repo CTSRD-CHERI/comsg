@@ -7,7 +7,7 @@ INC_PARAMS=$(foreach i, $(INC), -I$i)
 BUILD_TIME:=$(shell date "+%Y/%m/%d %H:%M:%S")
 DEBUG=-v -g
 CFLAGS=$(DEBUG) -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
-	-mabi=purecap -fPIE -mstack-alignment=16 -fpic
+	-mabi=purecap -fPIE -mstack-alignment=16 -fPIC
 BUILDDIR=build
 OUTDIR=output
 LLDFLAGS=-pie -fuse-ld=lld 
@@ -44,14 +44,14 @@ ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o coproc.o \
 	$(CC) $(CFLAGS) $(LLDFLAGS) -Wl,-znow $(LIB_PARAMS) $(INC_PARAMS)  \
 	-o $(OUTDIR)/comesg_ukernel $(foreach o, $^, $(BUILDDIR)/$o)
 
-cochatter : comsg_chatterer.o comsg.o coproc.o comutex.o
-	$(CC) $(CFLAGS)  $(LLDFLAGS) $(LIB_PARAMS) $(INC_PARAMS) \
-	-o $(OUTDIR)/cochatter $(foreach o, $^, $(BUILDDIR)/$o)
+cochatter : comsg_chatterer.o libcomsg.so
+	$(CC) $(CFLAGS)  $(LLDFLAGS) $(LIB_PARAMS) -llibcomsg.so $(INC_PARAMS) \
+	-o $(OUTDIR)/cochatter $(BUILDDIR)/comsg_chatterer.o
 
 comsg_chatterer.o : src/bin/comsg_chatterer.c include/comsg.h \
 	src/ukernel/include/sys_comsg.h include/coport.h \
 	include/comutex.h include/coproc.h
-	$(CC) $(CFLAGS)   $(INC_PARAMS) -c src/bin/comsg_chatterer.c \
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/bin/comsg_chatterer.c \
 	-o $(BUILDDIR)/comsg_chatterer.o
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/cochatter;)
 
@@ -90,15 +90,19 @@ ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
 endif
 
-comsg.o: src/lib/comsg.c \
+libcomsg.so: src/lib/libcomsg.c \
 	include/coproc.h include/coport.h \
-	include/comutex.h src/ukernel/include/sys_comsg.h include/comsg.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/comsg.c -o $(BUILDDIR)/comsg.o
+	src/ukernel/include/sys_comsg.h include/comsg.h
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/comsg.c src/lib/coproc.c -shared -o $(BUILDDIR)/libcomsg.so
 ifdef CHERIBSD_DIR
-	cp $< $(CHERIBSD_DIR)/usr.bin/comesg_ukernel
-	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
+	cp $< $(CHERIBSD_DIR)/lib
+ifdef CHERIBUILD_DIR
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
+	--cheribsd-purecap/subdir="lib" \
+	--cheribsd/subdir="lib" \
+	cheribsd-purecap disk-image-purecap
 endif
-
+endif
 coproc.o: src/lib/coproc.c include/coproc.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/coproc.c -o $(BUILDDIR)/coproc.o
 ifdef CHERIBSD_DIR
