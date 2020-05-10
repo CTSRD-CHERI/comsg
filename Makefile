@@ -93,7 +93,7 @@ endif
 libcomsg.so: src/lib/libcomsg.c \
 	include/coproc.h include/coport.h \
 	src/ukernel/include/sys_comsg.h include/comsg.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/comsg.c src/lib/coproc.c -shared -o $(BUILDDIR)/libcomsg.so
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/libcomsg.c src/lib/coproc.c -shared -o $(BUILDDIR)/libcomsg.so
 ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/lib
 ifdef CHERIBUILD_DIR
@@ -103,6 +103,7 @@ ifdef CHERIBUILD_DIR
 	cheribsd-purecap disk-image-purecap
 endif
 endif
+
 coproc.o: src/lib/coproc.c include/coproc.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/coproc.c -o $(BUILDDIR)/coproc.o
 ifdef CHERIBSD_DIR
