@@ -12,17 +12,16 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include <machine/sysarch.h>
+
 #include "coproc.h"
 #include "coport.h"
 #include "comsg.h"
 
-#ifdef libcomsg
 //Sealing root
 static void * __capability libcomsg_sealroot;
 //Sealing cap for coport_t
 static void * __capability libcomsg_coport_type;
-
-#endif
 
 int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 {
