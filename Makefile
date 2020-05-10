@@ -90,16 +90,15 @@ ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
 endif
 
-libcomsg.so: src/lib/libcomsg.c \
+libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c coproc.o \
 	include/coproc.h include/coport.h \
 	src/ukernel/include/sys_comsg.h include/comsg.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) $(LLDFLAGS) -c src/lib/libcomsg.c -shared -o $(OUTDIR)/libcomsg.so $(BUILDDIR)/coproc.o
+	$(CC) $(CFLAGS) $(INC_PARAMS) $(LLDFLAGS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o
 ifdef CHERIBSD_DIR
-	cp $< $(CHERIBSD_DIR)/lib
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
+	rm $(CHERIBSD_DIR)/lib/libcomsg/*.o
 ifdef CHERIBUILD_DIR
 	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
-	--cheribsd-purecap/subdir="lib" \
-	--cheribsd/subdir="lib" \
 	cheribsd-purecap disk-image-purecap
 endif
 endif
