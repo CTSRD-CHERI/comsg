@@ -8,4 +8,6 @@
 #define MAX_COMUTEXES 20
 #define MAX_COPOLL 255
 
+#define UKERN_PRIV 1
+
 #endif
