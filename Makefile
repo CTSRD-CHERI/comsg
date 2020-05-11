@@ -97,10 +97,6 @@ libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c coproc.o \
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
 	rm -f $(CHERIBSD_DIR)/lib/libcomsg/coproc.o
-ifdef CHERIBUILD_DIR
-	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
-	cheribsd-purecap disk-image-purecap
-endif
 endif
 
 coproc.o: src/lib/coproc.c include/coproc.h
