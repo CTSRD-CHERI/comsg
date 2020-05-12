@@ -416,7 +416,6 @@ void *cocarrier_recv(void *args)
             continue;
         }
         cocarrier=cheri_unseal(cocarrier,seal_cap);
-        cocarrier_buf=cocarrier->buffer;
         for(;;)
         {
             status=COPORT_OPEN;
@@ -436,17 +435,20 @@ void *cocarrier_recv(void *args)
                 atomic_thread_fence(memory_order_release);
                 continue;
         }
+        cocarrier_buf=cocarrier->buffer;
         len=MIN(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->message));
         memcpy(cocarrier_send_args->message,cocarrier_buf[index],len);
         cocarrier->start++;
         cocarrier->length--;
+
+        pthread_mutex_lock(&global_copoll_lock);
+        cocarrier->event=COPOLL_OUT;
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
-        	pthread_mutex_lock(&global_copoll_lock);
-        	cocarrier->event=COPOLL_OUT;
         	pthread_cond_signal(&global_cosend_cond);
-        	pthread_mutex_unlock(&global_copoll_lock);
         }
+        pthread_mutex_unlock(&global_copoll_lock);
+
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
         atomic_thread_fence(memory_order_release);
     }
@@ -529,13 +531,13 @@ void *cocarrier_send(void *args)
         cocarrier->end=index;
         cocarrier->length++;
         //check if anyone is waiting on messages to arrive
+        pthread_mutex_lock(&global_copoll_lock);
+        cocarrier->event=COPOLL_OUT;
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
-        	pthread_mutex_lock(&global_copoll_lock);
-        	cocarrier->event=COPOLL_OUT;
         	pthread_cond_signal(&global_cosend_cond);
-        	pthread_mutex_unlock(&global_copoll_lock);
         }
+        pthread_mutex_unlock(&global_copoll_lock);
         //release
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
         atomic_thread_fence(memory_order_release);

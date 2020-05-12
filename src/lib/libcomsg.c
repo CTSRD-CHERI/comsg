@@ -116,9 +116,9 @@ int cosend(coport_t port, const void * buf, size_t len)
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
             call->cocarrier=port;
-            call->message=calloc(len,sizeof(char));
-            memcpy(call->message,buf,len);
-
+            call->message=cheri_csetbounds(buf,len);
+            call->message=cheri_andperm(call->message,COCARRIER_PERMS);
+            
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);
             cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
             if(call->status!=0)
