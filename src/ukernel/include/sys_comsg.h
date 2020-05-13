@@ -13,7 +13,7 @@
 #define U_COCARRIER_RECV "cocarrier_recv"
 #define U_COCARRIER_POLL "copoll"
 
-#define U_FUNCTIONS 8
+#define U_FUNCTIONS 7
 
 #define MAX_COPORTS 10
 #define LOOKUP_STRING_LEN 16

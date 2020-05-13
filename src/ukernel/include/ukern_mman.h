@@ -95,9 +95,7 @@ typedef struct _work_queue
 	work_queue_item_t * items;
 } work_queue_t;
 
-buffer_table_t buffer_table;
-region_table_t region_table;
-work_queue_t jobs_queue;
+extern work_queue_t jobs_queue;
 //void extend_region_table(void);
 int reserve_region(void);
 int map_region(void);

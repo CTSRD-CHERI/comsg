@@ -16,8 +16,8 @@
 #include "ukern_params.h"
 #include "sys_comsg.h"
 
-buffer_table_t buffer_table;
-region_table_t region_table;
+static buffer_table_t buffer_table;
+static region_table_t region_table;
 work_queue_t jobs_queue;
 
 

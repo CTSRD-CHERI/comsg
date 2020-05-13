@@ -57,10 +57,10 @@ void send_data(void)
 
 	status=coopen(port_name,coport_type,&port);
 	message_len=strlen(message_str)+1;
-	if(port->status==COPORT_CLOSED)
+	/*if(port->status==COPORT_CLOSED)
 	{
 		err(1,"port closed before sending");
-	}
+	}*/
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
 	for(unsigned int j = 0; j<runs; j++)
 	{
@@ -105,10 +105,10 @@ void receive_data(void)
 			buffer=calloc(4096,sizeof(char));
 			break;
 	}
-	if(port->status==COPORT_CLOSED)
+	/*if(port->status==COPORT_CLOSED)
 	{
 		err(1,"port closed before receiving");
-	}
+	}*/
 	clock_gettime(CLOCK_REALTIME,&start);
 	for(unsigned int j = 0; j<runs; j++)
 	{

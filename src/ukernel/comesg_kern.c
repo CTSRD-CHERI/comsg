@@ -5,6 +5,7 @@
 #include <stdatomic.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <cheri/cheric.h>
 #include <time.h>
 #include <sys/param.h>
 #include <sys/mman.h>
@@ -210,6 +211,14 @@ bool valid_coport(sys_coport_t * addr)
 
 bool valid_cocarrier(sys_coport_t * addr)
 {
+    if(cheri_gettype(addr)!=sealed_otype)
+    {
+        return false;
+    }
+    else
+    {
+        addr=cheri_unseal(addr,seal_cap);
+    }
     if(!valid_coport(addr))
     {
         return false;
@@ -883,7 +892,7 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     char * thread_name;
     bool private;
 
-    if (name[0]!="_")
+    if (name[0]=='_')
     	private=true;
     else
     	private=false;
@@ -1063,7 +1072,12 @@ int main(int argc, const char *argv[])
     handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COCARRIER_RECV);
     pthread_attr_init(&thread_attrs);
-    pthread_create(&cocarrier_send_handler,&thread_attrs,manage_requests,handler_args);
+    pthread_create(&cocarrier_recv_handler,&thread_attrs,manage_requests,handler_args);
+
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    strcpy(handler_args->func_name,U_COCARRIER_POLL);
+    pthread_attr_init(&thread_attrs);
+    pthread_create(&copoll_handler,&thread_attrs,manage_requests,handler_args);
 
     /*
     handler_args=malloc(sizeof(request_handler_args_t));
