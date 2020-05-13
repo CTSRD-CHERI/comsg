@@ -89,7 +89,7 @@ void receive_data(void)
 	int status;
 
 	status=coopen(port_name,coport_type,&port);
-	switch(port->type)
+	switch(coport_type)
 	{
 		case COCHANNEL:
 		case COPIPE:

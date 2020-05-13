@@ -20,6 +20,7 @@
 #include "coport.h"
 #include "comsg.h"
 
+#define LIBCOMSG_OTYPE 1
 //Sealing root
 static void * __capability libcomsg_sealroot;
 //Sealing cap for coport_t
@@ -280,6 +281,6 @@ void libcomsg_init(void)
     assert(cheri_getlen(libcomsg_sealroot) != 0);
     assert((cheri_getperm(libcomsg_sealroot) & CHERI_PERM_SEAL) != 0);
     //XXX-PBB: Is 1 an okay value?
-    libcomsg_coport_seal=cheri_maketype(libcomsg_sealroot,1);
+    libcomsg_coport_seal=cheri_maketype(libcomsg_sealroot,LIBCOMSG_OTYPE);
     libcomsg_otype=cheri_gettype(cheri_seal(libcomsg_coport_seal,libcomsg_coport_seal));
 }
