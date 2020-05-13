@@ -1,15 +1,17 @@
 LIB=pthread
 INC=include/ src/ukernel/include 
 
-LIB_PARAMS=$(foreach l, $(LIB),	 -l$l)
+BUILDDIR=build
+OUTDIR=output
+
+LIB_PARAMS=-L$(CURDIR)/$(OUTDIR) $(foreach l, $(LIB),	 -l$l) 
 INC_PARAMS=$(foreach i, $(INC), -I$i)
 
 BUILD_TIME:=$(shell date "+%Y/%m/%d %H:%M:%S")
 DEBUG=-v -g
 CFLAGS=$(DEBUG) -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
 	-mabi=purecap -fPIE -mstack-alignment=16 -fPIC
-BUILDDIR=build
-OUTDIR=output
+
 LLDFLAGS=-pie -fuse-ld=lld 
 ifndef FORCE
 FORCE=--force --clean
@@ -20,13 +22,12 @@ CHERIBSD_DIR=$(CHERI_ROOT)/cheribsd
 CHERIBUILD_DIR=$(CHERI_ROOT)/cheribuild/
 endif
 
-default : ukernel cochatter
-	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
-	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)/root/bin
+default : ukernel cochatter libcomsg.so
+	#cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
+	#cp $(OUTDIR)/cochatter $(CHERI_FSDIR)/root/bin
+	#cp $(OUTDIR)/libcomsg.so $(C)
 	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
-	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
-	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
-	cheribsd-purecap disk-image-purecap
+	cheribsd-mips-purecap disk-image-mips-purecap
 
 run : ukernel cochatter
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
@@ -37,16 +38,25 @@ endif
 	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) \
 	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
-	cheribsd-purecap disk-image-purecap run-purecap
+	cheribsd-purecap disk-image-purecap run-purecap \
+	cheribsd-mips-purecap disk-image-mips-purecap run-mips-purecap
 
 ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o coproc.o \
 	ukern_mman.o
 	$(CC) $(CFLAGS) $(LLDFLAGS) -Wl,-znow $(LIB_PARAMS) $(INC_PARAMS)  \
 	-o $(OUTDIR)/comesg_ukernel $(foreach o, $^, $(BUILDDIR)/$o)
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
+	--cheribsd-mips-purecap/subdir="'usr.bin/comesg_ukernel'" \
+	--cheribsd/subdir="'usr.bin/comesg_ukernel'" \
+	cheribsd-mips-purecap disk-image-mips-purecap
 
 cochatter : comsg_chatterer.o libcomsg.so
-	$(CC) $(CFLAGS)  $(LLDFLAGS) $(LIB_PARAMS) -llibcomsg.so $(INC_PARAMS) \
+	$(CC) $(CFLAGS)  $(LLDFLAGS) $(LIB_PARAMS) -lcomsg $(INC_PARAMS) \
 	-o $(OUTDIR)/cochatter $(BUILDDIR)/comsg_chatterer.o
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
+	--cheribsd-mips-purecap/subdir="'usr.bin/cochatter'" \
+	--cheribsd/subdir="'usr.bin/cochatter'" \
+	cheribsd-mips-purecap disk-image-mips-purecap
 
 comsg_chatterer.o : src/bin/comsg_chatterer.c include/comsg.h \
 	src/ukernel/include/sys_comsg.h include/coport.h \
@@ -90,7 +100,7 @@ ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
 endif
 
-libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c coproc.o \
+libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c \
 	include/coproc.h include/coport.h  include/comutex.h\
 	src/ukernel/include/sys_comsg.h include/comsg.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o

@@ -20,6 +20,7 @@
 #include "coport.h"
 #include "comsg.h"
 
+#define LIBCOMSG_OTYPE 1
 //Sealing root
 static void * __capability libcomsg_sealroot;
 //Sealing cap for coport_t
@@ -212,10 +213,9 @@ int corecv(coport_t port, void ** buf, size_t len)
             atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
             break;
         case COCARRIER:
-
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
             call->cocarrier=port;
-            call->message=calloc(len,sizeof(char));
+            call->message=cheri_csetbounds(*buf,len);
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
             cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
             if(call->status!=0)
@@ -231,7 +231,6 @@ int corecv(coport_t port, void ** buf, size_t len)
             {
                 err(1,"received capability does not grant read permissions");
             }
-            *buf=call->message;
             free(call);
             break;
         case COPIPE:
@@ -282,6 +281,6 @@ void libcomsg_init(void)
     assert(cheri_getlen(libcomsg_sealroot) != 0);
     assert((cheri_getperm(libcomsg_sealroot) & CHERI_PERM_SEAL) != 0);
     //XXX-PBB: Is 1 an okay value?
-    libcomsg_coport_seal=cheri_maketype(libcomsg_sealroot,1);
+    libcomsg_coport_seal=cheri_maketype(libcomsg_sealroot,LIBCOMSG_OTYPE);
     libcomsg_otype=cheri_gettype(cheri_seal(libcomsg_coport_seal,libcomsg_coport_seal));
 }

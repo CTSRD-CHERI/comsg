@@ -5,6 +5,7 @@
 #include <stdatomic.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <cheri/cheric.h>
 #include <time.h>
 #include <sys/param.h>
 #include <sys/mman.h>
@@ -29,8 +30,9 @@
 
 #define DEBUG
 
-void * __capability seal_cap;
-int sealed_otype;
+static void * __capability root_seal_cap;
+static otype_t seal_cap;
+static long sealed_otype;
 
 pthread_mutex_t global_copoll_lock;
 pthread_cond_t global_cosend_cond;
@@ -210,6 +212,14 @@ bool valid_coport(sys_coport_t * addr)
 
 bool valid_cocarrier(sys_coport_t * addr)
 {
+    if(cheri_gettype(addr)!=sealed_otype)
+    {
+        return false;
+    }
+    else
+    {
+        addr=cheri_unseal(addr,root_seal_cap);
+    }
     if(!valid_coport(addr))
     {
         return false;
@@ -323,7 +333,7 @@ void *cocarrier_poll(void *args)
                 copoll_args->error=EINVAL;
                 continue;
             }
-            cocarrier=cheri_unseal(cocarrier,seal_cap);
+            cocarrier=cheri_unseal(cocarrier,root_seal_cap);
             listen_entries[i]=ukern_fast_malloc(sizeof(coport_listener_t));
             listen_entries[i]->wakeup=wake;
             listen_entries[i]->revent=NOEVENT;
@@ -415,7 +425,7 @@ void *cocarrier_recv(void *args)
             cocarrier_send_args->error=EINVAL;
             continue;
         }
-        cocarrier=cheri_unseal(cocarrier,seal_cap);
+        cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         for(;;)
         {
             status=COPORT_OPEN;
@@ -490,7 +500,7 @@ void *cocarrier_send(void *args)
             cocarrier_send_args->error=EINVAL;
             continue;
         }
-        cocarrier=cheri_unseal(cocarrier,seal_cap);
+        cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         //allocate ukernel owned buffer
         msg_buf=ukern_fast_malloc(cheri_getlen(cocarrier_send_args->message));
         //copy data into buffer
@@ -883,7 +893,7 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     char * thread_name;
     bool private;
 
-    if (name[0]!="_")
+    if (name[0]=='_')
     	private=true;
     else
     	private=false;
@@ -1001,8 +1011,10 @@ int main(int argc, const char *argv[])
     error=coport_tbl_setup();
     error+=comutex_tbl_setup();
 
-    error+=sysarch(CHERI_GET_SEALCAP,&seal_cap);
+    error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
+    seal_cap=cheri_maketype(root_seal_cap,UKERN_OTYPE);
     sealed_otype=cheri_gettype(cheri_seal(&argc,seal_cap));
+    root_seal_cap=cheri_setoffset(root_seal_cap,UKERN_OTYPE);
     memset(&worker_map,0,sizeof(worker_map_entry_t)*U_FUNCTIONS);
     if(error!=0)
     {
@@ -1063,7 +1075,12 @@ int main(int argc, const char *argv[])
     handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COCARRIER_RECV);
     pthread_attr_init(&thread_attrs);
-    pthread_create(&cocarrier_send_handler,&thread_attrs,manage_requests,handler_args);
+    pthread_create(&cocarrier_recv_handler,&thread_attrs,manage_requests,handler_args);
+
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    strcpy(handler_args->func_name,U_COCARRIER_POLL);
+    pthread_attr_init(&thread_attrs);
+    pthread_create(&copoll_handler,&thread_attrs,manage_requests,handler_args);
 
     /*
     handler_args=malloc(sizeof(request_handler_args_t));
