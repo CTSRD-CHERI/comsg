@@ -53,7 +53,6 @@ void send_data(void)
 	struct timespec start_timestamp,end_timestamp;
 	double ipc_time;
 	int status;
-	unsigned int message_start;
 
 	status=coopen(port_name,coport_type,&port);
 	message_len=strlen(message_str)+1;
@@ -67,18 +66,10 @@ void send_data(void)
 		cosend(port,message_str,message_len);
 	}
 	clock_gettime(CLOCK_REALTIME,&end_timestamp);
-	message_start=port->start;
 	timespecsub(&end_timestamp,&start_timestamp);
 	ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
 	printf("transferred %lu bytes in %lf\n", total_size, ipc_time);
 	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
-	if(coport_type==COCARRIER)
-	{
-		while (port->start==message_start)
-		{
-			sleep(1);
-		}
-	}
 }
 
 void receive_data(void)

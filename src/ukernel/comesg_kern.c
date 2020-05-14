@@ -190,20 +190,23 @@ bool valid_coport(sys_coport_t * addr)
     vaddr_t port_addr = (vaddr_t) addr;
     int index;
 
-    if(cheri_getlen(addr)!=sizeof(sys_coport_t))
+    if(cheri_getlen(addr)<sizeof(sys_coport_t))
     {
+        printf("too small to represent coport\n");
         return false;
     }
-    else if(cheri_is_address_inbounds(coport_table.table,port_addr))
+    else if(!cheri_is_address_inbounds(coport_table.table,port_addr))
     {
+        printf("address not in bounds\n");
         return false;
     }
     else
     {
         table_offset=port_addr-cheri_getbase(coport_table.table);
         index=table_offset/sizeof(coport_tbl_entry_t);
-        if(& coport_table.table[index].port!=addr)
+        if(&coport_table.table[index].port!=addr)
         {
+            printf("offset looks wrong\n");
             return false;
         }
     }
@@ -214,6 +217,7 @@ bool valid_cocarrier(sys_coport_t * addr)
 {
     if(cheri_gettype(addr)!=sealed_otype)
     {
+        printf("wrong type\n");
         return false;
     }
     else
@@ -224,14 +228,7 @@ bool valid_cocarrier(sys_coport_t * addr)
     {
         return false;
     }
-    else if(!cheri_getsealed(addr))
-    {
-        return false;
-    }
-    else if(cheri_gettype(addr)!=sealed_otype)
-    {
-        return false;
-    }
+
     return true;
 }
 
@@ -458,7 +455,8 @@ void *cocarrier_recv(void *args)
         	pthread_cond_signal(&global_cosend_cond);
         }
         pthread_mutex_unlock(&global_copoll_lock);
-
+        cocarrier_send_args->status=0;
+        cocarrier_send_args->error=0;
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
         atomic_thread_fence(memory_order_release);
     }
