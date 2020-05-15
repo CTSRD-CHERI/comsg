@@ -112,8 +112,7 @@ int cosend(coport_t port, const void * buf, size_t len)
             {
                 memcpy((char *)port->buffer+old_end, buf, len);
             }
-            atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
-            break;
+            port->status=COPORT_OPEN;            break;
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
             call->cocarrier=port;
@@ -210,7 +209,7 @@ int corecv(coport_t port, void ** buf, size_t len)
             port->start=port->start+len;
             memcpy(*buf,(char *)port->buffer+old_start, len);
             port->start=port->start+len;
-            atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
+            port->status=COPORT_OPEN;
             break;
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
@@ -248,11 +247,39 @@ int corecv(coport_t port, void ** buf, size_t len)
             port->buffer=NULL;
             break;
         default:
+            err(1,"invalid coport type");
             break;
     }
     atomic_thread_fence(memory_order_release);
     return 0;
     
+}
+
+coport_type_t coport_gettype(coport_t port)
+{
+
+    assert(cheri_getsealed(port)!=0);
+    if(cheri_gettype(port)!=libcomsg_otype)
+    {
+        return (COCARRIER);
+    }
+    else
+    {
+        port=cheri_unseal(port,libcomsg_coport_seal);
+        return (port->type);
+    }
+}
+
+pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events)
+{
+    pollcoport_t pcpt;
+
+    assert(coport_gettype(port)==COCARRIER);
+    pcpt.port=port;
+    pcpt.events=events;
+    pcpt.revents=0;
+
+    return pcpt;
 }
 
 int coclose(coport_t port)
@@ -261,13 +288,43 @@ int coclose(coport_t port)
     return 0;
 }
 
-int copoll(coport_t port)
+int copoll(pollcoport_t * coports, uint ncoports, int timeout)
 {
-    if (port)
+    void * __capability switcher_code;
+    void * __capability switcher_data;
+    void * __capability func;
+
+    copoll_args_t * call;
+    pollcoport_t * call_coports;
+    uint error;
+    int status;
+
+    /* cocall setup */
+    //TODO-PBB: Only do this once.
+    call=calloc(1,sizeof(copoll_args_t));
+    //allocate our own for safety purposes
+    call_coports=calloc(ncoports,sizeof(pollcoport_t));
+    memcpy(call_coports,coports,sizeof(pollcoport_t)*ncoports);
+    
+    call->coports=call_coports;
+    call->ncoports=ncoports;
+    call->timeout=timeout;
+
+
+    //possible deferred call to malloc ends up in cocall, causing exceptions?
+    error=ukern_lookup(&switcher_code,&switcher_data,U_COPOLL,&func);
+    error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
+
+    errno=call->error;
+    status=call->status;
+    for (int i = 0; i<ncoports; ++i)
     {
-        return 0;
+        coports[i].revents=call->coports[i].revents;
     }
-    return 0;
+    free(call_coports);
+    free(call);
+
+    return (status);
 }
 
 __attribute__ ((constructor)) static 

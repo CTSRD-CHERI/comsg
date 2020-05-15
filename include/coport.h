@@ -25,11 +25,11 @@
 typedef enum {COSEND, CORECV} coport_op_t;
 typedef enum {COPIPE, COCARRIER, COCHANNEL} coport_type_t;
 typedef enum {COPORT_CLOSED=0,COPORT_OPEN=1,COPORT_BUSY=2,COPORT_READY=4,COPORT_DONE=8} coport_status_t;
-typedef enum {NOEVENT=0,COPOLL_CLOSED=1,COPOLL_IN=2,COPOLL_OUT=4,COPOLL_READ_ERROR=8,COPOLL_WRITE_ERROR=16} coport_eventmask_t;
+typedef enum {NOEVENT=0,COPOLL_CLOSED=1,COPOLL_IN=2,COPOLL_OUT=4,COPOLL_RERR=8,COPOLL_WERR=16} coport_eventmask_t;
 typedef enum {RECV=1,SEND=2,CREAT=4,EXCL=8,ONEWAY=16,} coport_flags_t; //currently unimplemented
 
 #define COCARRIER_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
-
+#define COPOLL_INIT_EVENTS ( COPOLL_OUT )
 
 /* 
  * TODO-PBB: Rework so we can have fine-grained, least-privilege protection of 
@@ -68,15 +68,15 @@ struct _coport
 {
     void * __capability buffer;
     u_int length;
-    u_int start;
-    u_int end;
+    int start;
+    int end;
     _Atomic coport_status_t status;
     coport_type_t type;
-    union 
+    union //used to allow other coport_type dependent stuff later if we want it.
     {
         struct 
         {
-            coport_eventmask_t event;
+            _Atomic coport_eventmask_t event;
             LIST_HEAD(,_coport_listener) listeners;
         };
     };

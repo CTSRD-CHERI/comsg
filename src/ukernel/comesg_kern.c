@@ -310,8 +310,9 @@ void *cocarrier_poll(void *args)
     update_worker_args(data,U_COCARRIER_POLL);
     for (;;)
     {
+    	//This could likely be organized much better.
+    	//When the refactor comes, this will need an appointment with Dr Guillotin
         error=coaccept(sw_code,sw_data,&caller_cookie,copoll_args,sizeof(copoll_args_t));
-        listen_entries=ukern_fast_malloc(CHERICAP_SIZE*copoll_args->ncoports);        
         targets=ukern_fast_malloc(sizeof(pollcoport_t)*copoll_args->ncoports);
         memcpy(targets,copoll_args->coports,sizeof(pollcoport_t)*copoll_args->ncoports);
         ncoports=copoll_args->ncoports;
@@ -330,32 +331,49 @@ void *cocarrier_poll(void *args)
                 copoll_args->error=EINVAL;
                 continue;
             }
-            cocarrier=cheri_unseal(cocarrier,root_seal_cap);
-            listen_entries[i]=ukern_fast_malloc(sizeof(coport_listener_t));
-            listen_entries[i]->wakeup=wake;
-            listen_entries[i]->revent=NOEVENT;
-            listen_entries[i]->eventmask=targets[i].events;
-            
+            targets[i].coport=cheri_unseal(cocarrier,root_seal_cap);
         }
+
         if(copoll_args->status==-1)
         {
             //we need to clean up
-            for (int j = 0; j < i; ++j)
-            {
-            	ukern_fast_free(listen_entries[j]);
-            }
-            ukern_fast_free(listen_entries);
             ukern_fast_free(targets);
             copoll_args->error=EINVAL;
             continue;
         }
+        if(copoll_args->timeout!=0)
+        {
+        	listen_entries=ukern_fast_malloc(CHERICAP_SIZE*copoll_args->ncoports);
+        	for(i = 0; i<ncoports;i++)
+        	{
+        		listen_entries[i]=ukern_fast_malloc(sizeof(coport_listener_t));
+	            listen_entries[i]->wakeup=wake;
+	            listen_entries[i]->revent=NOEVENT;
+	            listen_entries[i]->eventmask=targets[i].events;
+        	}
+        }
+        
+        if (copoll_args->timeout==0)
+        {
+        		atomic_thread_fence(memory_order_acquire);
+        		for(i=0,i<ncoports; ++i)
+        		{
+        			cocarrier=targets[i].coport;
+        			copoll_args->coports[i].revents=(copoll_args->coports[i].revents & cocarrier->event);
+        		}
+        		atomic_thread_fence(memory_order_release);
+        		ukern_fast_free(targets);
+        		continue;
+        }
+
         pthread_mutex_lock(&global_copoll_lock);
         for (i = 0; i < ncoports; ++i)
         {
+        	cocarrier=targets[i].coport;
         	LIST_INSERT_HEAD(&cocarrier->listeners,listen_entries[i],entries);
         }
-        got_woken_up=false;
-        if(copoll_args->timeout!=0)
+
+        if(copoll_args->timeout!=-1)
         {
         	timespec_get(&curtime_spec,TIME_UTC);
 	        timeout_spec.tv_nsec=copoll_args->timeout;
@@ -369,12 +387,7 @@ void *cocarrier_poll(void *args)
         /*do stuff*/
         for(i = 0; i<ncoports;i++)
         {
-        	cocarrier=copoll_args->coports[i].coport;
-        	if(listen_entries[i]->revent!=NOEVENT)
-        	{
-        		copoll_args->coports[i].revents=listen_entries[i]->revent;
-        		got_woken_up = true;
-        	}
+        	copoll_args->coports[i].revents=listen_entries[i]->revent;
         	LIST_REMOVE(listen_entries[i],entries);
         }
         pthread_mutex_unlock(&global_copoll_lock);
@@ -435,11 +448,12 @@ void *cocarrier_recv(void *args)
         index=cocarrier->start;
         if(cocarrier->length==0)
         {
+                cocarrier->event&=COPOLL_RERR;
+                atomic_thread_fence(memory_order_release);
 
-            	//buffer is empty - return error
+                //buffer is empty - return error
                 cocarrier_send_args->status=-1;
                 cocarrier_send_args->error=EAGAIN;
-                atomic_thread_fence(memory_order_release);
                 continue;
         }
         cocarrier_buf=cocarrier->buffer;
@@ -447,18 +461,22 @@ void *cocarrier_recv(void *args)
         memcpy(cocarrier_send_args->message,cocarrier_buf[index],len);
         cocarrier->start++;
         cocarrier->length--;
+        
+        cocarrier->event|=COPOLL_OUT;
+        cocarrier->event&=~COPOLL_RERR;
+        if (cocarrier->length==0)
+        {
+        	cocarrier->event&=~COPOLL_IN;
+        }
+        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
+        atomic_thread_fence(memory_order_release);
 
-        pthread_mutex_lock(&global_copoll_lock);
-        cocarrier->event=COPOLL_OUT;
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
         	pthread_cond_signal(&global_cosend_cond);
         }
-        pthread_mutex_unlock(&global_copoll_lock);
         cocarrier_send_args->status=0;
         cocarrier_send_args->error=0;
-        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
-        atomic_thread_fence(memory_order_release);
     }
     return args;
 }
@@ -496,6 +514,7 @@ void *cocarrier_send(void *args)
         {
             cocarrier_send_args->status=-1;
             cocarrier_send_args->error=EINVAL;
+
             continue;
         }
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
@@ -522,33 +541,44 @@ void *cocarrier_send(void *args)
         {
             if(index==cocarrier->start)
             {
-            	//buffer is full - return error
-                cocarrier_send_args->status=-1;
-                cocarrier_send_args->error=EAGAIN;
-                atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
+                cocarrier->event&=COPOLL_WERR;
+                cocarrier->status=COPORT_OPEN;
                 atomic_thread_fence(memory_order_release);
                 ukern_fast_free(msg_buf);
+
+                //buffer is full - return error
+                cocarrier_send_args->status=-1;
+                cocarrier_send_args->error=EAGAIN;
                 continue;
             }
         }
         if(cheri_gettag(cocarrier_buf[index]))
         {
+        	//auto overwrite old messages once we've wrapped around
         	ukern_fast_free(cocarrier_buf[index]);
         }
         cocarrier_buf[index]=msg_buf;
         cocarrier->end=index;
         cocarrier->length++;
         //check if anyone is waiting on messages to arrive
-        pthread_mutex_lock(&global_copoll_lock);
-        cocarrier->event=COPOLL_OUT;
+        
+        cocarrier->event|=COPOLL_IN;
+        cocarrier->event&=~COPOLL_WERR;
+        if(cocarrier->length==COCARRIER_SIZE)
+        {
+        	cocarrier->event&=~COPOLL_OUT;
+        }
+        //release
+        cocarrier->status=COPORT_OPEN;
+        atomic_thread_fence(memory_order_release);
+
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
         	pthread_cond_signal(&global_cosend_cond);
         }
-        pthread_mutex_unlock(&global_copoll_lock);
-        //release
-        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
-        atomic_thread_fence(memory_order_release);
+        cocarrier_send_args->status=0;
+        cocarrier_send_args->error=0;
+        
     }
     free(cocarrier_send_args);
     return 0;
@@ -607,6 +637,7 @@ void *coport_open(void *args)
             if(port.type==COCARRIER)
             {
                 LIST_INIT(&port.listeners);
+                port.event=COPOLL_INIT_EVENTS;
             }
             table_entry.port=port;
             table_entry.id=generate_id();
