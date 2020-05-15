@@ -68,15 +68,67 @@ typedef struct _pollcoport_t
 	int revents;
 } pollcoport_t;
 
+
+//There is an unsatisfying situation here which arises from the fact that
+//cocall/coaccept data lengths must be symmetrical, so to pass a variable 
+//length array, even though we can derive its length, we must pass a pointer
+//to memory we cannot guarantee will not be touched during the call.
 typedef struct _copoll_args_t
 {
 	pollcoport_t * coports;
-	int ncoports;
+	uint ncoports;
 	int timeout; 
 	int status;
 	int error;
 } __attribute__((__aligned__(16))) copoll_args_t;
 
+#if 0
+
+struct cocall_args
+{
+	int status;
+	int error;
+	union {} retval;
+	union 
+	{
+		struct
+		{
+			pollcoport_t * coports;
+			int ncoports;
+			int timeout;
+		};
+		struct
+		{
+			_Atomic(coport_t) cocarrier;
+			void * __capability message;
+		};
+		struct
+		{
+			_Atomic(comutex_t * __capability) mutex;
+		};
+		struct
+		{
+			char target[LOOKUP_STRING_LEN];
+			void * __capability func_cap;
+		};
+		struct 
+		{
+			char name[COMUTEX_NAME_LEN];
+		};
+		struct
+		{
+			cocall_comutex_init_args_t args;
+			_Atomic(comutex_t * __capability) mutex; 
+		};
+		struct
+		{
+			coopen_args_t args;
+			_Atomic(coport_t) port; 
+		}
+	} args;
+};
+
+#endif
 
 int ukern_lookup(void *  __capability * __capability code, 
 	void * __capability  * __capability data, const char * target_name, 
