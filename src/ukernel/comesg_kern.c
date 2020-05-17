@@ -1,3 +1,29 @@
+/*
+ * Copyright (c) 2020 Peter S. Blandford-Baker
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 #include "comesg_kern.h"
 
 #include <math.h>
@@ -9,6 +35,7 @@
 #include <time.h>
 #include <sys/param.h>
 #include <sys/mman.h>
+#include <sys/queue.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
@@ -56,7 +83,7 @@ int generate_id(void)
     return random();
 }
 
-int rand_string(char * buf,unsigned int len)
+int rand_string(char * buf, long int len)
 {
     char c;
     char * s;
@@ -72,7 +99,7 @@ int rand_string(char * buf,unsigned int len)
     s[len-1]='\0';
     strcpy(buf,s);
     free(s);
-    return 0;
+    return i;
 }
 
 int add_port(coport_tbl_entry_t entry)
@@ -872,12 +899,12 @@ int coaccept_init(
     error=coregister(target_name,target_cap);
     if (error!=0)
     {
-        err(1,"ERROR: Could not coregister with name %s.\n",target_name);
+        err(errno,"ERROR: Could not coregister with name %s.\n",target_name);
     }
     //printf("Successfully coregistered with name %s\n",target_name);
     //printf("validity: %u\n",cheri_gettag(*target_cap));
 
-    return 0;
+    return (error);
 }
 
 int coport_tbl_setup(void)
@@ -1029,6 +1056,13 @@ int main(int argc, const char *argv[])
     pthread_attr_init(&thread_attrs);
     pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
 
+    
+    error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
+    seal_cap=cheri_maketype(root_seal_cap,UKERN_OTYPE);
+    sealed_otype=cheri_gettype(cheri_seal(&argc,seal_cap));
+    root_seal_cap=cheri_setoffset(root_seal_cap,UKERN_OTYPE);
+    memset(&worker_map,0,sizeof(worker_map_entry_t)*U_FUNCTIONS);
+
     while(jobs_queue.max_len!=(WORKER_COUNT*U_FUNCTIONS)+2)
     {
         //this really shouldn't take long.
@@ -1036,20 +1070,13 @@ int main(int argc, const char *argv[])
         //i apologise
         __asm("nop");
     }
-
-    error=coport_tbl_setup();
+    error+=coport_tbl_setup();
     error+=comutex_tbl_setup();
-
-    error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
-    seal_cap=cheri_maketype(root_seal_cap,UKERN_OTYPE);
-    sealed_otype=cheri_gettype(cheri_seal(&argc,seal_cap));
-    root_seal_cap=cheri_setoffset(root_seal_cap,UKERN_OTYPE);
-    memset(&worker_map,0,sizeof(worker_map_entry_t)*U_FUNCTIONS);
     if(error!=0)
     {
-        err(1,"Table setup failed!!");
+        err(1,"Initial setup failed!!");
     }
-    printf("Table setup complete.\n");
+    printf("Initial setup complete.\n");
 
     /* perform setup */
     printf("Spawning co-open listeners...\n");

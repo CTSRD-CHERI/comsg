@@ -23,7 +23,7 @@
                 sender to copy data into
 */
 typedef enum {COSEND, CORECV} coport_op_t;
-typedef enum {COPIPE, COCARRIER, COCHANNEL} coport_type_t;
+typedef enum {COPIPE=1, COCARRIER=2, COCHANNEL=3} coport_type_t;
 typedef enum {COPORT_CLOSED=0,COPORT_OPEN=1,COPORT_BUSY=2,COPORT_READY=4,COPORT_DONE=8} coport_status_t;
 typedef enum {NOEVENT=0,COPOLL_CLOSED=1,COPOLL_IN=2,COPOLL_OUT=4,COPOLL_RERR=8,COPOLL_WERR=16} coport_eventmask_t;
 typedef enum {RECV=1,SEND=2,CREAT=4,EXCL=8,ONEWAY=16,} coport_flags_t; //currently unimplemented
