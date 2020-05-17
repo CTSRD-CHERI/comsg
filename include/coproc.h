@@ -60,6 +60,7 @@ typedef struct _cocarrier_send_args_t
 	int error;
 } __attribute__((__aligned__(16))) cocall_cocarrier_send_t;
 
+typedef struct _commap_args commap_args_t;
 
 typedef struct _pollcoport_t
 {
