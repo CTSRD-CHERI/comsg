@@ -23,25 +23,36 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef COMSG_H
-#define COMSG_H
+#ifndef COMMAP_H
+#define COMMAP_H
 
-#include "sys_comsg.h"
-#include "coport.h"
-#include "coproc.h"
-#include <cheri/cherireg.h>
-#include <sys/types.h>
+#define get_prot(c) perms_to_prot(cheri_getperm(c))
+#define set_prot(c,p) cheri_andperm(c,prot_to_perms(p))
+
+typedef void * __capability token_t;
+typedef enum {REPLY_ADDR,MMAP_FILE} fd_type;
 
 
-int coopen(const char * coport_name, coport_type_t type, coport_t * prt);
-int cosend(coport_t p, const void * buf, size_t len);
-int corecv(coport_t p, void ** buf, size_t len);
-int coclose(coport_t port);
+typdef struct _commap_message_header {
+    size_t fd_count;
+} commap_msghdr_t;
 
-int copoll(coport_t port);
-pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events);
+typedef struct _commap_info {
+    int sender_fd; //used by the sender to reassociate tokens with its own fds
+    fd_type type;
+    size_t size;
+    int prot;
+    int offset;
+    int flags;
+} commap_info_t;
 
-int commap_setup(void);
-int commap(void *,size_t,int,int,int,off_t);
+typedef struct _commap_reply {
+    int sender_fd;
+    token_t mmap_token;
+} commap_reply_t;
 
-#endif
+
+int perms_to_prot(int prot);
+int prot_to_perms(int perms);
+
+#endif // COMMAP_H

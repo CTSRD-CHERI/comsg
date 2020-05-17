@@ -23,25 +23,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef COMSG_H
-#define COMSG_H
+#ifndef UKERN_COMMAP_H
+#define UKERN_COMMAP_H
 
-#include "sys_comsg.h"
-#include "coport.h"
-#include "coproc.h"
-#include <cheri/cherireg.h>
-#include <sys/types.h>
+#define RANDOM_LEN 3
+#define U_SOCKADDR "getukernsockaddr"
+#define U_COMMAP "commap"
+#define RECV_FLAGS 0
+#define MAX_FDS 255
+#define MAX_MAP_INFO_SIZE ( MAX_FDS * sizeof(commap_info_t)  )
+#define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(message_header) )
+#define CMSG_BUFFER_SIZE ( CMSG_SPACE(sizeof(int) * MAX_FDS) )
+#define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD )
+#define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
+#define MAX_ADDR_SIZE 104
+
+struct mapping {
+    LIST_ENTRY(mapping) entries;
+    token_t token;
+    int fd;
+    void * __capability map_cap;
+    _Atomic int refs;
+};
+
+struct mapping_table {
+    LIST_HEAD(,struct mapping) mappings;
+    _Atomic uint count;
+};
 
 
-int coopen(const char * coport_name, coport_type_t type, coport_t * prt);
-int cosend(coport_t p, const void * buf, size_t len);
-int corecv(coport_t p, void ** buf, size_t len);
-int coclose(coport_t port);
-
-int copoll(coport_t port);
-pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events);
-
-int commap_setup(void);
-int commap(void *,size_t,int,int,int,off_t);
+void ukern_mmap(void *args);
 
 #endif

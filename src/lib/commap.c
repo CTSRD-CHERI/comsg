@@ -23,25 +23,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef COMSG_H
-#define COMSG_H
 
-#include "sys_comsg.h"
-#include "coport.h"
-#include "coproc.h"
+#include "commap.h"
+#include <sys/mman.h>
 #include <cheri/cherireg.h>
-#include <sys/types.h>
 
+int perms_to_prot(int perms)
+{
+	int prot;
 
-int coopen(const char * coport_name, coport_type_t type, coport_t * prt);
-int cosend(coport_t p, const void * buf, size_t len);
-int corecv(coport_t p, void ** buf, size_t len);
-int coclose(coport_t port);
+	if (perms & (CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP))
+		prot |=  PROT_READ;
+	if (perms & (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_STORE_LOCAL_CAP))
+		prot |= PROT_WRITE;
+	if (perms & CHERI_PERM_EXECUTE )
+		prot |= PROT_EXEC;
+			   
 
-int copoll(coport_t port);
-pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events);
+	return prot;
+}
 
-int commap_setup(void);
-int commap(void *,size_t,int,int,int,off_t);
+int prot_to_perms(int prot)
+{
+	int perms;
 
-#endif
+	if (prot & PROT_READ)
+		perms |= CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP;
+	if (prot & PROT_WRITE)
+		perms |= CHERI_PERM_STORE | CHERI_PERM_STORE_CAP |
+		CHERI_PERM_STORE_LOCAL_CAP;
+	if (prot & PROT_EXEC)
+		perms |= CHERI_PERM_EXECUTE;
+
+	return perms;
+}

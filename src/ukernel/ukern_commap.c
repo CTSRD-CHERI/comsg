@@ -44,61 +44,18 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include "commap.h"
+#include "ukern_commap.h"
 #include "comesg_kern.h"
 #include "ukern_params.h"
-
-#define RANDOM_LEN 3
-#define U_SOCKADDR "getukernsockaddr"
-#define U_COMMAP "commap"
-#define RECV_FLAGS 0
-#define MAX_FDS 255
-#define MAX_MAP_INFO_SIZE ( MAX_FDS * sizeof(struct map_info)  )
-#define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(message_header) )
-#define CMSG_BUFFER_SIZE ( CMSG_SPACE(sizeof(int) * MAX_FDS) )
-#define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD )
-#define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
-#define MAX_ADDR_SIZE 104
 
 static int rsock_fd;
 static const char path_prefix = "/tmp/ukern.";
 static char bind_path[MAX_ADDR_SIZE] = "/tmp/ukern.";
 static sockaddr_un rsock_addr;
 
-typedef long int token_t; //TODO-PBB: REPLACE
-
-struct mapping {
-    LIST_ENTRY(mapping) entries;
-    token_t token;
-    int fd;
-    void * __capability map_cap;
-    _Atomic int refs;
-};
-
-struct mapping_table {
-    LIST_HEAD(,struct mapping) mappings;
-    _Atomic uint count;
-};
 
 static struct mapping_table mmap_tbl;
-
-typedef enum {REPLY_ADDR,MMAP_FILE} fd_type;
-struct map_info {
-    int sender_fd; //used by the sender to reassociate tokens with its own fds
-    fd_type type;
-    size_t size;
-    int prot;
-    int offset;
-    int flags;
-};
-
-struct map_reply {
-    int sender_fd;
-    token_t mmap_token;
-};
-
-struct message_header {
-    size_t fd_count;
-};
 
 static
 void remove_sockf(void)
@@ -173,7 +130,7 @@ token_t generate_token(struct mapping * m)
 }
 
 static
-int map_fds(struct map_info * params, int * fds, struct mapping ***fd_mappings, int * reply_fd, int len)
+int map_fds(commap_info_t * params, int * fds, struct mapping ***fd_mappings, int * reply_fd, int len)
 {
     struct mapping *new_m, **mapped_fds;
     int mapped=0;
@@ -254,10 +211,10 @@ int process_cmsgs(struct msghdr m, int * fda, int expected_fds)
 }
 
 static
-void do_reply(int fd, struct mapping **mapped,struct map_info *params,int len)
+void do_reply(int fd, struct mapping **mapped,commap_info_t *params,int len)
 {
     int reply_idx = 0;
-    struct map_reply * reply = calloc(len,sizeof(struct map_reply));
+    commap_reply_t * reply = calloc(len,sizeof(commap_reply_t));
     for(int i = 0; i < len; ++i)
     {
         if(params[i].fd_type==REPLY_ADDR)
@@ -266,7 +223,7 @@ void do_reply(int fd, struct mapping **mapped,struct map_info *params,int len)
         reply[reply_idx].token=mapped[reply_idx];
         reply_idx++;
     }
-    write(fd,reply,len*sizeof(struct map_reply));
+    write(fd, reply, len * sizeof(commap_reply_t));
     close(fd);
 }
 
@@ -274,17 +231,17 @@ static
 void process_msg(struct msghdr msg)
 {
     void * raw_data;
-    struct message_header header;
-    struct map_info *map_params;
+    commap_msghdr_t header;
+    commap_info_t *map_params;
     int *fds, reply, fd_count;
     struct mapping **mapped_fds;
 
     raw_data=msg.iov[0].iov_base;
-    memcpy(&header,raw_data,sizeof(struct message_header));
-    raw_data+=sizeof(struct message_header);
+    memcpy(&header,raw_data,sizeof(commap_msghdr_t));
+    raw_data+=sizeof(commap_msghdr_t);
 
-    map_params=calloc(message_header.fd_count,sizeof(struct map_info));
-    memcpy(map_params,raw_data,sizeof(struct map_info)*message_header.fd_count);
+    map_params=calloc(message_header.fd_count,sizeof(commap_info_t));
+    memcpy(map_params,raw_data,sizeof(commap_info_t)*message_header.fd_count);
 
     fd_count=process_cmsgs(msg,message_header.fd_count);
     fd_count=MIN(fd_count,message_header.fd_count);
@@ -366,13 +323,8 @@ void *getfds(void *args)
     return args;
 }
 
-#define get_prot(c) perms_to_prot(cheri_getperm(c))
-#define set_prot(c,p) cheri_andperm(c,prot_to_perms(p))
 
-static 
-int perms_to_prot(int prot);
-static 
-int prot_to_perms(int perms);
+
 
 
 static
@@ -423,7 +375,6 @@ void *commap(void *args)
         commap_args->cap=set_prot(commap_args->cap,prot);
         //flags not included
     }
-
     return args;
 }
 
@@ -462,5 +413,5 @@ void ukern_mmap(void *args)
     pthread_attr_init(&thread_attrs);
     pthread_create(&commap_handler,&thread_attrs,manage_requests,handler_args);
 
-    
+    pthread_join(commap_threads[0],NULL);
 }
