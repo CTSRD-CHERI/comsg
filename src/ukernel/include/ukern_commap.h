@@ -23,32 +23,40 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-/*system-wide colocation constants*/
-#ifndef _SYS_COMSG_H
-#define _SYS_COMSG_H
+#ifndef UKERN_COMMAP_H
+#define UKERN_COMMAP_H
 
-#include <cheri/cherireg.h>
+#include <stdatomic.h>
+#include <sys/queue.h>
+#include <sys/socket.h>
+#include "commap.h"
+#include "sys_comsg.h"
 
-#define U_COOPEN "coopen"
-#define U_COCLOSE "coclose"
-#define U_COUNLOCK "counlock"
-#define U_COLOCK "colock"
-#define U_COMUTEX_INIT "comutex_init"
-#define U_COCARRIER_SEND "cocarrier_send"
-#define U_COCARRIER_RECV "cocarrier_recv"
-#define U_COPOLL "copoll"
-#define U_COMMAP "commap"
+#define RANDOM_LEN 3
 
-#define U_SOCKADDR "getukernsockaddr" //Currently doesn't use requests interface
+#define RECV_FLAGS 0
+#define MAX_FDS 255
+#define MAX_MAP_INFO_SIZE ( MAX_FDS * sizeof(commap_info_t)  )
+#define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(commap_msghdr_t) )
+#define MAX_CMSG_BUFFER_SIZE ( CMSG_BUFFER_SIZE(MAX_FDS) )
+#define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+#define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
+#define TOKEN_OTYPE 3
 
-#define U_FUNCTIONS 8 //coclose not yet implemented
+struct ukern_mapping {
+    LIST_ENTRY(ukern_mapping) entries;
+    token_t token;
+    FILE_POS;
+    void * __capability map_cap;
+    _Atomic int refs;
+};
 
-#define MAX_COPORTS 10
-#define LOOKUP_STRING_LEN 16
-#define COPORT_BUF_LEN 4096
-#define COPORT_NAME_LEN 255
-#define COMUTEX_NAME_LEN 255
-#define COCARRIER_SIZE ( COPORT_BUF_LEN / CHERICAP_SIZE )
+struct ukern_mapping_table {
+    LIST_HEAD(,ukern_mapping) mappings;
+    _Atomic uint count;
+};
 
+
+void *ukern_mmap(void *args);
 
 #endif

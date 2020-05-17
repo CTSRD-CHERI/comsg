@@ -35,16 +35,18 @@ run : ukernel cochatter
 ifdef dev
 	git commit -a --message="$(BUILD_TIME)"
 endif
-	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) \
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update -v $(FORCE) \
 	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	cheribsd-purecap disk-image-purecap run-purecap \
 	cheribsd-mips-purecap disk-image-mips-purecap run-mips-purecap
 
-ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o coproc.o \
-	ukern_mman.o
-	$(CC) $(CFLAGS) $(LLDFLAGS) -Wl,-znow $(LIB_PARAMS) $(INC_PARAMS)  \
-	-o $(OUTDIR)/comesg_ukernel $(foreach o, $^, $(BUILDDIR)/$o)
+ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
+	ukern_mman.o ukern_commap.o libcomsg.so
+	$(CC) $(CFLAGS) $(LLDFLAGS) -Wl,-znow $(LIB_PARAMS) -lcomsg $(INC_PARAMS)  \
+	-o $(OUTDIR)/comesg_ukernel $(BUILDDIR)/comesg_kern.o \
+	$(BUILDDIR)/coport_utils.o $(BUILDDIR)/sys_comutex.o \
+	$(BUILDDIR)/comutex.o $(BUILDDIR)/ukern_mman.o $(BUILDDIR)/ukern_commap.o
 	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
 	--cheribsd-mips-purecap/subdir="'usr.bin/comesg_ukernel'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel'" \
@@ -82,6 +84,14 @@ ukern_mman.o : src/ukernel/ukern_mman.c \
 	-o $(BUILDDIR)/ukern_mman.o
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
 
+ukern_commap.o : src/ukernel/ukern_commap.c \
+	src/ukernel/include/ukern_params.h src/ukernel/include/comesg_kern.h  \
+	src/ukernel/include/sys_comsg.h include/commap.h include/coproc.h \
+	src/ukernel/include/ukern_commap.h
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/ukernel/ukern_commap.c \
+	-o $(BUILDDIR)/ukern_commap.o
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
+
 
 comutex.o: src/lib/comutex.c include/comutex.h \
 	src/ukernel/include/sys_comsg.h include/coproc.h
@@ -102,14 +112,23 @@ endif
 
 libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c \
 	include/coproc.h include/coport.h  include/comutex.h\
-	src/ukernel/include/sys_comsg.h include/comsg.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o
+	src/ukernel/include/sys_comsg.h include/comsg.h \
+	include/commap.h src/lib/commap.c
+	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so src/lib/libcomsg.c src/lib/commap.c src/lib/coproc.c
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
-	rm -f $(CHERIBSD_DIR)/lib/libcomsg/coproc.o
+	rm -f $(CHERIBSD_DIR)/lib/libcomsg/*.o
 endif
 
-coproc.o: src/lib/coproc.c include/coproc.h
+commap.o: src/lib/commap.c include/commap.h \
+	src/ukernel/include/sys_comsg.h include/coproc.h src/lib/coproc.c
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/commap.c -o $(BUILDDIR)/commap.o
+ifdef CHERIBSD_DIR
+	cp $< $(CHERIBSD_DIR)/usr.bin/comesg_ukernel
+	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
+endif
+
+coproc.o: src/lib/coproc.c include/coproc.h include/commap.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/coproc.c -o $(BUILDDIR)/coproc.o
 ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/comesg_ukernel

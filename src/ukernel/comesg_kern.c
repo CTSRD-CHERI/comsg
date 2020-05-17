@@ -1,3 +1,29 @@
+/*
+ * Copyright (c) 2020 Peter S. Blandford-Baker
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 #include "comesg_kern.h"
 
 #include <math.h>
@@ -9,6 +35,7 @@
 #include <time.h>
 #include <sys/param.h>
 #include <sys/mman.h>
+#include <sys/queue.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
@@ -26,6 +53,7 @@
 #include "sys_comsg.h"
 #include "ukern_mman.h"
 #include "ukern_params.h"
+#include "ukern_commap.h"
 
 
 #define DEBUG
@@ -56,14 +84,15 @@ int generate_id(void)
     return random();
 }
 
-int rand_string(char * buf,unsigned int len)
+int rand_string(char * buf, long int len)
 {
     char c;
     char * s;
     int rand_no;
+    long int i;
     s = (char *) malloc(sizeof(char)*len);
     srandomdev();
-    for (unsigned int i = 0; i < len-1; i++)
+    for (i = 0; i < len-1; i++)
     {
         rand_no=random() % KEYSPACE;
         c=(char)rand_no+0x21;
@@ -72,7 +101,7 @@ int rand_string(char * buf,unsigned int len)
     s[len-1]='\0';
     strcpy(buf,s);
     free(s);
-    return 0;
+    return i;
 }
 
 int add_port(coport_tbl_entry_t entry)
@@ -286,7 +315,6 @@ void *cocarrier_poll(void *args)
     int ncoports;
     struct timespec timeout_spec;
     struct timespec curtime_spec;
-    bool got_woken_up;
 
     worker_args_t * data = args;
     copoll_args_t * copoll_args = calloc(1,sizeof(copoll_args));
@@ -307,7 +335,7 @@ void *cocarrier_poll(void *args)
     
     error=coaccept_init(&sw_code,&sw_data,data->name,&target);
     data->cap=target;
-    update_worker_args(data,U_COCARRIER_POLL);
+    update_worker_args(data,U_COPOLL);
     for (;;)
     {
     	//This could likely be organized much better.
@@ -356,7 +384,7 @@ void *cocarrier_poll(void *args)
         if (copoll_args->timeout==0)
         {
         		atomic_thread_fence(memory_order_acquire);
-        		for(i=0,i<ncoports; ++i)
+        		for(i=0;i<ncoports; ++i)
         		{
         			cocarrier=targets[i].coport;
         			copoll_args->coports[i].revents=(copoll_args->coports[i].revents & cocarrier->event);
@@ -485,7 +513,7 @@ void *cocarrier_send(void *args)
 {
     //todo implement
     int error;
-    uint index;
+    size_t index;
     coport_status_t status;
 
     worker_args_t * data = args;
@@ -858,7 +886,7 @@ void *manage_requests(void *args)
 int coaccept_init(
     void * __capability * __capability  code_cap,
     void * __capability * __capability  data_cap, 
-    char * target_name,
+    const char * target_name,
     void * __capability * __capability target_cap)
 {
     int error;
@@ -872,12 +900,12 @@ int coaccept_init(
     error=coregister(target_name,target_cap);
     if (error!=0)
     {
-        err(1,"ERROR: Could not coregister with name %s.\n",target_name);
+        err(errno,"ERROR: Could not coregister with name %s.\n",target_name);
     }
     //printf("Successfully coregistered with name %s\n",target_name);
     //printf("validity: %u\n",cheri_gettag(*target_cap));
 
-    return 0;
+    return (error);
 }
 
 int coport_tbl_setup(void)
@@ -981,10 +1009,10 @@ void run_tests(void)
 int main(int argc, const char *argv[])
 {
     int verbose;
-    int error;
+    int error = 0;
     request_handler_args_t * handler_args;
 
-    pthread_t memory_manager;
+    pthread_t memory_manager, commap_manager;
     pthread_t coopen_threads[WORKER_COUNT];
     pthread_t counlock_threads[WORKER_COUNT];
     pthread_t comutex_init_threads[WORKER_COUNT];
@@ -1029,6 +1057,12 @@ int main(int argc, const char *argv[])
     pthread_attr_init(&thread_attrs);
     pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
 
+    error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
+    seal_cap=cheri_maketype(root_seal_cap,UKERN_OTYPE);
+    sealed_otype=cheri_gettype(cheri_seal(&argc,seal_cap));
+    root_seal_cap=cheri_setoffset(root_seal_cap,UKERN_OTYPE);
+    memset(&worker_map,0,sizeof(worker_map_entry_t)*U_FUNCTIONS);
+
     while(jobs_queue.max_len!=(WORKER_COUNT*U_FUNCTIONS)+2)
     {
         //this really shouldn't take long.
@@ -1036,20 +1070,14 @@ int main(int argc, const char *argv[])
         //i apologise
         __asm("nop");
     }
-
-    error=coport_tbl_setup();
+    error+=coport_tbl_setup();
     error+=comutex_tbl_setup();
-
-    error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
-    seal_cap=cheri_maketype(root_seal_cap,UKERN_OTYPE);
-    sealed_otype=cheri_gettype(cheri_seal(&argc,seal_cap));
-    root_seal_cap=cheri_setoffset(root_seal_cap,UKERN_OTYPE);
-    memset(&worker_map,0,sizeof(worker_map_entry_t)*U_FUNCTIONS);
     if(error!=0)
     {
-        err(1,"Table setup failed!!");
+        err(1,"Initial setup failed!!");
     }
-    printf("Table setup complete.\n");
+    printf("Initial setup complete.\n");
+    pthread_create(&commap_manager,&thread_attrs,ukern_mmap,NULL);
 
     /* perform setup */
     printf("Spawning co-open listeners...\n");
@@ -1065,7 +1093,7 @@ int main(int argc, const char *argv[])
     printf("Spawning cocarrier recv listeners...\n");
     error+=spawn_workers(&cocarrier_recv,cocarrier_recv_threads,U_COCARRIER_RECV);
     printf("Spawning copoll listeners...\n");
-    error+=spawn_workers(&cocarrier_poll,copoll_threads,U_COCARRIER_POLL);
+    error+=spawn_workers(&cocarrier_poll,copoll_threads,U_COPOLL);
     error+=spawn_workers(&copoll_deliver,copoll_deliver_threads,"_copoll_deliver");
     // XXX-PBB: Not implemented yet
     /*
@@ -1107,7 +1135,7 @@ int main(int argc, const char *argv[])
     pthread_create(&cocarrier_recv_handler,&thread_attrs,manage_requests,handler_args);
 
     handler_args=ukern_malloc(sizeof(request_handler_args_t));
-    strcpy(handler_args->func_name,U_COCARRIER_POLL);
+    strcpy(handler_args->func_name,U_COPOLL);
     pthread_attr_init(&thread_attrs);
     pthread_create(&copoll_handler,&thread_attrs,manage_requests,handler_args);
 
