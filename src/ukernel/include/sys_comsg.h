@@ -36,7 +36,7 @@
 #define U_COMUTEX_INIT "comutex_init"
 #define U_COCARRIER_SEND "cocarrier_send"
 #define U_COCARRIER_RECV "cocarrier_recv"
-#define U_COCARRIER_POLL "copoll"
+#define U_COPOLL "copoll"
 
 #define U_FUNCTIONS 7
 

@@ -300,7 +300,7 @@ pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events)
     pollcoport_t pcpt;
 
     assert(coport_gettype(port)==COCARRIER);
-    pcpt.port=port;
+    pcpt.coport=port;
     pcpt.events=events;
     pcpt.revents=0;
 
