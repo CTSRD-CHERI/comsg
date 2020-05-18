@@ -37,6 +37,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 static lmap_tbl_t map_tbl;
 static pthread_key_t replyfd;
@@ -105,6 +108,64 @@ void * __capability token_from_table(int fd, off_t offset, int prot)
 	}
 	return NULL;
 }
+
+static
+void add_token_to_table(token_t token, int fd, off_t offset,int prot)
+{
+	lmap_t * entry = calloc(1,sizeof(lmap_t));
+	entry->token=token;
+	entry->fd=fd;
+	entry->offset=offset;
+	entry->prot=prot;
+	LIST_INSERT_HEAD(&map_tbl.maps,entry,entries);
+	map_tbl.count++;
+}
+
+static
+void add_cap_to_table(token_t token, void * __capability cap)
+{
+	lmap_t *map, *map_temp;
+	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
+		if (map->token==token) 
+		{
+			if (HAS_PROT_PERMS(cap,map->prot))
+				map->cap=cap;
+			//keep looking, we might've mapped it more times
+		}
+	}
+	return;
+}
+
+
+static inline
+commap_info_t make_commap_info(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
+{
+	commap_info_t i;
+	i.fd=fd;
+	i.offset=offset;
+	i.flags=flags;
+	i.prot=prot;
+	i.size=size;
+	base=NULL; //unused
+	return i;
+}
+
+static inline 
+commap_info_t make_reply_info(int fd)
+{
+	commap_info_t i = make_commap_info(0,0,0,0,fd,0);
+	i.type=REPLY_ADDR;
+	return i;
+}
+
+static inline 
+commap_info_t make_fd_info(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
+{
+	commap_info_t i = make_commap_info(base,size,prot,flags,fd,offset);
+	i.type=MMAP_FILE;
+	return i;
+}
+
 
 static void 
 init_replyfd()
@@ -177,7 +238,7 @@ void get_ukerneladdr(void)
     void * __capability func;
     char path[MAX_ADDR_SIZE];
 
-    ukernel_sock_addr=calloc(1,sizeof(sockaddr_un));
+    ukernel_sock_addr=calloc(1,sizeof(struct sockaddr_un));
     ukernel_sock_addr->sun_family=AF_UNIX;
 
 	cosetup(COSETUP_COCALL,&switcher_code,&switcher_data);
@@ -203,35 +264,10 @@ int get_ukernelfd(void)
 
 }
 
-static inline 
-commap_info_t make_reply_info(int fd)
-{
-	commap_info_t i = make_commap_info(0,0,0,0,fd,0);
-	i.type=REPLY_ADDR;
-	return i;
-}
-
-static inline 
-commap_info_t make_fd_info(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
-{
-	commap_info_t i = make_commap_info(base,size,prot,flags,fd,offset);
-	i.type=MMAP_FILE;
-	return i;
-}
 
 
-static inline
-commap_info_t make_commap_info(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
-{
-	commap_info_t i;
-	i.fd=fd;
-	i.offset=offset;
-	i.flags=flags;
-	i.prot=prot;
-	i.size=size;
-	base=NULL; //unused
-	return i;
-}
+
+
 
 struct msghdr * msghdr_alloc(size_t fds)
 {
@@ -350,7 +386,7 @@ token_t request_token(commap_info_t info)
 		else
 			perror("Error: could not retrieve reply via fd");
 	}
-	if (reply[0].fd != info.fd)
+	if (reply[0].sender_fd != info.fd)
 	{
 		err(EINVAL,"Error: mismatch between sender fd from ukern and local fd");
 	}
@@ -364,32 +400,7 @@ token_t request_token(commap_info_t info)
 	return token; 
 }
 
-static
-void add_token_to_table(token_t token, int fd, off_t offset,int prot)
-{
-	lmap_t * entry = calloc(1,sizeof(lmap_t));
-	entry->token=token;
-	entry->fd=fd;
-	entry->offset=offset;
-	entry->prot=prot;
-	LIST_INSERT_HEAD(&map_tbl.maps,entry,entries);
-	map_tbl.count++;
-}
 
-static
-void add_cap_to_table(token_t token, void * __capability cap)
-{
-	lmap_t *map, *map_temp;
-	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
-		if (map->token==token) 
-		{
-			if (HAS_PROT_PERMS(cap,map->prot))
-				map->cap=cap;
-			//keep looking, we might've mapped it again with higher permissions.
-		}
-	}
-	return NULL;
-}
 
 void * __capability commap(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
 {
@@ -397,7 +408,7 @@ void * __capability commap(void * __capability base, size_t size, int prot, int 
 	commap_info_t request_info;
 	token_t token;
 	
-	mapped_cap = map_from_table(fd,prot);
+	mapped_cap = map_from_table(fd,offset,prot);
 	//we already mapped this with this prot
 	if(mapped_cap)
 		return mapped_cap;
