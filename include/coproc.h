@@ -97,7 +97,11 @@ typedef struct _commap_args
 {
 	int status;
 	int error;
-	struct commap_info;
+	struct {
+		void * __capability cap;
+		token_t token;
+		int prot;
+	};
 } commap_args_t;
 
 typedef struct _pollcoport_t
