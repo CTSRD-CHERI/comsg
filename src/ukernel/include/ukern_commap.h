@@ -43,7 +43,7 @@
 #define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
 #define TOKEN_OTYPE 3
 
-struct _mapping {
+struct ukern_mapping {
     LIST_ENTRY(_mapping) entries;
     token_t token;
     FILE_POS;
@@ -51,8 +51,8 @@ struct _mapping {
     _Atomic int refs;
 };
 
-struct mapping_table {
-    LIST_HEAD(,_mapping) mappings;
+struct ukern_mapping_table {
+    LIST_HEAD(,ukern_mapping) mappings;
     _Atomic uint count;
 };
 

@@ -58,7 +58,7 @@ static void * __capability token_unseal_cap;
 static otype_t token_seal_cap;
 static long token_otype;
 
-static struct mapping_table mmap_tbl;
+static struct ukern_mapping_table mmap_tbl;
 
 
 static
@@ -127,10 +127,10 @@ void *advertise_sockaddr(void *args)
 }
 
 static
-token_t generate_token(struct mapping * m)
+token_t generate_token(struct ukern_mapping * m)
 {
     token_t t;
-    t=cheri_csetbounds(m,sizeof(struct mapping));
+    t=cheri_csetbounds(m,sizeof(struct ukern_mapping));
     t=cheri_andperm(t,TOKEN_PERMS);
     t=cheri_seal(t,);
 
@@ -138,11 +138,11 @@ token_t generate_token(struct mapping * m)
 }
 
 static
-int map_fds(commap_info_t * params, int * fds, struct mapping **fd_mappings, int * reply_fd, int len)
+int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mappings, int * reply_fd, int len)
 {
-    struct mapping *new_m, **mapped_fds;
+    struct ukern_mapping *new_m, **mapped_fds;
     int mapped=0;
-    *fd_mappings=calloc(len,sizeof(struct mapping*));
+    *fd_mappings=calloc(len,sizeof(struct ukern_mapping*));
     for(int i = 0; i<len; ++i)
     {
         if (fds[i]<0)
@@ -153,7 +153,7 @@ int map_fds(commap_info_t * params, int * fds, struct mapping **fd_mappings, int
             continue;
         }
 
-        new_m=malloc(sizeof(struct mapping));
+        new_m=malloc(sizeof(struct ukern_mapping));
         new_m->fd=fds[i];
         new_m->token=generate_token(new_m);
         new_m->refs=0;
@@ -207,7 +207,7 @@ int process_cmsgs(struct msghdr *m, int * fda, int expected_fds)
 }
 
 static
-void do_reply(int fd, struct mapping **mapped, commap_info_t *params, int len)
+void do_reply(int fd, struct ukern_mapping **mapped, commap_info_t *params, int len)
 {
     int reply_idx = 0;
     commap_reply_t * reply = calloc(len,sizeof(commap_reply_t));
@@ -231,7 +231,7 @@ void process_msg(struct msghdr *msg)
     commap_msghdr_t header;
     commap_info_t *map_params;
     int *fds, reply, fd_count;
-    struct mapping **mapped_fds;
+    struct ukern_mapping **mapped_fds;
 
     raw_data=msg->msg_iov[0].iov_base;
     memcpy(&header,raw_data,sizeof(commap_msghdr_t));
@@ -292,7 +292,7 @@ void *co_mmap(void *args)
     void * __capability target;
 
 
-    struct mapping *map;
+    struct ukern_mapping *map;
     commap_args_t * commap_args;
     //char path[MAX_ADDR_SIZE];
 
