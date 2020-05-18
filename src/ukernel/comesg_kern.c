@@ -490,19 +490,21 @@ void *cocarrier_recv(void *args)
         cocarrier->start++;
         cocarrier->length--;
         
-        cocarrier->event|=COPOLL_OUT;
-        cocarrier->event&=~COPOLL_RERR;
         if (cocarrier->length==0)
-        {
-        	cocarrier->event&=~COPOLL_IN;
-        }
-        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_relaxed);
-        atomic_thread_fence(memory_order_release);
+        	cocarrier->event=(COPOLL_OUT | cocarrier->event & ~COPOLL_RERR) & ~COPOLL_IN;
+        else
+            cocarrier->event=(COPOLL_OUT | cocarrier->event & ~COPOLL_RERR);
+        
 
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
-        	pthread_cond_signal(&global_cosend_cond);
+            pthread_cond_signal(&global_cosend_cond);
         }
+
+        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_thread_fence(memory_order_release);
+
+       
         cocarrier_send_args->status=0;
         cocarrier_send_args->error=0;
     }
@@ -590,20 +592,20 @@ void *cocarrier_send(void *args)
         cocarrier->length++;
         //check if anyone is waiting on messages to arrive
         
-        cocarrier->event|=COPOLL_IN;
-        cocarrier->event&=~COPOLL_WERR;
+        
         if(cocarrier->length==COCARRIER_SIZE)
-        {
-        	cocarrier->event&=~COPOLL_OUT;
-        }
-        //release
-        cocarrier->status=COPORT_OPEN;
-        atomic_thread_fence(memory_order_release);
-
+        	cocarrier->event=(((COPOLL_IN | cocarrier->event) & ~COPOLL_WERR) & ~COPOLL_OUT);
+        else
+            cocarrier->event=(COPOLL_IN | cocarrier->event) & ~COPOLL_WERR;
+        
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
-        	pthread_cond_signal(&global_cosend_cond);
+            pthread_cond_signal(&global_cosend_cond);
         }
+        //release
+        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_thread_fence(memory_order_release);
+
         cocarrier_send_args->status=0;
         cocarrier_send_args->error=0;
         

@@ -321,7 +321,7 @@ void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
 	cmsg->cmsg_level = SOL_SOCKET;
     cmsg->cmsg_type = SCM_RIGHTS;
     cmsg->cmsg_len = CMSG_BUFFER_SIZE(len);
-    fd_dest = (int *)CMSG_INT_DATA(cmsg);
+    fd_dest = CMSG_INT_DATA(cmsg);
     for(size_t i = 0; i < len; ++i) {
     	fd_dest[i]=r[i].fd;
     }
@@ -410,7 +410,7 @@ void * __capability commap(void * __capability base, size_t size, int prot, int 
 	if(!token)
 	{
 		//request a token for mapping the region from the microkernel
-		request_info=make_commap_info(base,size,prot,flags,fd,offset);
+		request_info=make_fd_info(base,size,prot,flags,fd,offset);
 		token=request_token(request_info);
 	}
 	//call into microkernel and attempt use our token to retrieve the mapping
