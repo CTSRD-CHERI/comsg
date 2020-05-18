@@ -26,6 +26,10 @@
 #ifndef COMMAP_H
 #define COMMAP_H
 
+#include <cheri/cheric.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 #define MAX_ADDR_SIZE 104
 
 #define FILE_POS struct { int fd; off_t offset; }
@@ -79,7 +83,8 @@ int prot_to_perms(int perms);
 #define HAS_PROT(a,b) ( a <= ( a & b ) )
 #define HAS_PROT_PERMS(c,p) ( p <= ( GET_PROT(c) & p ) )
 
-struct msghdr * msghdr_alloc(size_t fds);
-void msghdr_free(struct msghdr * hdr);
+extern struct msghdr * msghdr_alloc(size_t fds);
+extern void msghdr_free(struct msghdr * hdr);
+extern void * __capability commap(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset);
 
 #endif // COMMAP_H

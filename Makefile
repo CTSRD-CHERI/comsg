@@ -41,10 +41,12 @@ endif
 	cheribsd-purecap disk-image-purecap run-purecap \
 	cheribsd-mips-purecap disk-image-mips-purecap run-mips-purecap
 
-ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o coproc.o \
-	ukern_mman.o ukern_commap.o
-	$(CC) $(CFLAGS) $(LLDFLAGS) -Wl,-znow $(LIB_PARAMS) $(INC_PARAMS)  \
-	-o $(OUTDIR)/comesg_ukernel $(foreach o, $^, $(BUILDDIR)/$o)
+ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
+	ukern_mman.o ukern_commap.o libcomsg.so
+	$(CC) $(CFLAGS) $(LLDFLAGS) -Wl,-znow $(LIB_PARAMS) -lcomsg $(INC_PARAMS)  \
+	-o $(OUTDIR)/comesg_ukernel $(BUILDDIR)/comesg_kern.o \
+	$(BUILDDIR)/coport_utils.o $(BUILDDIR)/sys_comutex.o \
+	$(BUILDDIR)/comutex.o $(BUILDDIR)/ukern_mman.o $(BUILDDIR)/ukern_commap.o
 	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE)  \
 	--cheribsd-mips-purecap/subdir="'usr.bin/comesg_ukernel'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel'" \

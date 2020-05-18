@@ -26,6 +26,7 @@
 
 #include "commap.h"
 #include "sys_comsg.h"
+#include "coproc.h"
 
 #include <cheri/cherireg.h>
 #include <pthread.h>
@@ -360,6 +361,7 @@ token_t request_token(commap_info_t info)
 	return token; 
 }
 
+static
 void add_token_to_table(token_t token, int fd, off_t offset,int prot)
 {
 	lmap_t * entry = calloc(1,sizeof(lmap_t));
