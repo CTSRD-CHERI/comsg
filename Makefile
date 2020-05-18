@@ -62,7 +62,7 @@ cochatter : comsg_chatterer.o libcomsg.so
 
 comsg_chatterer.o : src/bin/comsg_chatterer.c include/comsg.h \
 	src/ukernel/include/sys_comsg.h include/coport.h \
-	include/comutex.h include/coproc.h
+	include/comutex.h include/coproc.h include/commap.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/bin/comsg_chatterer.c \
 	-o $(BUILDDIR)/comsg_chatterer.o
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/cochatter;)
