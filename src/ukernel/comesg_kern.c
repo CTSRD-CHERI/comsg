@@ -88,9 +88,10 @@ int rand_string(char * buf, long int len)
     char c;
     char * s;
     int rand_no;
+    long int i;
     s = (char *) malloc(sizeof(char)*len);
     srandomdev();
-    for (unsigned int i = 0; i < len-1; i++)
+    for (i = 0; i < len-1; i++)
     {
         rand_no=random() % KEYSPACE;
         c=(char)rand_no+0x21;
@@ -313,7 +314,6 @@ void *cocarrier_poll(void *args)
     int ncoports;
     struct timespec timeout_spec;
     struct timespec curtime_spec;
-    bool got_woken_up;
 
     worker_args_t * data = args;
     copoll_args_t * copoll_args = calloc(1,sizeof(copoll_args));
@@ -334,7 +334,7 @@ void *cocarrier_poll(void *args)
     
     error=coaccept_init(&sw_code,&sw_data,data->name,&target);
     data->cap=target;
-    update_worker_args(data,U_COCARRIER_POLL);
+    update_worker_args(data,U_COPOLL);
     for (;;)
     {
     	//This could likely be organized much better.
@@ -383,7 +383,7 @@ void *cocarrier_poll(void *args)
         if (copoll_args->timeout==0)
         {
         		atomic_thread_fence(memory_order_acquire);
-        		for(i=0,i<ncoports; ++i)
+        		for(i=0;i<ncoports; ++i)
         		{
         			cocarrier=targets[i].coport;
         			copoll_args->coports[i].revents=(copoll_args->coports[i].revents & cocarrier->event);
@@ -512,7 +512,7 @@ void *cocarrier_send(void *args)
 {
     //todo implement
     int error;
-    uint index;
+    int index;
     coport_status_t status;
 
     worker_args_t * data = args;
@@ -1092,7 +1092,7 @@ int main(int argc, const char *argv[])
     printf("Spawning cocarrier recv listeners...\n");
     error+=spawn_workers(&cocarrier_recv,cocarrier_recv_threads,U_COCARRIER_RECV);
     printf("Spawning copoll listeners...\n");
-    error+=spawn_workers(&cocarrier_poll,copoll_threads,U_COCARRIER_POLL);
+    error+=spawn_workers(&cocarrier_poll,copoll_threads,U_COPOLL);
     error+=spawn_workers(&copoll_deliver,copoll_deliver_threads,"_copoll_deliver");
     // XXX-PBB: Not implemented yet
     /*
@@ -1134,7 +1134,7 @@ int main(int argc, const char *argv[])
     pthread_create(&cocarrier_recv_handler,&thread_attrs,manage_requests,handler_args);
 
     handler_args=ukern_malloc(sizeof(request_handler_args_t));
-    strcpy(handler_args->func_name,U_COCARRIER_POLL);
+    strcpy(handler_args->func_name,U_COPOLL);
     pthread_attr_init(&thread_attrs);
     pthread_create(&copoll_handler,&thread_attrs,manage_requests,handler_args);
 

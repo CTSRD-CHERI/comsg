@@ -30,7 +30,6 @@
 #include <errno.h>
 #include <err.h>
 #include <pthread.h>
-#include <queue.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +39,6 @@
 #include <sys/mman.h>
 #include <sys/queue.h>
 #include <sys/param.h>
-#include <sys/params.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -48,11 +46,12 @@
 #include "ukern_commap.h"
 #include "comesg_kern.h"
 #include "ukern_params.h"
+#include "coproc.h"
 
 static int rsock_fd;
-static const char path_prefix = "/tmp/ukern.";
+static const char * path_prefix = "/tmp/ukern.";
 static char bind_path[MAX_ADDR_SIZE] = "/tmp/ukern.";
-static sockaddr_un rsock_addr;
+static struct sockaddr_un *rsock_addr;
 
 
 static struct mapping_table mmap_tbl;
@@ -68,7 +67,7 @@ static
 int generate_path(void)
 {
     char * rand;
-    rand_string(rand,RANDOM_LEN)
+    rand_string(rand,RANDOM_LEN);
     strcpy(bind_path,path_prefix);
     strcat(bind_path,rand);
     free(rand);
@@ -81,20 +80,24 @@ void sock_init(void)
     int error;
     
     rsock_fd=socket(PF_UNIX,SOCK_STREAM,0);
-    memset(&rsock_addr,0,sizeof(rsock_addr));
-    rsock_addr.sun_family=AF_UNIX;
+    rsock_addr=malloc(sizeof(struct sockaddr_un));
+    memset(rsock_addr,0,sizeof(struct sockaddr_un));
+    rsock_addr->sun_family=AF_UNIX;
 
     for(;;)
+    {
         generate_path();        
-        strncpy(rsock_addr.sun_path,bind_path,sizeof(rsock_addr.sun_path)-1);       
-        error=bind(rsock_fd,rsock_addr,SUN_LEN(&rsock_addr));
+        strncpy(rsock_addr->sun_path,bind_path,sizeof(rsock_addr->sun_path)-1);       
+        error=bind(rsock_fd,rsock_addr,SUN_LEN(rsock_addr));
         if(error==0)
+        {
             atexit(remove_sockf);
             break;
+        }
+    }
     error=listen(rsock_fd,WORKER_COUNT); //queue length so that you are waiting on at most one op to complete (not strictly true, but close)
     if(error!=0)
         perror("Error: listen(2) failed on rsock_fd");
-    return error;
 }
 
 static
@@ -122,7 +125,7 @@ static
 token_t generate_token(struct mapping * m)
 {
     token_t t;
-    t=cheri_setbounds(m,sizeof(struct mapping));
+    t=cheri_csetbounds(m,sizeof(struct mapping));
     t=cheri_andperm(t,TOKEN_PERMS);
     t=cheri_seal(t,seal_cap);
 
@@ -130,27 +133,27 @@ token_t generate_token(struct mapping * m)
 }
 
 static
-int map_fds(commap_info_t * params, int * fds, struct mapping ***fd_mappings, int * reply_fd, int len)
+int map_fds(commap_info_t * params, int * fds, struct mapping **fd_mappings, int * reply_fd, int len)
 {
     struct mapping *new_m, **mapped_fds;
     int mapped=0;
-    *fd_mappings=calloc(len,sizeof(*struct mapping));
+    *fd_mappings=calloc(len,sizeof(struct mapping*));
     for(int i = 0; i<len; ++i)
     {
         if (fds[i]<0)
             continue;
         else if (params[i].type==REPLY_ADDR)
         {
-            *reply_fd=fds;
+            *reply_fd=fds[i];
             continue;
         }
 
         new_m=malloc(sizeof(struct mapping));
-        new_m.fd=fds[i];
-        new_m.token=generate_token(new_m);
-        new_m.refs=0;
-        new_m.map_cap=mmap(0,params[i].size,params[i].prot,fds[i],params[i].offset);
-        if (new_m.map_cap == MAP_FAILED){
+        new_m->fd=fds[i];
+        new_m->token=generate_token(new_m);
+        new_m->refs=0;
+        new_m->map_cap=mmap(0,params[i].size,params[i].prot,params[i].flags,fds[i],params[i].offset);
+        if (new_m->map_cap == MAP_FAILED){
             perror("Error: mapping fd failed");
             free(new_m);
             continue;
@@ -165,45 +168,32 @@ int map_fds(commap_info_t * params, int * fds, struct mapping ***fd_mappings, in
 }
 
 static 
-int process_cmsgs(struct msghdr m, int * fda, int expected_fds)
+int process_cmsgs(struct msghdr *m, int * fda, int expected_fds)
 {
     struct cmsghdr* c_msg;
-    int reply = -1;
     int fd_bytes,fd_count;
 
     if (expected_fds>MAX_FDS)
     {
         err(1,"Error: Supplied too many fds\n");
-        return;
+        return -1;
     }
 
     fda=calloc(MAX_FDS,sizeof(int));
     fd_count=0;
 
-    for(c_msg = CMSG_FIRSTHDR(&m); c_msg; c_msg = CMSG_NXTHDR(&m, c_msg))
+    for(c_msg = CMSG_FIRSTHDR(m); c_msg; c_msg = CMSG_NXTHDR(m, c_msg))
     {
-        if(!(c_msg->cmsg_level == SOL_SOCKET) || (!c_msg->cmsg_type == SCM_RIGHTS)) 
+        if(!(c_msg->cmsg_level == SOL_SOCKET) || !(c_msg->cmsg_type == SCM_RIGHTS)) 
         {
             printf("Error: Invalid control message type %d\n",c_msg->cmsg_type);
-            continue;
-        }
-        if (cmsg->cmsg_len == CMSG_LEN(sizeof(int))&&(reply==-1))
-        {
-            memcpy(&reply,CMSG_DATA(c_msg),sizeof(int));
             continue;
         }
         fd_bytes=(c_msg->cmsg_len - CMSG_LEN(0));
         memcpy(fda+fd_count,CMSG_DATA(c_msg),fd_bytes);
         fd_count+=fd_bytes/sizeof(int);
     }
-    if(reply==-1)
-    {
-        err(1,"No socket supplied for reply");
-        return;
-    }
-    else
-        fd_count++;
-    if(fd_count!=fds)
+    if(fd_count!=expected_fds)
     {
         warn("Warning: fds in ancillary data (%d) did not match expected (%d)",fd_count,expected_fds);
     }
@@ -217,7 +207,7 @@ void do_reply(int fd, struct mapping **mapped,commap_info_t *params,int len)
     commap_reply_t * reply = calloc(len,sizeof(commap_reply_t));
     for(int i = 0; i < len; ++i)
     {
-        if(params[i].fd_type==REPLY_ADDR)
+        if(params[i].type==REPLY_ADDR)
             continue;
         reply[reply_idx].sender_fd=params[i].sender_fd;
         reply[reply_idx].token=mapped[reply_idx];
@@ -228,7 +218,7 @@ void do_reply(int fd, struct mapping **mapped,commap_info_t *params,int len)
 }
 
 static
-void process_msg(struct msghdr msg)
+void process_msg(struct msghdr *msg)
 {
     void * raw_data;
     commap_msghdr_t header;
@@ -236,16 +226,16 @@ void process_msg(struct msghdr msg)
     int *fds, reply, fd_count;
     struct mapping **mapped_fds;
 
-    raw_data=msg.iov[0].iov_base;
+    raw_data=msg->msg_iov[0].iov_base;
     memcpy(&header,raw_data,sizeof(commap_msghdr_t));
     raw_data+=sizeof(commap_msghdr_t);
 
-    map_params=calloc(message_header.fd_count,sizeof(commap_info_t));
-    memcpy(map_params,raw_data,sizeof(commap_info_t)*message_header.fd_count);
+    map_params=calloc(header.fd_count,sizeof(commap_info_t));
+    memcpy(map_params,raw_data,sizeof(commap_info_t)*header.fd_count);
 
-    fd_count=process_cmsgs(msg,message_header.fd_count);
-    fd_count=MIN(fd_count,message_header.fd_count);
-    map_fds(map_params,fds,&mapped_fds,&reply,fd_count);
+    fd_count=process_cmsgs(msg,fds,header.fd_count);
+    fd_count=MIN(fd_count,header.fd_count);
+    map_fds(map_params,fds,mapped_fds,&reply,fd_count);
 
     do_reply(reply,mapped_fds,map_params,fd_count);
     free(mapped_fds);
@@ -269,7 +259,7 @@ struct msghdr * header_alloc()
 
     hdr->msg_control = malloc(CMSG_BUFFER_SIZE);
     hdr->msg_controllen = CMSG_BUFFER_SIZE;
-    memset(hdr.msg_control, 0, CMSG_BUFFER_SIZE);
+    memset(hdr->msg_control, 0, CMSG_BUFFER_SIZE);
     
     hdr->msg_iov=iov;
     hdr->msg_iovlen=1;
@@ -282,9 +272,9 @@ void header_free(struct msghdr * hdr)
 {
     for (int i = 0; i < hdr->msg_iovlen; ++i)
     {
-        free(hdr->iov[i].iov_base);
+        free(hdr->msg_iov[i].iov_base);
     }
-    free(hdr->iov);
+    free(hdr->msg_iov);
     free(hdr->msg_control);
     free(hdr);
     return;
@@ -303,12 +293,12 @@ void *getfds(void *args)
         s=accept(rsock_fd,NULL,NULL);
         if(s==-1)
             perror("Error: accept(2) failed on rsock_fd");
-        if(recvmsg(s,&msg,RECV_FLAGS)==-1)
+        if(recvmsg(s,msg,RECV_FLAGS)==-1)
         {
             perror("Error: recvmsg(2) failed on s");
             break;
         }
-        else if(msg.msg_controllen==0)
+        else if(msg->msg_controllen==0)
         {
             //drop connection, invalid.
             printf("Error: communicating socket did not send any ancillary data.\n");
@@ -359,7 +349,7 @@ void *commap(void *args)
         }
         if(commap_args->cap==NULL)
         {
-            commap_args->status=MAP_FAILED;
+            commap_args->status=-1;
             commap_args->error=EINVAL;
             continue;
         }
@@ -368,7 +358,7 @@ void *commap(void *args)
         if((commap_args->prot-prot)!=0)
         {
             commap_args->cap=NULL;
-            commap_args->status=MAP_FAILED;
+            commap_args->status=-1;
             commap_args->error=EACCES;
             continue;
         }

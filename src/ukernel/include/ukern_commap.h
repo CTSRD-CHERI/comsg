@@ -26,13 +26,17 @@
 #ifndef UKERN_COMMAP_H
 #define UKERN_COMMAP_H
 
+#include <stdatomic.h>
+
+#include "commap.h"
+
 #define RANDOM_LEN 3
 #define U_SOCKADDR "getukernsockaddr"
 #define U_COMMAP "commap"
 #define RECV_FLAGS 0
 #define MAX_FDS 255
 #define MAX_MAP_INFO_SIZE ( MAX_FDS * sizeof(commap_info_t)  )
-#define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(message_header) )
+#define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(commap_msghdr_t) )
 #define CMSG_BUFFER_SIZE ( CMSG_SPACE(sizeof(int) * MAX_FDS) )
 #define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD )
 #define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
@@ -47,7 +51,7 @@ struct mapping {
 };
 
 struct mapping_table {
-    LIST_HEAD(,struct mapping) mappings;
+    LIST_HEAD(,mapping) mappings;
     _Atomic uint count;
 };
 

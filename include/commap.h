@@ -33,7 +33,7 @@ typedef void * __capability token_t;
 typedef enum {REPLY_ADDR,MMAP_FILE} fd_type;
 
 
-typdef struct _commap_message_header {
+typedef struct _commap_message_header {
     size_t fd_count;
 } commap_msghdr_t;
 
@@ -48,7 +48,7 @@ typedef struct _commap_info {
 
 typedef struct _commap_reply {
     int sender_fd;
-    token_t mmap_token;
+    token_t token;
 } commap_reply_t;
 
 
