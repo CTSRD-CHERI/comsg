@@ -70,10 +70,11 @@ typedef struct _local_mapping {
 
 } lmap_t;
 
-typedef struct _local_mapping_table {
+struct _local_mapping_table {
     _Atomic int count;
 	LIST_HEAD(,_local_mapping) maps;
-} lmap_tbl_t;
+};
+typedef struct _local_mapping_table lmap_tbl_t;
 
 //Handy for working with mmap(2) prot values vs CHERI permissions
 int perms_to_prot(int prot);

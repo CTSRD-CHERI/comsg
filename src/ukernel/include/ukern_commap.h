@@ -42,8 +42,8 @@
 #define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
 #define TOKEN_OTYPE 3
 
-struct mapping {
-    LIST_ENTRY(mapping) entries;
+struct _mapping {
+    LIST_ENTRY(_mapping) entries;
     token_t token;
     FILE_POS;
     void * __capability map_cap;
@@ -51,7 +51,7 @@ struct mapping {
 };
 
 struct mapping_table {
-    LIST_HEAD(,mapping) mappings;
+    LIST_HEAD(,_mapping) mappings;
     _Atomic uint count;
 };
 
