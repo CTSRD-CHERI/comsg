@@ -320,8 +320,8 @@ void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
 	cmsg->cmsg_level = SOL_SOCKET;
     cmsg->cmsg_type = SCM_RIGHTS;
     cmsg->cmsg_len = CMSG_BUFFER_SIZE(len);
-    fd_dest = (int *)CMSG_DATA(cmsg);
-    for(int i = 0; i < len; ++i) {
+    fd_dest = (int *)CMSG_INT_DATA(cmsg);
+    for(size_t i = 0; i < len; ++i) {
     	fd_dest[i]=r[i].fd;
     }
     return;
