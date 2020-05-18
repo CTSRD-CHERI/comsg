@@ -161,7 +161,7 @@ void * __capability map_token(token_t token, int prot)
     	perror("Error: commap failed");
     	return NULL;
     }
-  	
+  	add_cap_to_table(token,cap);
     return (cap);
 
 }
@@ -370,6 +370,22 @@ void add_token_to_table(token_t token, int fd, off_t offset,int prot)
 	entry->offset=offset;
 	entry->prot=prot;
 	LIST_INSERT_HEAD(&map_tbl.maps,entry,entries);
+	map_tbl.count++;
+}
+
+static
+void add_cap_to_table(token_t token, void * __capability cap)
+{
+	lmap_t *map, *map_temp;
+	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
+		if (map->token==token) 
+		{
+			if (HAS_PROT_PERMS(cap,map->prot))
+				map->cap=cap;
+			//keep looking, we might've mapped it again with higher permissions.
+		}
+	}
+	return NULL;
 }
 
 void * __capability commap(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)

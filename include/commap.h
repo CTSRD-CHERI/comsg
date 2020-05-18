@@ -71,6 +71,7 @@ typedef struct _local_mapping {
 } lmap_t;
 
 typedef struct _local_mapping_table {
+    _Atomic int count;
 	LIST_HEAD(,_local_mapping) maps;
 } lmap_tbl_t;
 
