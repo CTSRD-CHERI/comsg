@@ -53,6 +53,7 @@
 #include "sys_comsg.h"
 #include "ukern_mman.h"
 #include "ukern_params.h"
+#include "ukern_commap.h"
 
 
 #define DEBUG
@@ -1011,7 +1012,7 @@ int main(int argc, const char *argv[])
     int error;
     request_handler_args_t * handler_args;
 
-    pthread_t memory_manager;
+    pthread_t memory_manager, commap_manager;
     pthread_t coopen_threads[WORKER_COUNT];
     pthread_t counlock_threads[WORKER_COUNT];
     pthread_t comutex_init_threads[WORKER_COUNT];
@@ -1056,7 +1057,6 @@ int main(int argc, const char *argv[])
     pthread_attr_init(&thread_attrs);
     pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
 
-    
     error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
     seal_cap=cheri_maketype(root_seal_cap,UKERN_OTYPE);
     sealed_otype=cheri_gettype(cheri_seal(&argc,seal_cap));
@@ -1077,6 +1077,7 @@ int main(int argc, const char *argv[])
         err(1,"Initial setup failed!!");
     }
     printf("Initial setup complete.\n");
+    pthread_create(&commap_manager,&thread_attrs,ukern_mmap,NULL);
 
     /* perform setup */
     printf("Spawning co-open listeners...\n");

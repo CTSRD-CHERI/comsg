@@ -37,9 +37,10 @@
 #define MAX_FDS 255
 #define MAX_MAP_INFO_SIZE ( MAX_FDS * sizeof(commap_info_t)  )
 #define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(commap_msghdr_t) )
-#define MAX_CMSG_BUFFER_SIZE CMSG_BUFFER_SIZE(MAX_FDS)
-#define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD )
+#define MAX_CMSG_BUFFER_SIZE ( CMSG_BUFFER_SIZE(MAX_FDS) )
+#define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
 #define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
+#define TOKEN_OTYPE 3
 
 struct mapping {
     LIST_ENTRY(mapping) entries;

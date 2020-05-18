@@ -54,7 +54,12 @@ static char bind_path[MAX_ADDR_SIZE] = "/tmp/ukern.";
 static struct sockaddr_un *rsock_addr;
 static int page_size;
 
+static void * __capability token_unseal_cap;
+static otype_t token_seal_cap;
+static long token_otype;
+
 static struct mapping_table mmap_tbl;
+
 
 static
 void remove_sockf(void)
@@ -127,7 +132,7 @@ token_t generate_token(struct mapping * m)
     token_t t;
     t=cheri_csetbounds(m,sizeof(struct mapping));
     t=cheri_andperm(t,TOKEN_PERMS);
-    t=cheri_seal(t,seal_cap);
+    t=cheri_seal(t,);
 
     return t;
 }
@@ -245,9 +250,6 @@ void process_msg(struct msghdr *msg)
     return;
 }
 
-
-
-
 static
 void *getfds(void *args)
 {
@@ -281,10 +283,6 @@ void *getfds(void *args)
     return args;
 }
 
-
-
-
-
 static
 void *co_mmap(void *args)
 {
@@ -293,7 +291,8 @@ void *co_mmap(void *args)
     void * __capability cookie = 0;
     void * __capability target;
 
-    struct mapping *map, *map_temp;
+
+    struct mapping *map;
     commap_args_t * commap_args;
     //char path[MAX_ADDR_SIZE];
 
@@ -309,12 +308,18 @@ void *co_mmap(void *args)
     {
         coaccept(code,data,&cookie,commap_args,sizeof(commap_args));
         commap_args->cap=NULL;
-        LIST_FOREACH_SAFE(map, &mmap_tbl.mappings, entries, map_temp) {
-            if(commap_args->token==map->token) {
-                commap_args->cap=map->map_cap;
-                break;
+        if (cheri_gettype(commap_args->token)==token_otype)
+        {
+            map=cheri_unseal(commap_args->token,token_unseal_cap);
+            if (map->token!=commap_args->token)
+            {
+                commap_args->status=-1;
+                commap_args->error=EINVAL;
+                continue;
             }
+            commap_args->cap=map->map_cap;
         }
+        
         if(commap_args->cap==NULL)
         {
             commap_args->status=-1;
@@ -341,12 +346,21 @@ void *co_mmap(void *args)
 static
 void mmap_tbl_init(void)
 {
+    void __capability root_cap;
+    
     LIST_INIT(&mmap_tbl.mappings);
     mmap_tbl.count=0;
+    error+=sysarch(CHERI_GET_SEALCAP,&root_cap);
+    token_seal_cap=cheri_maketype(root_cap,TOKEN_OTYPE);
+    token_otype=cheri_gettype(cheri_seal(token_seal_cap,token_seal_cap));
+    token_unseal_cap=cheri_setoffset(root_cap,TOKEN_OTYPE);
+
+    root_cap=cheri_unseal(cheri_seal(token_seal_cap,token_seal_cap),token_unseal_cap); //test
+
     return;
 }
 
-void ukern_mmap(void *args)
+void *ukern_mmap(void *args)
 {
 
     //pthread_t sock_advertiser_threads[WORKER_COUNT];
@@ -374,4 +388,6 @@ void ukern_mmap(void *args)
     pthread_create(&commap_handler,&thread_attrs,manage_requests,handler_args);
 
     pthread_join(commap_threads[0],NULL);
+
+    return args;
 }
