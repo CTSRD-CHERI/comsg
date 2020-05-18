@@ -36,6 +36,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <machine/sysarch.h>
+
 #include <sys/mman.h>
 #include <sys/queue.h>
 #include <sys/param.h>
@@ -132,7 +134,7 @@ token_t generate_token(struct ukern_mapping * m)
     token_t t;
     t=cheri_csetbounds(m,sizeof(struct ukern_mapping));
     t=cheri_andperm(t,TOKEN_PERMS);
-    t=cheri_seal(t,);
+    t=cheri_seal(t,token_seal_cap);
 
     return t;
 }
@@ -337,7 +339,7 @@ void *co_mmap(void *args)
         }
         commap_args->cap=SET_PROT(commap_args->cap,prot);
         commap_args->status=0;
-        commap_args->errno=0;
+        commap_args->error=0;
         //flags not included
     }
     return args;
