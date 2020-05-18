@@ -54,6 +54,8 @@ typedef struct _commap_info {
 
 #define COMMAP_MSG_LEN(f) ( sizeof(commap_msghdr_t) + ( f * sizeof(commap_info_t) ) )
 #define CMSG_BUFFER_SIZE(f) ( CMSG_SPACE(sizeof(int) * f) )
+#define CMSG_INT_DATA(cmsg)     ((int *)(cmsg) + \
+                 _CMSG_ALIGN(sizeof(struct cmsghdr)))
 
 typedef struct _commap_reply {
     int sender_fd;
