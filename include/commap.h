@@ -90,4 +90,8 @@ extern struct msghdr * msghdr_alloc(size_t fds);
 extern void msghdr_free(struct msghdr * hdr);
 extern void * __capability commap(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset);
 
+#ifdef COMMAP_C
+static void init_replyfd(void);
+#endif
+
 #endif // COMMAP_H

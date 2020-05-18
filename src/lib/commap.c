@@ -23,6 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#define COMMAP_C
 
 #include "commap.h"
 #include "sys_comsg.h"
@@ -258,7 +259,7 @@ int get_ukernelfd(void)
 		get_ukerneladdr();
 	fd=socket(PF_LOCAL,(SOCK_STREAM | SOCK_NONBLOCK), 0);
 	
-	if(connect(fd,ukernel_sock_addr,SUN_LEN(ukernel_sock_addr))==-1)
+	if(connect(fd,(struct sockaddr *)ukernel_sock_addr,SUN_LEN(ukernel_sock_addr))==-1)
 		err(errno,"Error: connect(2) to ukernel socket at %s failed",ukernel_sock_addr->sun_path);
 	return fd;
 
@@ -303,14 +304,14 @@ void msghdr_free(struct msghdr * hdr)
 static 
 void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
 {
-	void * dest;
+	unsigned char * dest;
 	commap_msghdr_t h;
 	int * fd_dest;
 
 
 	//make message body
 	h.fd_count = len;
-	dest = hdr->msg_iov;
+	dest = hdr->msg_iov[0].iov_base;
 	memcpy(dest,&h,sizeof(commap_msghdr_t));
 	dest+=sizeof(commap_msghdr_t);
 	memcpy(dest,r,len*sizeof(commap_info_t));
@@ -320,19 +321,13 @@ void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
 	cmsg->cmsg_level = SOL_SOCKET;
     cmsg->cmsg_type = SCM_RIGHTS;
     cmsg->cmsg_len = CMSG_BUFFER_SIZE(len);
-    fd_dest = (int *)CMSG_DATA(cmsg);
+    fd_dest = CMSG_DATA(cmsg);
     for(int i = 0; i < len; ++i) {
     	fd_dest[i]=r[i].fd;
     }
     return;
 }
 
-static 
-void make_token_request(commap_info_t * r, size_t len, struct msghdr *msg)
-{
-	msg = msghdr_alloc(len); 
-	make_message(r,len,msg);
-}
 
 static
 token_t request_token(commap_info_t info)
@@ -340,7 +335,7 @@ token_t request_token(commap_info_t info)
 	token_t token;
 	commap_info_t reply_info, request_info[2];
 	commap_reply_t * reply;
-	struct msghdr * msg;
+	struct msghdr * msg = msghdr_alloc(2);
 	struct pollfd pfd;
 	
 	int * reply_fds = calloc(2,sizeof(int)); 
@@ -353,7 +348,8 @@ token_t request_token(commap_info_t info)
 	
 	request_info[0]=reply_info;
 	request_info[1]=info;
-	make_token_request(request_info,2,msg);
+	make_message(request_info,2,msg);
+
 
 	while (sendmsg(send_fd,msg,0) == -1) {
 		if (errno == EINTR)

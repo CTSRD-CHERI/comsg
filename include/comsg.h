@@ -39,8 +39,9 @@ int cosend(coport_t p, const void * buf, size_t len);
 int corecv(coport_t p, void ** buf, size_t len);
 int coclose(coport_t port);
 
-int copoll(pollcoport_t * coports, uint ncoports, int timeout);
+int copoll(pollcoport_t * coports, int ncoports, int timeout);
 pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events);
+coport_type_t coport_gettype(coport_t port);
 
 
 #endif

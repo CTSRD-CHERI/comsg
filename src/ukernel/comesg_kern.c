@@ -513,7 +513,7 @@ void *cocarrier_send(void *args)
 {
     //todo implement
     int error;
-    int index;
+    size_t index;
     coport_status_t status;
 
     worker_args_t * data = args;
