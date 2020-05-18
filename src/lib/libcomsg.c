@@ -103,7 +103,7 @@ int cosend(coport_t port, const void * buf, size_t len)
     assert(cheri_getsealed(port)!=0);
     if(cheri_gettype(port)==libcomsg_otype)
     {
-        port=cheri_unseal(port,libcomsg_coport_seal);
+        port=cheri_unseal(port,libcomsg_sealroot);
         type=port->type;
     }
     else
@@ -194,7 +194,7 @@ int corecv(coport_t port, void ** buf, size_t len)
     }
     else
     {
-        port=cheri_unseal(port,libcomsg_coport_seal);
+        port=cheri_unseal(port,libcomsg_sealroot);
         type=port->type;
         for(;;)
         {
@@ -291,7 +291,7 @@ coport_type_t coport_gettype(coport_t port)
     }
     else
     {
-        port=cheri_unseal(port,libcomsg_coport_seal);
+        port=cheri_unseal(port,libcomsg_sealroot);
         return (port->type);
     }
 }
@@ -375,4 +375,5 @@ void libcomsg_init(void)
     //XXX-PBB: Is 1 an okay value?
     libcomsg_coport_seal=cheri_maketype(libcomsg_sealroot,LIBCOMSG_OTYPE);
     libcomsg_otype=cheri_gettype(cheri_seal(libcomsg_coport_seal,libcomsg_coport_seal));
+    libcomsg_sealroot=cheri_setoffset(libcomsg_sealroot,LIBCOMSG_OTYPE);
 }
