@@ -92,9 +92,9 @@ typedef struct __no_subobject_bounds _coport_listener
 struct _coport
 {
     void * __capability buffer;
-    int length;
-    int start;
-    int end;
+    size_t length;
+    size_t start;
+    size_t end;
     _Atomic coport_status_t status;
     coport_type_t type;
     union //used to allow other coport_type dependent stuff later if we want it.
