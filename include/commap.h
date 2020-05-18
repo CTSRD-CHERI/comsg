@@ -27,6 +27,7 @@
 #define COMMAP_H
 
 #include <cheri/cheric.h>
+#include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 

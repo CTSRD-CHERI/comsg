@@ -27,6 +27,7 @@
 #define UKERN_COMMAP_H
 
 #include <stdatomic.h>
+#include <sys/queue.h>
 #include <sys/socket.h>
 #include "commap.h"
 #include "sys_comsg.h"
