@@ -326,7 +326,7 @@ void *co_mmap(void *args)
             commap_args->error=EINVAL;
             continue;
         }
-        prot=get_prot(commap_args->cap);
+        prot=GET_PROT(commap_args->cap);
         prot&=commap_args->prot;
         if((commap_args->prot-prot)!=0)
         {
@@ -335,7 +335,7 @@ void *co_mmap(void *args)
             commap_args->error=EACCES;
             continue;
         }
-        commap_args->cap=set_prot(commap_args->cap,prot);
+        commap_args->cap=SET_PROT(commap_args->cap,prot);
         commap_args->status=0;
         commap_args->errno=0;
         //flags not included
