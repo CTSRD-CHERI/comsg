@@ -350,7 +350,7 @@ void mmap_tbl_init(void)
     
     LIST_INIT(&mmap_tbl.mappings);
     mmap_tbl.count=0;
-    error+=sysarch(CHERI_GET_SEALCAP,&root_cap);
+    sysarch(CHERI_GET_SEALCAP,&root_cap);
     token_seal_cap=cheri_maketype(root_cap,TOKEN_OTYPE);
     token_otype=cheri_gettype(cheri_seal(token_seal_cap,token_seal_cap));
     token_unseal_cap=cheri_setoffset(root_cap,TOKEN_OTYPE);
@@ -370,6 +370,8 @@ void *ukern_mmap(void *args)
     pthread_t commap_handler;
 
     pthread_attr_t thread_attrs;
+
+
 
     request_handler_args_t * handler_args;
 

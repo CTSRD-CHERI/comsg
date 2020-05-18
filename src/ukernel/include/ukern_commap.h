@@ -57,6 +57,6 @@ struct ukern_mapping_table {
 };
 
 
-void ukern_mmap(void *args);
+void *ukern_mmap(void *args);
 
 #endif
