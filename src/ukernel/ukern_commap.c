@@ -346,7 +346,7 @@ void *co_mmap(void *args)
 static
 void mmap_tbl_init(void)
 {
-    void __capability root_cap;
+    void * __capability root_cap;
     
     LIST_INIT(&mmap_tbl.mappings);
     mmap_tbl.count=0;
