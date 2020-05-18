@@ -28,6 +28,9 @@
 #include "sys_comsg.h"
 #include "coproc.h"
 
+#include <errno.h>
+#include <err.h>
+#include <poll.h>
 #include <cheri/cherireg.h>
 #include <pthread.h>
 #include <sys/mman.h>
@@ -275,7 +278,7 @@ void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
 	//make message body
 	h.fd_count = len;
 	dest = hdr->msg_iov;
-	memcpy(dest,h,sizeof(commap_msghdr_t));
+	memcpy(dest,&h,sizeof(commap_msghdr_t));
 	dest+=sizeof(commap_msghdr_t);
 	memcpy(dest,r,len*sizeof(commap_info_t));
 
@@ -286,7 +289,7 @@ void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
     cmsg->cmsg_len = CMSG_BUFFER_SIZE(len);
     fd_dest = (int *)CMSG_DATA(cmsg);
     for(int i = 0; i < len; ++i) {
-    	fd_dest[i]=commap_info_t[i].fd;
+    	fd_dest[i]=r[i].fd;
     }
     return;
 }
@@ -294,7 +297,7 @@ void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
 static 
 void make_token_request(commap_info_t * r, size_t len, struct msghdr *msg)
 {
-	msg = msghdr_init(len); 
+	msg = msghdr_alloc(len); 
 	make_message(r,len,msg);
 }
 
