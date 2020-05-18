@@ -26,8 +26,9 @@
 #ifndef COMMAP_H
 #define COMMAP_H
 
-#define get_prot(c) perms_to_prot(cheri_getperm(c))
-#define set_prot(c,p) cheri_andperm(c,prot_to_perms(p))
+#define MAX_ADDR_SIZE 104
+
+#define FILE_POS struct { int fd; off_t offset; }
 
 typedef void * __capability token_t;
 typedef enum {REPLY_ADDR,MMAP_FILE} fd_type;
@@ -37,22 +38,48 @@ typedef struct _commap_message_header {
     size_t fd_count;
 } commap_msghdr_t;
 
+
 typedef struct _commap_info {
-    int sender_fd; //used by the sender to reassociate tokens with its own fds
+    FILE_POS; //used by the sender to reassociate tokens with its own fds
     fd_type type;
     size_t size;
     int prot;
-    int offset;
     int flags;
 } commap_info_t;
 
+#define COMMAP_MSG_LEN(f) ( sizeof(commap_msghdr_t) + ( f * sizeof(commap_info_t) ) )
+#define CMSG_BUFFER_SIZE(f) ( CMSG_SPACE(sizeof(int) * f) )
+
 typedef struct _commap_reply {
     int sender_fd;
+    off_t offset;
     token_t token;
 } commap_reply_t;
 
 
+typedef struct _local_mapping {
+	LIST_ENTRY(_local_mapping) entries;
+	FILE_POS;
+	void * __capability cap;
+	token_t token;
+	int prot;
+
+} lmap_t;
+
+typedef struct _local_mapping_table {
+	LIST_HEAD(,_local_mapping) maps;
+} lmap_tbl_t;
+
+//Handy for working with mmap(2) prot values vs CHERI permissions
 int perms_to_prot(int prot);
 int prot_to_perms(int perms);
+
+#define GET_PROT(c) perms_to_prot(cheri_getperm(c))
+#define SET_PROT(c,p) cheri_andperm(c,prot_to_perms(p))
+#define HAS_PROT(a,b) ( a <= ( a & b ) )
+#define HAS_PROT_PERMS(c,p) ( p <= ( GET_PROT(c) & p ) )
+
+struct msghdr * msghdr_alloc(size_t fds);
+void msghdr_free(struct msghdr * hdr);
 
 #endif // COMMAP_H

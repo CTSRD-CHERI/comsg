@@ -86,13 +86,6 @@ typedef struct _cocarrier_send_args_t
 	int error;
 } __attribute__((__aligned__(16))) cocall_cocarrier_send_t;
 
-
-struct commap_info {
-	void * __capability cap;
-	token_t token;
-	int prot;
-};
-
 typedef struct _commap_args 
 {
 	int status;

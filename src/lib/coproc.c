@@ -32,19 +32,19 @@ int ukern_lookup(void * __capability * __capability code,
 	error=cosetup(COSETUP_COCALL,&sw_code,&sw_data);
 	if(error!=0)
 	{
-		err(1,"cosetup failed\n");
+		err(ESRCH,"cosetup failed\n");
 	}
 	*code=sw_code;
 	*data=sw_data;
 	if(strlen(target_name)>COPORT_NAME_LEN)
 	{
-		err(1,"target name too long\n");
+		err(ESRCH,"target name too long\n");
 	}
 
 	error=colookup(target_name,&lookup_cap);
 	if(error!=0)
 	{
-		err(1,"colookup of %s failed\n",target_name);
+		err(ESRCH,"colookup of %s failed\n",target_name);
 	}
 	lookup_data=malloc(sizeof(cocall_lookup_t));
 	memset(lookup_data,0,sizeof(cocall_lookup_t));
@@ -53,7 +53,7 @@ int ukern_lookup(void * __capability * __capability code,
 	error=cocall(sw_code,sw_data,lookup_cap,lookup_data,sizeof(cocall_lookup_t));
 	if(error!=0)
 	{
-		err(1,"cocall failed\n");
+		err(ESRCH,"cocall failed\n");
 	}
 	//error=colookup(lookup_data->target,target_cap);
 	*target_cap=lookup_data->cap;

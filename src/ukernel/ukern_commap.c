@@ -52,7 +52,7 @@ static int rsock_fd;
 static const char * path_prefix = "/tmp/ukern.";
 static char bind_path[MAX_ADDR_SIZE] = "/tmp/ukern.";
 static struct sockaddr_un *rsock_addr;
-
+static int page_size;
 
 static struct mapping_table mmap_tbl;
 
@@ -152,6 +152,7 @@ int map_fds(commap_info_t * params, int * fds, struct mapping **fd_mappings, int
         new_m->fd=fds[i];
         new_m->token=generate_token(new_m);
         new_m->refs=0;
+        new_m->offset=params[i].offset;
         new_m->map_cap=mmap(0,params[i].size,params[i].prot,params[i].flags,fds[i],params[i].offset);
         if (new_m->map_cap == MAP_FAILED){
             perror("Error: mapping fd failed");
@@ -201,7 +202,7 @@ int process_cmsgs(struct msghdr *m, int * fda, int expected_fds)
 }
 
 static
-void do_reply(int fd, struct mapping **mapped,commap_info_t *params,int len)
+void do_reply(int fd, struct mapping **mapped, commap_info_t *params, int len)
 {
     int reply_idx = 0;
     commap_reply_t * reply = calloc(len,sizeof(commap_reply_t));
@@ -209,7 +210,8 @@ void do_reply(int fd, struct mapping **mapped,commap_info_t *params,int len)
     {
         if(params[i].type==REPLY_ADDR)
             continue;
-        reply[reply_idx].sender_fd=params[i].sender_fd;
+        reply[reply_idx].sender_fd=params[i].fd;
+        reply[reply_idx].sender_fd=params[i].offset;
         reply[reply_idx].token=mapped[reply_idx];
         reply_idx++;
     }
@@ -243,42 +245,8 @@ void process_msg(struct msghdr *msg)
     return;
 }
 
-static
-struct msghdr * header_alloc()
-{
-    struct msghdr *hdr;
-    struct iovec *iov;
 
-    hdr=malloc(sizeof(struct msghdr));
-    memset(hdr,0,sizeof(struct msghdr));
-    
-    iov=calloc(1,sizeof(struct iovec));
-    iov[0].iov_base=malloc(MAX_MSG_SIZE);
-    iov[0].iov_len=MAX_MSG_SIZE;
-    memset(iov[0].iov_base,0,MAX_MSG_SIZE);
 
-    hdr->msg_control = malloc(CMSG_BUFFER_SIZE);
-    hdr->msg_controllen = CMSG_BUFFER_SIZE;
-    memset(hdr->msg_control, 0, CMSG_BUFFER_SIZE);
-    
-    hdr->msg_iov=iov;
-    hdr->msg_iovlen=1;
-
-    return hdr;
-}
-
-static
-void header_free(struct msghdr * hdr)
-{
-    for (int i = 0; i < hdr->msg_iovlen; ++i)
-    {
-        free(hdr->msg_iov[i].iov_base);
-    }
-    free(hdr->msg_iov);
-    free(hdr->msg_control);
-    free(hdr);
-    return;
-}
 
 static
 void *getfds(void *args)
@@ -289,7 +257,7 @@ void *getfds(void *args)
     
     for(;;)
     {
-        msg=header_alloc();
+        msg=msghdr_alloc(MAX_FDS);
         s=accept(rsock_fd,NULL,NULL);
         if(s==-1)
             perror("Error: accept(2) failed on rsock_fd");
@@ -308,7 +276,7 @@ void *getfds(void *args)
             process_msg(msg);
         }
         close(s);
-        header_free(msg);
+        msghdr_free(msg);
     }
     return args;
 }
@@ -318,7 +286,7 @@ void *getfds(void *args)
 
 
 static
-void *commap(void *args)
+void *co_mmap(void *args)
 {
     void * __capability code;
     void * __capability data;
@@ -363,6 +331,8 @@ void *commap(void *args)
             continue;
         }
         commap_args->cap=set_prot(commap_args->cap,prot);
+        commap_args->status=0;
+        commap_args->errno=0;
         //flags not included
     }
     return args;
@@ -391,7 +361,7 @@ void ukern_mmap(void *args)
 
     mmap_tbl_init();
     sock_init();
-
+    page_size=getpagesize();
     //spawn_workers(&advertise_sockaddr,sock_advertiser_threads,U_SOCKADDR);
     spawn_workers(&commap,commap_threads,U_COMMAP);
 

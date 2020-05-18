@@ -338,13 +338,22 @@ int copoll(pollcoport_t * coports, uint ncoports, int timeout)
 
     //possible deferred call to malloc ends up in cocall, causing exceptions?
     error=ukern_lookup(&switcher_code,&switcher_data,U_COPOLL,&func);
+    if(error)
+    {
+        free(call_coports);
+        free(call);
+        return -1;
+    }
     error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
 
     errno=call->error;
     status=call->status;
-    for (int i = 0; i<ncoports; ++i)
+    if(status!=0)
     {
-        coports[i].revents=call->coports[i].revents;
+        for (int i = 0; i<ncoports; ++i)
+        {
+            coports[i].revents=call->coports[i].revents;
+        }
     }
     free(call_coports);
     free(call);

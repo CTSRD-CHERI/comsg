@@ -27,25 +27,24 @@
 #define UKERN_COMMAP_H
 
 #include <stdatomic.h>
-
+#include <sys/socket.h>
 #include "commap.h"
+#include "sys_comsg.h"
 
 #define RANDOM_LEN 3
-#define U_SOCKADDR "getukernsockaddr"
-#define U_COMMAP "commap"
+
 #define RECV_FLAGS 0
 #define MAX_FDS 255
 #define MAX_MAP_INFO_SIZE ( MAX_FDS * sizeof(commap_info_t)  )
 #define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(commap_msghdr_t) )
-#define CMSG_BUFFER_SIZE ( CMSG_SPACE(sizeof(int) * MAX_FDS) )
+#define MAX_CMSG_BUFFER_SIZE CMSG_BUFFER_SIZE(MAX_FDS)
 #define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD )
 #define MMAP_FLAGS(f) ( ( f & ~(MAP_ANON | MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
-#define MAX_ADDR_SIZE 104
 
 struct mapping {
     LIST_ENTRY(mapping) entries;
     token_t token;
-    int fd;
+    FILE_POS;
     void * __capability map_cap;
     _Atomic int refs;
 };
