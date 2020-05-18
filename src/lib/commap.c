@@ -413,7 +413,7 @@ void * __capability commap(void * __capability base, size_t size, int prot, int 
 	if(mapped_cap)
 		return mapped_cap;
 	
-	token = token_from_table(fd,prot);
+	token = token_from_table(fd,offset,prot);
 	if(!token)
 	{
 		//request a token for mapping the region from the microkernel
@@ -421,7 +421,7 @@ void * __capability commap(void * __capability base, size_t size, int prot, int 
 		token=request_token(request_info);
 	}
 	//call into microkernel and attempt use our token to retrieve the mapping
-	mapped_cap=map_token(token);
+	mapped_cap=map_token(token,prot);
 
 	return (mapped_cap);
 }
@@ -430,5 +430,5 @@ void * __capability commap(void * __capability base, size_t size, int prot, int 
 __attribute__ ((constructor)) static 
 void commap_setup(void)
 {
-	LIST_INIT(map_tbl.maps);
+	LIST_INIT(&map_tbl.maps);
 }
