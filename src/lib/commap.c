@@ -49,7 +49,7 @@ static struct sockaddr_un *ukernel_sock_addr = NULL;
 inline
 int perms_to_prot(int perms)
 {
-	int prot;
+	int prot = 0;
 
 	if (perms & (CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP))
 		prot |=  PROT_READ;
@@ -65,7 +65,7 @@ int perms_to_prot(int perms)
 inline
 int prot_to_perms(int prot)
 {
-	int perms;
+	int perms = 0;
 
 	if (prot & PROT_READ)
 		perms |= CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP;
@@ -264,11 +264,7 @@ int get_ukernelfd(void)
 
 }
 
-
-
-
-
-
+extern
 struct msghdr * msghdr_alloc(size_t fds)
 {
 	struct msghdr *hdr;
@@ -291,6 +287,7 @@ struct msghdr * msghdr_alloc(size_t fds)
 	return hdr;
 }
 
+extern
 void msghdr_free(struct msghdr * hdr)
 {
     for (int i = 0; i < hdr->msg_iovlen; ++i)

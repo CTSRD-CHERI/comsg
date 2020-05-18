@@ -117,7 +117,7 @@ void *manage_requests(void *args);
 int coaccept_init(
 	void * __capability * __capability  code_cap,
 	void * __capability * __capability  data_cap, 
-	char * target_name,
+	const char * target_name,
 	void * __capability * __capability target_cap);
 int coport_tbl_setup(void);
 int comutex_tbl_setup(void);

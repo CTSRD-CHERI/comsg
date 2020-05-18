@@ -44,7 +44,7 @@
 #define TOKEN_OTYPE 3
 
 struct ukern_mapping {
-    LIST_ENTRY(_mapping) entries;
+    LIST_ENTRY(ukern_mapping) entries;
     token_t token;
     FILE_POS;
     void * __capability map_cap;

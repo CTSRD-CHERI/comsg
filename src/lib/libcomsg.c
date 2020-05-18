@@ -88,7 +88,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
     return 0;
 }
 
-int cosend(coport_t port, const void * buf, size_t len)
+int cosend(coport_t port, const void * buf, size_t length)
 {
     void * __capability switcher_code;
     void * __capability switcher_data;
@@ -98,6 +98,7 @@ int cosend(coport_t port, const void * buf, size_t len)
     unsigned int old_end;
     coport_status_t status_val;
     coport_type_t type;
+    int len = (int) length;
 
     assert(cheri_getsealed(port)!=0);
     if(cheri_gettype(port)==libcomsg_otype)

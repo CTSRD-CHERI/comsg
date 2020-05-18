@@ -24,6 +24,13 @@
  * SUCH DAMAGE.
  */
 //TODO-PBB:REFACTOR THIS MESS
+#include "ukern_commap.h"
+#include "commap.h"
+
+#include "comesg_kern.h"
+#include "ukern_params.h"
+#include "coproc.h"
+
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 
@@ -44,16 +51,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "commap.h"
-#include "ukern_commap.h"
-#include "comesg_kern.h"
-#include "ukern_params.h"
-#include "coproc.h"
+
 
 static int rsock_fd;
 static const char * path_prefix = "/tmp/ukern.";
 static char bind_path[MAX_ADDR_SIZE] = "/tmp/ukern.";
-static struct sockaddr_un *rsock_addr;
+static struct sockaddr_un rsock_addr;
 static int page_size;
 
 static void * __capability token_unseal_cap;
@@ -73,7 +76,7 @@ void remove_sockf(void)
 static
 int generate_path(void)
 {
-    char * rand;
+    char * rand = malloc(sizeof(char) * RANDOM_LEN);
     rand_string(rand,RANDOM_LEN);
     strcpy(bind_path,path_prefix);
     strcat(bind_path,rand);
@@ -87,15 +90,14 @@ void sock_init(void)
     int error;
     
     rsock_fd=socket(PF_UNIX,SOCK_STREAM,0);
-    rsock_addr=malloc(sizeof(struct sockaddr_un));
-    memset(rsock_addr,0,sizeof(struct sockaddr_un));
-    rsock_addr->sun_family=AF_UNIX;
+
+    rsock_addr.sun_family=AF_UNIX;
 
     for(;;)
     {
         generate_path();        
-        strncpy(rsock_addr->sun_path,bind_path,sizeof(rsock_addr->sun_path)-1);       
-        error=bind(rsock_fd,rsock_addr,SUN_LEN(rsock_addr));
+        strncpy(rsock_addr.sun_path,bind_path,sizeof(rsock_addr.sun_path)-1);       
+        error=bind(rsock_fd,(struct sockaddr *)&rsock_addr,SUN_LEN(&rsock_addr));
         if(error==0)
         {
             atexit(remove_sockf);
@@ -117,7 +119,6 @@ void *advertise_sockaddr(void *args)
 
     char path[MAX_ADDR_SIZE];
 
-    int error;
     coaccept_init(&code,&data,U_SOCKADDR,&target);
     for (;;)
     {
@@ -142,9 +143,8 @@ token_t generate_token(struct ukern_mapping * m)
 static
 int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mappings, int * reply_fd, int len)
 {
-    struct ukern_mapping *new_m, **mapped_fds;
+    struct ukern_mapping *new_m;
     int mapped=0;
-    *fd_mappings=calloc(len,sizeof(struct ukern_mapping*));
     for(int i = 0; i<len; ++i)
     {
         if (fds[i]<0)
@@ -176,10 +176,11 @@ int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mapping
 }
 
 static 
-int process_cmsgs(struct msghdr *m, int * fda, int expected_fds)
+size_t process_cmsgs(struct msghdr *m, int * fda, size_t expected_fds)
 {
     struct cmsghdr* c_msg;
-    int fd_bytes,fd_count;
+    int fd_bytes;
+    size_t fd_count;
 
     if (expected_fds>MAX_FDS)
     {
@@ -187,9 +188,7 @@ int process_cmsgs(struct msghdr *m, int * fda, int expected_fds)
         return -1;
     }
 
-    fda=calloc(MAX_FDS,sizeof(int));
     fd_count=0;
-
     for(c_msg = CMSG_FIRSTHDR(m); c_msg; c_msg = CMSG_NXTHDR(m, c_msg))
     {
         if(!(c_msg->cmsg_level == SOL_SOCKET) || !(c_msg->cmsg_type == SCM_RIGHTS)) 
@@ -203,7 +202,7 @@ int process_cmsgs(struct msghdr *m, int * fda, int expected_fds)
     }
     if(fd_count!=expected_fds)
     {
-        warn("Warning: fds in ancillary data (%d) did not match expected (%d)",fd_count,expected_fds);
+        warn("Warning: fds in ancillary data (%lu) did not match expected (%lu)",fd_count,expected_fds);
     }
     return fd_count;
 }
@@ -229,10 +228,11 @@ void do_reply(int fd, struct ukern_mapping **mapped, commap_info_t *params, int 
 static
 void process_msg(struct msghdr *msg)
 {
-    void * raw_data;
+    unsigned char * raw_data;
     commap_msghdr_t header;
     commap_info_t *map_params;
-    int *fds, reply, fd_count;
+    int *fds, reply;
+    size_t fd_count;
     struct ukern_mapping **mapped_fds;
 
     raw_data=msg->msg_iov[0].iov_base;
@@ -242,8 +242,10 @@ void process_msg(struct msghdr *msg)
     map_params=calloc(header.fd_count,sizeof(commap_info_t));
     memcpy(map_params,raw_data,sizeof(commap_info_t)*header.fd_count);
 
+    fds=calloc(MAX_FDS,sizeof(int));
     fd_count=process_cmsgs(msg,fds,header.fd_count);
     fd_count=MIN(fd_count,header.fd_count);
+    mapped_fds=calloc(fd_count,sizeof(struct ukern_mapping*));
     map_fds(map_params,fds,mapped_fds,&reply,fd_count);
 
     do_reply(reply,mapped_fds,map_params,fd_count);
@@ -255,8 +257,7 @@ void process_msg(struct msghdr *msg)
 static
 void *getfds(void *args)
 {
-    int s, fd;
-    int rlen;
+    int s;
     struct msghdr *msg;
     
     for(;;)
@@ -298,7 +299,7 @@ void *co_mmap(void *args)
     commap_args_t * commap_args;
     //char path[MAX_ADDR_SIZE];
 
-    int error, prot;
+    int prot;
     worker_args_t * arg_data = args;
 
     commap_args=calloc(1,sizeof(commap_args_t));
@@ -367,13 +368,12 @@ void *ukern_mmap(void *args)
 
     //pthread_t sock_advertiser_threads[WORKER_COUNT];
     pthread_t sock_advertiser;
+    pthread_t fd_getter[WORKER_COUNT];
 
     pthread_t commap_threads[WORKER_COUNT];
     pthread_t commap_handler;
 
     pthread_attr_t thread_attrs;
-
-
 
     request_handler_args_t * handler_args;
 
@@ -381,10 +381,8 @@ void *ukern_mmap(void *args)
     sock_init();
     page_size=getpagesize();
     //spawn_workers(&advertise_sockaddr,sock_advertiser_threads,U_SOCKADDR);
-    spawn_workers(&commap,commap_threads,U_COMMAP);
+    spawn_workers(&co_mmap,commap_threads,U_COMMAP);
 
-    pthread_attr_init(&thread_attrs);
-    pthread_create(&sock_advertiser,&thread_attrs,advertise_sockaddr,NULL);
 
     handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COMMAP);
@@ -392,6 +390,14 @@ void *ukern_mmap(void *args)
     pthread_create(&commap_handler,&thread_attrs,manage_requests,handler_args);
 
     pthread_join(commap_threads[0],NULL);
+
+    pthread_attr_init(&thread_attrs);
+    pthread_create(&sock_advertiser,&thread_attrs,advertise_sockaddr,NULL);
+
+    for(int i = 0; i<WORKER_COUNT;i++)
+    {
+        pthread_create(&fd_getter[i],&thread_attrs,getfds,NULL);
+    }
 
     return args;
 }

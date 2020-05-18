@@ -35,7 +35,7 @@ run : ukernel cochatter
 ifdef dev
 	git commit -a --message="$(BUILD_TIME)"
 endif
-	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) \
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update -v $(FORCE) \
 	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	cheribsd-purecap disk-image-purecap run-purecap \
@@ -113,8 +113,8 @@ endif
 libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c \
 	include/coproc.h include/coport.h  include/comutex.h\
 	src/ukernel/include/sys_comsg.h include/comsg.h \
-	include/commap.h src/lib/commap.c commap.o coproc.o \
-	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o $(BUILDDIR)/commap.o
+	include/commap.h src/lib/commap.c
+	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so src/lib/libcomsg.c src/lib/commap.c src/lib/coproc.c
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
 	rm -f $(CHERIBSD_DIR)/lib/libcomsg/*.o

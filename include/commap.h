@@ -78,8 +78,8 @@ struct _local_mapping_table {
 typedef struct _local_mapping_table lmap_tbl_t;
 
 //Handy for working with mmap(2) prot values vs CHERI permissions
-int perms_to_prot(int prot);
-int prot_to_perms(int perms);
+extern int perms_to_prot(int prot);
+extern int prot_to_perms(int perms);
 
 #define GET_PROT(c) perms_to_prot(cheri_getperm(c))
 #define SET_PROT(c,p) cheri_andperm(c,prot_to_perms(p))

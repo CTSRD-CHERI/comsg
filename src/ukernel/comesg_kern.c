@@ -886,7 +886,7 @@ void *manage_requests(void *args)
 int coaccept_init(
     void * __capability * __capability  code_cap,
     void * __capability * __capability  data_cap, 
-    char * target_name,
+    const char * target_name,
     void * __capability * __capability target_cap)
 {
     int error;
@@ -1009,7 +1009,7 @@ void run_tests(void)
 int main(int argc, const char *argv[])
 {
     int verbose;
-    int error;
+    int error = 0;
     request_handler_args_t * handler_args;
 
     pthread_t memory_manager, commap_manager;

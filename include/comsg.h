@@ -29,6 +29,7 @@
 #include "sys_comsg.h"
 #include "coport.h"
 #include "coproc.h"
+#include "commap.h"
 #include <cheri/cherireg.h>
 #include <sys/types.h>
 
@@ -38,10 +39,8 @@ int cosend(coport_t p, const void * buf, size_t len);
 int corecv(coport_t p, void ** buf, size_t len);
 int coclose(coport_t port);
 
-int copoll(coport_t port);
+int copoll(pollcoport_t * coports, uint ncoports, int timeout);
 pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events);
 
-int commap_setup(void);
-int commap(void *,size_t,int,int,int,off_t);
 
 #endif
