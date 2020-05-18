@@ -88,9 +88,10 @@ int rand_string(char * buf, long int len)
     char c;
     char * s;
     int rand_no;
+    long int i;
     s = (char *) malloc(sizeof(char)*len);
     srandomdev();
-    for (unsigned int i = 0; i < len-1; i++)
+    for (i = 0; i < len-1; i++)
     {
         rand_no=random() % KEYSPACE;
         c=(char)rand_no+0x21;
