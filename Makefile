@@ -113,14 +113,15 @@ endif
 libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c \
 	include/coproc.h include/coport.h  include/comutex.h\
 	src/ukernel/include/sys_comsg.h include/comsg.h \
-	include/commap.h src/lib/commap.c
+	include/commap.h src/lib/commap.c commap.o coproc.o \
 	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so  src/lib/libcomsg.c $(BUILDDIR)/coproc.o $(BUILDDIR)/commap.o
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
-	rm -f $(CHERIBSD_DIR)/lib/libcomsg/coproc.o
+	rm -f $(CHERIBSD_DIR)/lib/libcomsg/*.o
 endif
 
-commap.o: src/lib/commap.c include/commap.h
+commap.o: src/lib/commap.c include/commap.h \
+	src/ukernel/include/sys_comsg.h include/coproc.h src/lib/coproc.c
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/commap.c -o $(BUILDDIR)/commap.o
 ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/comesg_ukernel
