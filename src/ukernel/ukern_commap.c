@@ -145,6 +145,8 @@ int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mapping
 {
     struct ukern_mapping *new_m;
     int mapped=0;
+    int fd,flags;
+    void * __capability map_cap;
     for(int i = 0; i<len; ++i)
     {
         if (fds[i]<0)
@@ -155,19 +157,27 @@ int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mapping
             continue;
         }
 
-        new_m=malloc(sizeof(struct ukern_mapping));
-        new_m->fd=fds[i];
-        new_m->token=generate_token(new_m);
-        new_m->refs=0;
-        new_m->offset=params[i].offset;
-        new_m->map_cap=mmap(0,params[i].size,params[i].prot,params[i].flags,fds[i],params[i].offset);
-        if (new_m->map_cap == MAP_FAILED){
+        if (params[i].sender_fd==-1)
+        {
+            flags = ( MAP_ANONYMOUS | params[i].flags );
+            fd=-1;
+        }
+        else{
+            fd=fds[i];
+            flags=params[i].flags;
+        }
+        new_m->map_cap=mmap(0,params[i].size,params[i].prot,flags,fd,params[i].offset);
+        if (new_m->map_cap == MAP_FAILED)
+        {
             perror("Error: mapping fd failed");
-            free(new_m);
             continue;
         }
+        new_m=calloc(1,sizeof(struct ukern_mapping));
         LIST_INSERT_HEAD(&mmap_tbl.mappings,new_m,entries);
-
+        new_m->map_cap=map_cap;
+        new_m->token=generate_token(new_m);
+        new_m->refs=-1;
+        new_m->offset=params[i].offset;
         fd_mappings[mapped]=new_m;
         mapped++;
     }
@@ -295,7 +305,7 @@ void *co_mmap(void *args)
     void * __capability target;
 
 
-    struct ukern_mapping *map;
+    struct ukern_mapping *map =NULL;
     commap_args_t * commap_args;
     //char path[MAX_ADDR_SIZE];
 
@@ -323,7 +333,7 @@ void *co_mmap(void *args)
             commap_args->cap=map->map_cap;
         }
         
-        if(commap_args->cap==NULL)
+        if(commap_args->cap==NULL || map == NULL)
         {
             commap_args->status=-1;
             commap_args->error=EINVAL;
@@ -341,6 +351,57 @@ void *co_mmap(void *args)
         commap_args->cap=SET_PROT(commap_args->cap,prot);
         commap_args->status=0;
         commap_args->error=0;
+        map->refs++;
+        map=NULL;
+        //flags not included
+    }
+    return args;
+}
+
+static
+void *co_unmap(void *args)
+{
+    void * __capability code;
+    void * __capability data;
+    void * __capability cookie = 0;
+    void * __capability target;
+
+
+    struct ukern_mapping *map = NULL;
+    comunmap_args_t * comunmap_args;
+    //char path[MAX_ADDR_SIZE];
+
+    int prot;
+    worker_args_t * arg_data = args;
+
+    comunmap_args=calloc(1,sizeof(comunmap_args_t));
+
+    coaccept_init(&code,&data,arg_data->name,&target);
+    arg_data->cap=target;
+    update_worker_args(arg_data,U_COMMAP);
+    for (;;)
+    {
+        coaccept(code,data,&cookie,comunmap_args,sizeof(comunmap_args_t));
+        comunmap_args->cap=NULL;
+        if (cheri_gettype(comunmap_args->token)==token_otype)
+        {
+            map=cheri_unseal(comunmap_args->token,token_unseal_cap);
+            if (map->token!=comunmap_args->token)
+            {
+                comunmap_args->status=-1;
+                comunmap_args->error=EINVAL;
+                continue;
+            }
+            comunmap_args->cap=map->map_cap;
+        }
+        if(map==NULL)
+        {
+            comunmap_args->status=-1;
+            comunmap_args->error=EINVAL;
+            continue;
+        }
+        map->refs--;
+        map=NULL;
         //flags not included
     }
     return args;
@@ -382,14 +443,17 @@ void *ukern_mmap(void *args)
     page_size=getpagesize();
     //spawn_workers(&advertise_sockaddr,sock_advertiser_threads,U_SOCKADDR);
     spawn_workers(&co_mmap,commap_threads,U_COMMAP);
-
+    spawn_workers(&co_unmap,counmap_threads,U_COMUNMAP);
 
     handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COMMAP);
     pthread_attr_init(&thread_attrs);
     pthread_create(&commap_handler,&thread_attrs,manage_requests,handler_args);
 
-    pthread_join(commap_threads[0],NULL);
+    handler_args=malloc(sizeof(request_handler_args_t));
+    strcpy(handler_args->func_name,U_COMUNMAP);
+    pthread_attr_init(&thread_attrs);
+    pthread_create(&counmap_handler,&thread_attrs,manage_requests,handler_args);
 
     pthread_attr_init(&thread_attrs);
     pthread_create(&sock_advertiser,&thread_attrs,advertise_sockaddr,NULL);
@@ -399,5 +463,6 @@ void *ukern_mmap(void *args)
         pthread_create(&fd_getter[i],&thread_attrs,getfds,NULL);
     }
 
+    pthread_join(commap_threads[0],NULL);
     return args;
 }

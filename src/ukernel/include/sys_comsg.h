@@ -38,16 +38,19 @@
 #define U_COCARRIER_RECV "cocarrier_recv"
 #define U_COPOLL "copoll"
 #define U_COMMAP "commap"
+#define U_COMUNMAP "comunmap"
 
 #define U_SOCKADDR "getukernsockaddr" //Currently doesn't use requests interface
 
-#define U_FUNCTIONS 8 //coclose not yet implemented
+#define U_FUNCTIONS 9 //coclose not yet implemented
 
 #define MAX_COPORTS 10
 #define LOOKUP_STRING_LEN 16
 #define COPORT_BUF_LEN 4096
 #define COPORT_NAME_LEN 255
 #define COMUTEX_NAME_LEN 255
+#define UKERN_OTYPE 2
+#define COCARRIER_OTYPE ( UKERN_OTYPE )
 #define COCARRIER_SIZE ( COPORT_BUF_LEN / CHERICAP_SIZE )
 
 
