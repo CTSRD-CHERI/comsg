@@ -278,18 +278,15 @@ void *copoll_deliver(void *args)
 		for (int i = 0; i < coport_table.index; ++i)
 		{
 			cocarrier=&coport_table.table[i].port;
-			if(cocarrier->type!=COCARRIER)
-			{
-				cocarrier=NULL;
-				continue;
-			}
-			else if (LIST_EMPTY(&cocarrier->listeners))
+
+			if(cocarrier->type!=COCARRIER || (LIST_EMPTY(&cocarrier->listeners)))
 			{
 				cocarrier=NULL;
 				continue;
 			}
 			else
 			{
+                atomic_thread_fence(memory_order_acquire);
 				LIST_FOREACH_SAFE(l,&cocarrier->listeners,entries,l_temp)
 				{
 					if(event_match(cocarrier,l->eventmask))
@@ -298,7 +295,7 @@ void *copoll_deliver(void *args)
 						l->revent=cocarrier->event;
 					}
 				}
-				event=NOEVENT;
+				atomic_thread_fence(memory_order_release);
 			}
 		}
 	}
@@ -464,15 +461,9 @@ void *cocarrier_recv(void *args)
             continue;
         }
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
-        for(;;)
-        {
-            status=COPORT_OPEN;
-            if(atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
-            {
-                break;
-            }
-        }
+        cocarrier_buf=cocarrier->buffer;
         atomic_thread_fence(memory_order_acquire);
+        atomic_store_explicit(cocarrier->status,COPORT_BUSY,memory_order_release);
         index=cocarrier->start;
         if(cocarrier->length==0)
         {
@@ -484,28 +475,23 @@ void *cocarrier_recv(void *args)
                 cocarrier_send_args->error=EAGAIN;
                 continue;
         }
-        cocarrier_buf=cocarrier->buffer;
         len=MIN(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->message));
         memcpy(cocarrier_send_args->message,cocarrier_buf[index],len);
         cocarrier->start++;
         cocarrier->length--;
-        
         if (cocarrier->length==0)
         	cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR) & ~COPOLL_IN;
         else
             cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR);
         
-
+        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_thread_fence(memory_order_release);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
             pthread_cond_signal(&global_cosend_cond);
         }
 
-        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
-        atomic_thread_fence(memory_order_release);
-
-       
-        cocarrier_send_args->status=0;
+        cocarrier_send_args->status=len;
         cocarrier_send_args->error=0;
     }
     return args;
@@ -555,24 +541,17 @@ void *cocarrier_send(void *args)
         //reduce cap permissions on buffer
         msg_buf=cheri_andperm(msg_buf,COCARRIER_PERMS);
         //toggle state to busy
-        for(;;)
-        {
-            status=COPORT_OPEN;
-            if(atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
-            {
-                break;
-            }
-        }
-        //add buffer to cocarrrier
-        atomic_thread_fence(memory_order_acquire);
         cocarrier_buf=cocarrier->buffer;
+        //add buffer to cocarrrier
+        cocarrier_buf=cocarrier->buffer;
+        atomic_thread_fence(memory_order_acquire);
         index=(cocarrier->end+1)%COCARRIER_SIZE;
-        if(cocarrier->length!=0)
+        if(cocarrier->length>0)
         {
             if(index==cocarrier->start)
             {
                 cocarrier->event&=COPOLL_WERR;
-                cocarrier->status=COPORT_OPEN;
+                //cocarrier->status=COPORT_OPEN;
                 atomic_thread_fence(memory_order_release);
                 ukern_fast_free(msg_buf);
 
@@ -590,23 +569,28 @@ void *cocarrier_send(void *args)
         cocarrier_buf[index]=msg_buf;
         cocarrier->end=index;
         cocarrier->length++;
-        //check if anyone is waiting on messages to arrive
-        
         
         if(cocarrier->length==COCARRIER_SIZE)
         	cocarrier->event=(((COPOLL_IN | cocarrier->event) & ~COPOLL_WERR) & ~COPOLL_OUT);
         else
             cocarrier->event=(COPOLL_IN | cocarrier->event) & ~COPOLL_WERR;
-        
+        //check if anyone is waiting on messages to arrive
+        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_thread_fence(memory_order_release);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
             pthread_cond_signal(&global_cosend_cond);
         }
         //release
+<<<<<<< HEAD
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
         atomic_thread_fence(memory_order_release);
 
         cocarrier_send_args->status=0;
+=======
+       
+        cocarrier_send_args->status=cheri_getlen(cocarrier_send_args->message);
+>>>>>>> 98a90f2... Many additions
         cocarrier_send_args->error=0;
         
     }

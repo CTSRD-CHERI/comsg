@@ -97,6 +97,15 @@ typedef struct _commap_args
 	};
 } commap_args_t;
 
+typedef struct _commap_args 
+{
+	int status;
+	int error;
+	struct {
+		token_t token;
+	};
+} comunmap_args_t;
+
 typedef struct _pollcoport_t
 {
 	coport_t coport;

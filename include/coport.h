@@ -35,6 +35,14 @@
 
 #include "sys_comsg.h"
 
+#ifndef COPORT_NAME_LEN
+#define COPORT_NAME_LEN 255
+#endif
+
+#define COPORT_PERM_RECV CHERI_PERM_SW0
+#define COPORT_PERM_SEND CHERI_PERM_SW1
+#define COPORT_PERM_POLL CHERI_PERM_SW2
+#define COPORT_PERM_CLOSE CHERI_PERM_SW3
 
 #define COPORT_MMAP_FLAGS (MAP_ANONYMOUS | MAP_SHARED | MAP_ALIGNED_CHERI)
 #define COPORT_MMAP_PROT (PROT_READ | PROT_WRITE)
@@ -48,7 +56,7 @@
                 sender to copy data into
 */
 typedef enum {COSEND, CORECV} coport_op_t;
-typedef enum {COPIPE=1, COCARRIER=2, COCHANNEL=3} coport_type_t;
+typedef enum {INVALID=0,COPIPE=1, COCARRIER=2, COCHANNEL=3} coport_type_t;
 typedef enum {COPORT_CLOSED=0,COPORT_OPEN=1,COPORT_BUSY=2,COPORT_READY=4,COPORT_DONE=8} coport_status_t;
 typedef enum {NOEVENT=0,COPOLL_CLOSED=1,COPOLL_IN=2,COPOLL_OUT=4,COPOLL_RERR=8,COPOLL_WERR=16} coport_eventmask_t;
 typedef enum {RECV=1,SEND=2,CREAT=4,EXCL=8,ONEWAY=16,} coport_flags_t; //currently unimplemented
@@ -109,5 +117,10 @@ struct _coport
 
 typedef struct _coport sys_coport_t;
 typedef struct _coport *coport_t;
+
+typedef struct _named_coport {
+    char name[COPORT_NAME_LEN];
+    coport_t port;
+} named_coport_t;
 
 #endif

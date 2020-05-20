@@ -34,6 +34,6 @@
 #define MAX_COPOLL 255
 
 #define UKERN_PRIV 1
-#define UKERN_OTYPE 2
+
 
 #endif
