@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <err.h>
+#include <fnctl.h>
 #include <poll.h>
 #include <cheri/cherireg.h>
 #include <pthread.h>
@@ -79,12 +80,24 @@ int prot_to_perms(int prot)
 	return perms;
 }
 
-static
-void * __capability map_from_table(int fd, off_t offset, int prot)
+static 
+void set_cloexec(token_t token)
 {
 	lmap_t *map, *map_temp;
 	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
-		if (map->fd==fd && map->offset==offset && map->cap != NULL) 
+		if (map->token==token) 
+		{
+			map->cloexec=1;
+		}
+	}
+}
+
+static
+void * __capability map_from_token(token_t token, off_t offset, int prot)
+{
+	lmap_t *map, *map_temp;
+	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
+		if (map->token==token && map->offset==offset && map->cap != NULL) 
 		{
 			//check against what we actually have
 			if(HAS_PROT_PERMS(map->cap,prot))
@@ -96,18 +109,30 @@ void * __capability map_from_table(int fd, off_t offset, int prot)
 }
 
 static
-void * __capability token_from_table(int fd, off_t offset, int prot)
+token_t token_from_fd(int fd, off_t offset, int prot)
 {
 	lmap_t *map, *map_temp;
+	int matchness = 0;
+	int temp_matchness = 0;
+	token_t found = NULL;
 	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
-		if (map->fd==fd && map->offset==offset &&  map->cap == NULL && map->token!=NULL) 
+		if (map->offset==offset) 
+			temp_matchness++;
+		if (HAS_PROT(map->prot,prot))
+			temp_matchness++;
+		if (map->fd!=fd)
+			temp_matchness=-1;
+		if (temp_matchness == 2)
+			return map->token;
+		else if (temp_matchness > matchness)
 		{
-			if (HAS_PROT(map->prot,prot))
-				return (map->token);
+			matchness=temp_matchness;
+			found=map->token;
 			//keep looking, we might've mapped it again with higher permissions.
 		}
+		temp_matchness=0;
 	}
-	return NULL;
+	return found;
 }
 
 static
@@ -125,14 +150,23 @@ void add_token_to_table(token_t token, int fd, off_t offset,int prot)
 static
 void add_cap_to_table(token_t token, void * __capability cap)
 {
+	_Bool added = false;
 	lmap_t *map, *map_temp;
 	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
 		if (map->token==token) 
 		{
 			if (HAS_PROT_PERMS(cap,map->prot))
+			{
+				added=true;
 				map->cap=cap;
+			}
 			//keep looking, we might've mapped it more times
 		}
+	}
+	if(!added)
+	{
+		add_token_to_table(token,-1,-1,GET_PROT(cap));
+		add_cap_to_table(token,cap);
 	}
 	return;
 }
@@ -156,20 +190,61 @@ commap_info_t make_reply_info(int fd)
 {
 	commap_info_t i = make_commap_info(0,0,0,0,fd,0);
 	i.type=REPLY_ADDR;
+	i.cloexec=0;
 	return i;
 }
 
-static inline 
+extern inline 
 commap_info_t make_fd_info(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
 {
 	commap_info_t i = make_commap_info(base,size,prot,flags,fd,offset);
 	i.type=MMAP_FILE;
+	i.cloexec=0;
 	return i;
 }
 
+static void 
+clear_table_after_fork(void)
+{
+	lmap_t *map, *map_temp;
+	map=LIST_FIRST(&map_tbl.maps);
+	while (map!=NULL) {
+		map_temp = LIST_NEXT(map,entries);
+		free(map);
+		map=map_temp;
+	}
+	close_replyfd();
+}
 
 static void 
-init_replyfd()
+clear_table_at_exit(void)
+{
+	lmap_t *map, *map_temp;
+	map=LIST_FIRST(&map_tbl.maps);
+	while (map!=NULL) {
+		map_temp = LIST_NEXT(map,entries);
+		_counmap(map->token);
+		free(map);
+		map=map_temp;
+	}
+	close_replyfd();
+
+}
+
+static void
+close_replyfd(void)
+{
+	int * fd;
+	fd=pthread_getspecific(replyfd);
+	close(fd[0]);
+	close(fd[1]);
+	free(fd);
+	pthread_setspecific(replyfd,NULL);
+	return;
+}
+
+static void 
+init_replyfd(void)
 {
 	pthread_key_create(&replyfd,free);
 }
@@ -329,7 +404,7 @@ void make_message(commap_info_t * r, size_t len, struct msghdr * hdr)
 }
 
 
-static
+extern
 token_t request_token(commap_info_t info)
 {
 	token_t token;
@@ -354,7 +429,8 @@ token_t request_token(commap_info_t info)
 	while (sendmsg(send_fd,msg,0) == -1) {
 		if (errno == EINTR)
             continue;
-        else if (errno == EWOULDBLOCK || errno == EAGAIN) {
+        else if (errno == EWOULDBLOCK || errno == EAGAIN) 
+        {
             pfd.events = POLLOUT;
             pfd.revents = 0;
             pfd.fd = send_fd;
@@ -369,7 +445,8 @@ token_t request_token(commap_info_t info)
 	{
 		if (errno == EINTR)
 			continue;
-		else if (errno == EWOULDBLOCK || errno == EAGAIN){
+		else if (errno == EWOULDBLOCK || errno == EAGAIN)
+		{
 			pfd.events = POLLIN;
 			pfd.revents = 0;
 			pfd.fd = reply_fds[0];
@@ -394,25 +471,50 @@ token_t request_token(commap_info_t info)
 }
 
 
+extern
+token_t commap_reserve(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
+{
 
+	commap_info_t request_info;
+	token_t token;
+	int cloexec;
+	
+	cloexec=fnctl(fd,F_GETFD,void) & FD_CLOEXEC;
+	request_info=make_fd_info(base,size,prot,flags,fd,offset,cloexec);
+	token=request_token(request_info);
+	if (cloexec)
+		set_cloexec(token);
+	return token;
+}
+
+
+extern
+void * __capability commap2(token_t token,int prot)
+{
+
+	return (map_token(token,prot));
+}
+
+extern
 void * __capability commap(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset)
 {
 	void * __capability mapped_cap;
 	commap_info_t request_info;
 	token_t token;
+	int cloexec;
 	
-	mapped_cap = map_from_table(fd,offset,prot);
-	//we already mapped this with this prot
+	if (fd)
+		cloexec=fnctl(fd,F_GETFD,void) & FD_CLOEXEC;
+	else
+		cloexec=0;
+	request_info=make_fd_info(base,size,prot,flags,fd,offset,cloexec);
+	token=request_token(request_info);
+	if (cloexec)
+		set_cloexec(token);
+	mapped_cap = map_from_token(token,offset,prot);
+	//we already mapped this with this prot and offset
 	if(mapped_cap)
 		return mapped_cap;
-	
-	token = token_from_table(fd,offset,prot);
-	if(!token)
-	{
-		//request a token for mapping the region from the microkernel
-		request_info=make_fd_info(base,size,prot,flags,fd,offset);
-		token=request_token(request_info);
-	}
 	//call into microkernel and attempt use our token to retrieve the mapping
 	mapped_cap=map_token(token,prot);
 
@@ -420,8 +522,74 @@ void * __capability commap(void * __capability base, size_t size, int prot, int 
 }
 
 
+static
+void _comunmap(token_t token)
+{
+	void * __capability switcher_code;
+    void * __capability switcher_data;
+    void * __capability func;
+
+	comunmap_args_t * call;
+	
+	int error;
+	int status;
+
+	call=calloc(1,sizeof(comunmap_args_t));
+	call->token=token;
+    
+    error=ukern_lookup(&switcher_code,&switcher_data,U_COMUNMAP,&func);
+    error+=cocall(switcher_code,switcher_data,func,call,sizeof(comunmap_args_t));
+    
+    error=call->error;
+    status=call->status;
+    free(call);
+
+    if(status==-1)
+    {
+    	errno=error;
+    	perror("Error: commap failed");
+    	return;
+    }
+    return;
+}
+
+extern
+void comunmap(void * __capability cap, size_t len);
+{
+	if(cheri_getlen(cap)<len)
+	{
+		err(1,"Error: comunmap: mismatch cap length and len");
+	}
+	else if (!cheri_gettag(cap))
+	{
+		err(1,"Error: comunmap: cannot unmap untagged capability");
+	}
+	//TODO-PBB:IMPLEMENT
+	lmap_t *map, *map_temp;
+	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
+		if (map->cap==cap) {
+			_counmap(map->token);
+			LIST_REMOVE(map, entries);
+			free(map);
+		}
+	}
+
+}
+
 __attribute__ ((constructor)) static 
 void commap_setup(void)
 {
 	LIST_INIT(&map_tbl.maps);
+	pthread_atfork(NULL,NULL,clear_table_after_fork);
+	atexit(clear_table_at_exit);
+}
+
+__attribute__ ((destructor)) static 
+void commap_teardown(void)
+{
+	lmap_t *map, *map_temp;
+	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
+		if (map->cloexec) 
+			_counmap(map->token);
+	}
 }

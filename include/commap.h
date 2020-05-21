@@ -50,6 +50,7 @@ typedef struct _commap_info {
     size_t size;
     int prot;
     int flags;
+    int cloexec; //only used sender-side
 } commap_info_t;
 
 #define COMMAP_MSG_LEN(f) ( sizeof(commap_msghdr_t) + ( f * sizeof(commap_info_t) ) )
@@ -70,6 +71,7 @@ typedef struct _local_mapping {
 	void * __capability cap;
 	token_t token;
 	int prot;
+    int cloexec;
 
 } lmap_t;
 
@@ -90,10 +92,13 @@ extern int prot_to_perms(int perms);
 
 extern struct msghdr * msghdr_alloc(size_t fds);
 extern void msghdr_free(struct msghdr * hdr);
+extern commap_info_t make_fd_info(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset);
+extern token_t request_token(commap_info_t info);
 extern void * __capability commap(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset);
+extern void * __capability commap2(token_t token,int prot);
+extern void comunmap(void * __capability,size_t);
 
-#ifdef COMMAP_C
 static void init_replyfd(void);
-#endif
+
 
 #endif // COMMAP_H

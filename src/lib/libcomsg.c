@@ -51,6 +51,7 @@ static void * __capability libcomsg_sealroot;
 //Sealing cap for coport_t
 static otype_t libcomsg_coport_seal;
 static long libcomsg_otype;
+static long cocarrier_otype = -1;
 
 int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 {
@@ -82,10 +83,19 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
         }
         else
         {
+            cocarrier_otype=cheri_gettype(call->port);
             *prt=call->port;
         }
     }
-    return 0;
+    free(call);
+    return 1;
+}
+
+inline
+coport_t coport_clearperm(coport_t p,int perms)
+{
+    perms&=CHERI_PERMS_SWALL; //prevent trashing the rest of the perms word, which is unrelated to coport access control
+    return cheri_andperm(p,perms);
 }
 
 int cosend(coport_t port, const void * buf, size_t len)
@@ -96,11 +106,13 @@ int cosend(coport_t port, const void * buf, size_t len)
     cocall_cocarrier_send_t * call;
 
     unsigned int old_end;
+    int retval = len;
     coport_status_t status_val;
     coport_type_t type;
-    //int len = (int) length;
-
+    
+    assert(cheri_getperm(port)&COPORT_PERM_SEND);
     assert(cheri_getsealed(port)!=0);
+
     if(cheri_gettype(port)==libcomsg_otype)
     {
         port=cheri_unseal(port,libcomsg_sealroot);
@@ -138,7 +150,9 @@ int cosend(coport_t port, const void * buf, size_t len)
             {
                 memcpy((char *)port->buffer+old_end, buf, len);
             }
-            port->status=COPORT_OPEN;            break;
+            atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
+            atomic_thread_fence(memory_order_release);
+            break;
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
             call->cocarrier=port;
@@ -147,10 +161,14 @@ int cosend(coport_t port, const void * buf, size_t len)
             
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);
             cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
-            if(call->status!=0)
+            if(call->status<0)
             {
-                err(call->error,"error occurred during cocarrier send");
+                warn("error occurred during cocarrier send");
+                errno=call->error;
+                return -1;
             }
+            else
+                retval=call->status;
             break;
         case COPIPE:
             for(;;)
@@ -165,15 +183,19 @@ int cosend(coport_t port, const void * buf, size_t len)
             if(cheri_getlen(port->buffer)<len)
             {
                 err(1,"recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
+                errno=EINVAL;
+                return -1;
             }
             memcpy(port->buffer,buf,len);
             atomic_store_explicit(&port->status,COPORT_DONE,memory_order_relaxed);
+            atomic_thread_fence(memory_order_release);
             break;
         default:
-            err(1,"unimplemented coport type");
+            errno=EINVAL;
+            return -1;
     }
-    atomic_thread_fence(memory_order_release);
-    return 0;
+    
+    return retval;
 }
 
 int corecv(coport_t port, void ** buf, size_t len)
@@ -187,6 +209,7 @@ int corecv(coport_t port, void ** buf, size_t len)
     coport_status_t status_val;
     coport_type_t type;
     
+    assert(cheri_getperm(port)&COPORT_PERM_RECV);
     assert(cheri_getsealed(port)!=0);
     if(cheri_gettype(port)!=libcomsg_otype)
     {
@@ -240,10 +263,10 @@ int corecv(coport_t port, void ** buf, size_t len)
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
             call->cocarrier=port;
-            call->message=cheri_csetbounds(*buf,len);
+            call->message=cheri_csetbounds(buf,len);
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
             cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
-            if(call->status!=0)
+            if(call->status<0)
             {
                 err(call->error,"error occurred during cocarrier recv");
             }
@@ -277,23 +300,29 @@ int corecv(coport_t port, void ** buf, size_t len)
             break;
     }
     atomic_thread_fence(memory_order_release);
-    return 0;
+    return len;
     
 }
 
 coport_type_t coport_gettype(coport_t port)
 {
 
-    assert(cheri_getsealed(port)!=0);
+    if(!cheri_getsealed(port))
+        return INVALID;
     if(cheri_gettype(port)!=libcomsg_otype)
     {
-        return (COCARRIER);
+        //XXX-PBB:this is bad. 
+        //if both are true we don't reach this. 
+        //we give sealed stuff a pass if we don't know the cocarrier_otype yet.
+        if(cocarrier_otype==-1 || cheri_gettype(port) == cocarrier_otype)
+            return (COCARRIER);
     }
-    else
+    else 
     {
         port=cheri_unseal(port,libcomsg_sealroot);
         return (port->type);
     }
+    return INVALID;
 }
 
 pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events)
@@ -310,6 +339,9 @@ pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events)
 
 int coclose(coport_t port)
 {
+    //TODO-PBB: IMPLEMENT
+    //if we possess the CLOSE permission, we can unilaterally close the port for all users.
+    //otherwise, this operation decrements the ukernel refcount for the port
     port=NULL;
     return 0;
 }
@@ -324,6 +356,8 @@ int copoll(pollcoport_t * coports, int ncoports, int timeout)
     pollcoport_t * call_coports;
     uint error;
     int status;
+
+    assert(cheri_getperm(port)&COPORT_PERM_POLL);
 
     /* cocall setup */
     //TODO-PBB: Only do this once.

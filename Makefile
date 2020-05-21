@@ -1,4 +1,4 @@
-LIB=pthread
+LIB=pthread statcounters
 INC=include/ src/ukernel/include 
 
 BUILDDIR=build

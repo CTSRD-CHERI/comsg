@@ -35,13 +35,15 @@
 
 
 int coopen(const char * coport_name, coport_type_t type, coport_t * prt);
+coport_t coport_clearperm(coport_t p,int perms);
 int cosend(coport_t p, const void * buf, size_t len);
-int corecv(coport_t p, void ** buf, size_t len);
+int corecv(coport_t p, const void ** buf, size_t len);
 int coclose(coport_t port);
 
 int copoll(pollcoport_t * coports, int ncoports, int timeout);
 pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events);
 coport_type_t coport_gettype(coport_t port);
+
 
 
 #endif
