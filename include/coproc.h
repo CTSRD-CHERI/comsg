@@ -97,7 +97,7 @@ typedef struct _commap_args
 	};
 } commap_args_t;
 
-typedef struct _commap_args 
+typedef struct _comunmap_args 
 {
 	int status;
 	int error;

@@ -97,8 +97,12 @@ extern token_t request_token(commap_info_t info);
 extern void * __capability commap(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset);
 extern void * __capability commap2(token_t token,int prot);
 extern void comunmap(void * __capability,size_t);
+extern token_t commap_reserve(void * __capability base, size_t size, int prot, int flags, int fd, off_t offset);
 
+#ifdef COMMAP_C
 static void init_replyfd(void);
-
+static void _comunmap(token_t token);
+static void close_replyfd(void);
+#endif
 
 #endif // COMMAP_H

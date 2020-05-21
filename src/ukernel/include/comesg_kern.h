@@ -69,6 +69,7 @@ typedef struct _coport_tbl_entry_t
 {
 	unsigned int id;
 	sys_coport_t port;
+	sys_coport_t * port_cap;
 	char name[COPORT_NAME_LEN];
 } coport_tbl_entry_t;
 

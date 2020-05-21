@@ -42,7 +42,7 @@
 
 #define U_SOCKADDR "getukernsockaddr" //Currently doesn't use requests interface
 
-#define U_FUNCTIONS 9 //coclose not yet implemented
+#define U_FUNCTIONS 10 //coclose not yet implemented
 
 #define MAX_COPORTS 10
 #define LOOKUP_STRING_LEN 16

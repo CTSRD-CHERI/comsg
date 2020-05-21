@@ -146,7 +146,7 @@ int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mapping
     struct ukern_mapping *new_m;
     int mapped=0;
     int fd,flags;
-    void * __capability map_cap;
+    //void * __capability map_cap;
     for(int i = 0; i<len; ++i)
     {
         if (fds[i]<0)
@@ -157,7 +157,7 @@ int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mapping
             continue;
         }
 
-        if (params[i].sender_fd==-1)
+        if (params[i].fd==-1)
         {
             flags = ( MAP_ANONYMOUS | params[i].flags );
             fd=-1;
@@ -174,7 +174,6 @@ int map_fds(commap_info_t * params, int * fds, struct ukern_mapping **fd_mapping
         }
         new_m=calloc(1,sizeof(struct ukern_mapping));
         LIST_INSERT_HEAD(&mmap_tbl.mappings,new_m,entries);
-        new_m->map_cap=map_cap;
         new_m->token=generate_token(new_m);
         new_m->refs=-1;
         new_m->offset=params[i].offset;
@@ -369,20 +368,17 @@ void *co_unmap(void *args)
 
     struct ukern_mapping *map = NULL;
     comunmap_args_t * comunmap_args;
-    //char path[MAX_ADDR_SIZE];
 
-    int prot;
     worker_args_t * arg_data = args;
 
     comunmap_args=calloc(1,sizeof(comunmap_args_t));
 
     coaccept_init(&code,&data,arg_data->name,&target);
     arg_data->cap=target;
-    update_worker_args(arg_data,U_COMMAP);
+    update_worker_args(arg_data,U_COMUNMAP);
     for (;;)
     {
         coaccept(code,data,&cookie,comunmap_args,sizeof(comunmap_args_t));
-        comunmap_args->cap=NULL;
         if (cheri_gettype(comunmap_args->token)==token_otype)
         {
             map=cheri_unseal(comunmap_args->token,token_unseal_cap);
@@ -392,7 +388,6 @@ void *co_unmap(void *args)
                 comunmap_args->error=EINVAL;
                 continue;
             }
-            comunmap_args->cap=map->map_cap;
         }
         if(map==NULL)
         {
@@ -433,6 +428,8 @@ void *ukern_mmap(void *args)
 
     pthread_t commap_threads[WORKER_COUNT];
     pthread_t commap_handler;
+    pthread_t comunmap_threads[WORKER_COUNT];
+    pthread_t comunmap_handler;
 
     pthread_attr_t thread_attrs;
 
@@ -443,7 +440,7 @@ void *ukern_mmap(void *args)
     page_size=getpagesize();
     //spawn_workers(&advertise_sockaddr,sock_advertiser_threads,U_SOCKADDR);
     spawn_workers(&co_mmap,commap_threads,U_COMMAP);
-    spawn_workers(&co_unmap,counmap_threads,U_COMUNMAP);
+    spawn_workers(&co_unmap,comunmap_threads,U_COMUNMAP);
 
     handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COMMAP);
@@ -453,7 +450,7 @@ void *ukern_mmap(void *args)
     handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COMUNMAP);
     pthread_attr_init(&thread_attrs);
-    pthread_create(&counmap_handler,&thread_attrs,manage_requests,handler_args);
+    pthread_create(&comunmap_handler,&thread_attrs,manage_requests,handler_args);
 
     pthread_attr_init(&thread_attrs);
     pthread_create(&sock_advertiser,&thread_attrs,advertise_sockaddr,NULL);
