@@ -357,7 +357,8 @@ int copoll(pollcoport_t * coports, int ncoports, int timeout)
     uint error;
     int status;
 
-    assert(cheri_getperm(port)&COPORT_PERM_POLL);
+    for(int i = 0; i<ncoports; i++)
+    assert(cheri_getperm(coports[i].coport)&COPORT_PERM_POLL);
 
     /* cocall setup */
     //TODO-PBB: Only do this once.

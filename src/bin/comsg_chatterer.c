@@ -25,8 +25,8 @@
  */
 
 #include "comsg.h"
-#include <statcounters.h>
 #include "coport.h"
+
 #include <inttypes.h>
 #include <time.h>
 #include <sys/types.h>
@@ -36,6 +36,9 @@
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
+#include <statcounters.h>
+
+extern char **environ;
 
 static char * message_str;
 static const char * one_k_str = "SIqfubhhJOVdGGMvw09vqHs7S8miUyi1JBaFNGbtKYy4vUs6QeB1JdrMAlWOcC5llzZ5XogADMOvIyNP9R0deF6Coi8RDsf1HUQFVZXYskgmUODJb0uB88DkY2h2qS1dMEX06tTaUWCTDOwRWt9qtgtD8OfBH0uKp6ABwt5vbCjchd7npp12jXBDdAzzkC81DOTdYGMsuuZ6iqMQt0CwkesUj4HSJ7exSaD5hQn47hpr2cinaATAlmfd8G1oKlYWCcXszmGAPkZm4qpE6lA51dTMNmR9kXvnONnMFWesrjI8XmA7qss71oSUgIu10WCnJ7YJA97lg40fCQ647lZCZKdsqGF7XZAgJEkAwSmZ7apdVK4zmlK8JXkdKCuecHxEJk3NDLdN83qvonYiJE7aoZHmibjwHMiJDAtmPKlaJBnKS5yLNXRExHLH5GXvjrvRIdDzCtQZStt4ZW8PickMMcDczSyP7Kr0OwjPaX3dSgU6PFRX3hKbYGyXx28VdzeAZ2ynvv1b5i13Hg9xW6oeidFVFw0SsuTg9gVmbYRr9F20LdDxGaJBMofsX6SbHx66JmtsgztP0DWAQxxviSRlUBi8fYvgxHqRfyYyGEFi5V1GMbPtpIKB6EZ2ixOt63VcXTK2egU4dzDcOlgognDz8253LFn0e02hNRX0nRRkamJ0xMkS9tzBW8NhdxG2iQ0zWbAyHzPWmFYQOvrXPm0u5yS2drByXmz5y9S8LvnBAZ1vlaLAylyMIxy8z6clpCIZqTovP3X0Eg6xPuLg4xQpXvxwx3U2WryMcDWRmAJWW7XL6JfzipyZTI9GGPiNp73Hs9CwSlQMpJDh9ByvzsWKmDKm3YUHLDwqe7XdmBbQfOkEKyjrQPr10TvNA0euXw0TTu6dmziZLSGrLv1DFLcuxzQ9CZkg1bkFX8RUzREjG8NmdGa0YLRdru2FWLqC1rCG6c3aD2qp2v0SuVUlJe9qj5aUsFjOlq5s9XGJJepCb6TTeHKP8jsHL7jnJQXIR9O0";
@@ -47,7 +50,7 @@ static coport_t port = (void * __capability)-1;
 
 //static const char * message_str = "";
 
-static coport_op_t chatter_operation = COSEND;
+//static coport_op_t chatter_operation = COSEND;
 static coport_type_t coport_type = COCARRIER;
 //static const char * ts_port_name = "timestamp_port";
 
@@ -77,7 +80,7 @@ static void send_timestamp(struct timespec * timestamp)
 */
 void send_data(void)
 {
-	statcounter_bank_t bank1,bank2,result;
+	statcounters_bank_t bank1,bank2,result;
 	struct timespec start_timestamp,end_timestamp;
 	double ipc_time;
 	int status;
@@ -90,7 +93,7 @@ void send_data(void)
 	}*/
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
 	statcounters_sample(&bank1);
-	for(unsigned int j = 0; j<runs; j++)
+	for(unsigned int j = 0; j<(total_size/message_len); j++)
 	{
 		cosend(port,message_str,message_len);
 	}
@@ -106,7 +109,7 @@ void send_data(void)
 
 void receive_data(void)
 {
-	statcounter_bank_t bank1,bank2,result;
+	statcounters_bank_t bank1,bank2,result;
 	static char * buffer = NULL;
 	struct timespec start, end;
 	float ipc_time;
@@ -135,7 +138,7 @@ void receive_data(void)
 	}*/
 	clock_gettime(CLOCK_REALTIME,&start);
 	statcounters_sample(&bank1);
-	for(unsigned int j = 0; j<runs; j++)
+	for(unsigned int j = 0; j<(total_size/message_len); j++)
 	{
 		corecv(port,(void **)&buffer,message_len);
 	}
@@ -160,10 +163,11 @@ static
 void prepare_message(void)
 {
 	total_size = message_len * runs;
-	unsigned int i;
+	unsigned int i, message_remaining, data_copied, to_copy;
+	message_str=calloc(message_len+1,sizeof(char));
 	if (message_len%1024==0)
 	{
-		message_str=calloc(message_len+1,sizeof(char));
+		;
 		for(i = 0; i < message_len-1024; i+=1024)
 		{
 			memcpy(message_str+i,one_k_str,1024);
@@ -172,9 +176,18 @@ void prepare_message(void)
 	}
 	else
 	{
-		message_str=calloc(message_len+1,sizeof(char));
-		for(int i = 0; i < message_len; sizeof(char));
-		strncpy(message_str,one_k_str,MIN(message_len,1024));
+		message_remaining=message_len;
+		data_copied=0;
+		while(1)
+		{
+			to_copy=MIN(message_remaining,1024);
+			memcpy(message_str+data_copied,one_k_str,to_copy);
+			data_copied+=to_copy;
+			if (message_remaining<to_copy)
+				break;
+			message_remaining-=to_copy;
+		}
+		
 	}
 }
 
@@ -182,6 +195,7 @@ void prepare_message(void)
 int main(int argc, char * const argv[])
 {
 	int opt;
+	char * strptr;
 	pid_t p,pp;
 	int receiver = 0;
 
@@ -215,15 +229,48 @@ int main(int argc, char * const argv[])
 
 	if (!receiver)
 	{
-		if (!p=fork())
+		p=fork();
+		if (!p)
 		{
-			coexecve(getppid(),argv[0],argv,environ);
+			pp=getppid();
+			char ** new_argv = malloc(sizeof(char *)*argc);
+			for(int i = 0; i < argc; i++)
+			{
+				new_argv[i]=malloc((strlen(argv[i])+1)*sizeof(char));
+				strncpy(new_argv[i],argv[i],(strlen(argv[i])+1)*sizeof(char));
+			}
+			new_argv[argc]=malloc((strlen("p")+1)*sizeof(char));
+			strcpy(new_argv[argc],"p");
+			coexecve(pp,new_argv[0],new_argv,environ);
 		}
 		else
 		{
-			send
+			prepare_message();
+			coport_type=COCARRIER;
+			for(unsigned int i = 0; i < runs; i++)
+				send_data();
+			coport_type=COPIPE;
+			for(unsigned int i = 0; i < runs; i++)
+				send_data();
+			coport_type=COCHANNEL;
+			for(unsigned int i = 0; i < runs; i++)
+				send_data();
 		}
 	}
+	else
+	{
+		prepare_message();
+		coport_type=COCARRIER;
+		for(unsigned int i = 0; i < runs; i++)
+			receive_data();
+		coport_type=COPIPE;
+		for(unsigned int i = 0; i < runs; i++)
+			receive_data();
+		coport_type=COCHANNEL;
+		for(unsigned int i = 0; i < runs; i++)
+			receive_data();
+	}
+		
 }
 /*
 int main(int argc, char * const argv[])
@@ -302,4 +349,4 @@ int main(int argc, char * const argv[])
 	}
 
 	return 0;
-}
+}*/

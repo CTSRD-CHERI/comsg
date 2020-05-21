@@ -31,7 +31,7 @@
 
 #include <errno.h>
 #include <err.h>
-#include <fnctl.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <cheri/cherireg.h>
 #include <pthread.h>
@@ -108,6 +108,7 @@ void * __capability map_from_token(token_t token, off_t offset, int prot)
 	return NULL;
 }
 
+/*
 static
 token_t token_from_fd(int fd, off_t offset, int prot)
 {
@@ -134,7 +135,7 @@ token_t token_from_fd(int fd, off_t offset, int prot)
 	}
 	return found;
 }
-
+*/
 static
 void add_token_to_table(token_t token, int fd, off_t offset,int prot)
 {
@@ -150,14 +151,14 @@ void add_token_to_table(token_t token, int fd, off_t offset,int prot)
 static
 void add_cap_to_table(token_t token, void * __capability cap)
 {
-	_Bool added = false;
+	int added = 0;
 	lmap_t *map, *map_temp;
 	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
 		if (map->token==token) 
 		{
 			if (HAS_PROT_PERMS(cap,map->prot))
 			{
-				added=true;
+				added=1;
 				map->cap=cap;
 			}
 			//keep looking, we might've mapped it more times
@@ -223,7 +224,7 @@ clear_table_at_exit(void)
 	map=LIST_FIRST(&map_tbl.maps);
 	while (map!=NULL) {
 		map_temp = LIST_NEXT(map,entries);
-		_counmap(map->token);
+		_comunmap(map->token);
 		free(map);
 		map=map_temp;
 	}
@@ -479,8 +480,8 @@ token_t commap_reserve(void * __capability base, size_t size, int prot, int flag
 	token_t token;
 	int cloexec;
 	
-	cloexec=fnctl(fd,F_GETFD,void) & FD_CLOEXEC;
-	request_info=make_fd_info(base,size,prot,flags,fd,offset,cloexec);
+	cloexec=fcntl(fd,F_GETFD,NULL) & FD_CLOEXEC;
+	request_info=make_fd_info(base,size,prot,flags,fd,offset);
 	token=request_token(request_info);
 	if (cloexec)
 		set_cloexec(token);
@@ -504,10 +505,10 @@ void * __capability commap(void * __capability base, size_t size, int prot, int 
 	int cloexec;
 	
 	if (fd)
-		cloexec=fnctl(fd,F_GETFD,void) & FD_CLOEXEC;
+		cloexec=fcntl(fd,F_GETFD,NULL) & FD_CLOEXEC;
 	else
 		cloexec=0;
-	request_info=make_fd_info(base,size,prot,flags,fd,offset,cloexec);
+	request_info=make_fd_info(base,size,prot,flags,fd,offset);
 	token=request_token(request_info);
 	if (cloexec)
 		set_cloexec(token);
@@ -554,7 +555,7 @@ void _comunmap(token_t token)
 }
 
 extern
-void comunmap(void * __capability cap, size_t len);
+void comunmap(void * __capability cap, size_t len)
 {
 	if(cheri_getlen(cap)<len)
 	{
@@ -568,7 +569,7 @@ void comunmap(void * __capability cap, size_t len);
 	lmap_t *map, *map_temp;
 	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
 		if (map->cap==cap) {
-			_counmap(map->token);
+			_comunmap(map->token);
 			LIST_REMOVE(map, entries);
 			free(map);
 		}
@@ -590,6 +591,6 @@ void commap_teardown(void)
 	lmap_t *map, *map_temp;
 	LIST_FOREACH_SAFE(map, &map_tbl.maps, entries, map_temp) {
 		if (map->cloexec) 
-			_counmap(map->token);
+			_comunmap(map->token);
 	}
 }
