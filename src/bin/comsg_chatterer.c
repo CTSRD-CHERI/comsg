@@ -25,6 +25,7 @@
  */
 
 #include "comsg.h"
+#include <statcounters.h>
 #include "coport.h"
 #include <inttypes.h>
 #include <time.h>
@@ -76,6 +77,7 @@ static void send_timestamp(struct timespec * timestamp)
 */
 void send_data(void)
 {
+	statcounter_bank_t bank1,bank2,result;
 	struct timespec start_timestamp,end_timestamp;
 	double ipc_time;
 	int status;
@@ -87,12 +89,16 @@ void send_data(void)
 		err(1,"port closed before sending");
 	}*/
 	clock_gettime(CLOCK_REALTIME,&start_timestamp);
+	statcounters_sample(&bank1);
 	for(unsigned int j = 0; j<runs; j++)
 	{
 		cosend(port,message_str,message_len);
 	}
+	statcounters_sample(&bank2);
 	clock_gettime(CLOCK_REALTIME,&end_timestamp);
 	timespecsub(&end_timestamp,&start_timestamp);
+	statcounters_diff(&result,&bank2,&bank1);
+	statcounters_dump(&result);
 	ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
 	printf("transferred %lu bytes in %lf\n", total_size, ipc_time);
 	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
@@ -100,6 +106,7 @@ void send_data(void)
 
 void receive_data(void)
 {
+	statcounter_bank_t bank1,bank2,result;
 	static char * buffer = NULL;
 	struct timespec start, end;
 	float ipc_time;
@@ -127,10 +134,12 @@ void receive_data(void)
 		err(1,"port closed before receiving");
 	}*/
 	clock_gettime(CLOCK_REALTIME,&start);
+	statcounters_sample(&bank1);
 	for(unsigned int j = 0; j<runs; j++)
 	{
 		corecv(port,(void **)&buffer,message_len);
 	}
+	statcounters_sample(&bank2);
 	clock_gettime(CLOCK_REALTIME,&end);
 	if(buffer==NULL)
 	{
@@ -138,6 +147,8 @@ void receive_data(void)
 	}
 	//printf("message received:%s\n",(char *)buffer);
 	timespecsub(&end,&start);
+	statcounters_diff(&result,&bank2,&bank1);
+	statcounters_dump(&result);
 	ipc_time=(float)end.tv_sec + (float)end.tv_nsec / 1000000000;
 	printf("transferred %lu bytes in %lf\n", total_size, ipc_time);
 	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
@@ -145,21 +156,73 @@ void receive_data(void)
 	//if(port->type!=COCARRIER) free(buffer);
 }	
 
+static
+void prepare_message(void)
+{
+	total_size = message_len * runs;
+	unsigned int i;
+	if (message_len%1024==0)
+	{
+		message_str=calloc(message_len+1,sizeof(char));
+		for(i = 0; i < message_len-1024; i+=1024)
+		{
+			memcpy(message_str+i,one_k_str,1024);
+		}
+		strncpy(message_str+i,one_k_str,1023);
+	}
+	else
+	{
+		message_str=calloc(message_len+1,sizeof(char));
+		for(int i = 0; i < message_len; sizeof(char));
+		strncpy(message_str,one_k_str,MIN(message_len,1024));
+	}
+}
+
+
 int main(int argc, char * const argv[])
 {
 	int opt;
 	pid_t p,pp;
-	while((opt=getopt(argc,argv,"t:r:b:"))!=-1)
+	int receiver = 0;
+
+	while((opt=getopt(argc,argv,"o:t:r:b:p"))!=-1)
 	{
 		switch(opt)
 		{
-
+			case 'b':
+				message_len = strtol(optarg, &strptr, 10);
+				if (*optarg == '\0' || *strptr != '\0' || message_len <= 0)
+					err(1,"invalid buffer length");
+				break;
+			case 'r':
+				runs = strtol(optarg, &strptr, 10);
+				if (*optarg == '\0' || *strptr != '\0' || runs <= 0)
+					err(1,"invalid runs");
+				break;
+			case 't':
+				total_size = strtol(optarg, &strptr, 10);
+				if (*optarg == '\0' || *strptr != '\0' || total_size <=0)
+					err(1,"invalid total length");
+			case 'p':
+				receiver=1;
+				break;
+			default:
+				break;
 		}
 	}
+	if (total_size % message_len !=0)
+		err(1,"total size must be a multiple of buffer size");
 
-	if (!p=fork())
+	if (!receiver)
 	{
-		coexecve(getppid(),argv[0],argv,environ);
+		if (!p=fork())
+		{
+			coexecve(getppid(),argv[0],argv,environ);
+		}
+		else
+		{
+			send
+		}
 	}
 }
 /*
