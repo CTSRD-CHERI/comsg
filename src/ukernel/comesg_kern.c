@@ -491,9 +491,9 @@ void *cocarrier_recv(void *args)
         cocarrier->length--;
         
         if (cocarrier->length==0)
-        	cocarrier->event=(COPOLL_OUT | cocarrier->event & ~COPOLL_RERR) & ~COPOLL_IN;
+        	cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR) & ~COPOLL_IN;
         else
-            cocarrier->event=(COPOLL_OUT | cocarrier->event & ~COPOLL_RERR);
+            cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR);
         
 
         if(!LIST_EMPTY(&cocarrier->listeners))
@@ -501,7 +501,7 @@ void *cocarrier_recv(void *args)
             pthread_cond_signal(&global_cosend_cond);
         }
 
-        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
         atomic_thread_fence(memory_order_release);
 
        
@@ -603,7 +603,7 @@ void *cocarrier_send(void *args)
             pthread_cond_signal(&global_cosend_cond);
         }
         //release
-        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
         atomic_thread_fence(memory_order_release);
 
         cocarrier_send_args->status=0;
