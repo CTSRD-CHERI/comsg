@@ -263,7 +263,7 @@ int corecv(coport_t port, void ** buf, size_t len)
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
             call->cocarrier=port;
-            call->message=cheri_csetbounds(buf,len);
+            
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
             cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
             if(call->status<0)
@@ -279,6 +279,7 @@ int corecv(coport_t port, void ** buf, size_t len)
             {
                 err(1,"received capability does not grant read permissions");
             }
+            memcpy(buf,call->message,MIN(cheri_getlen(buf),MIN(cheri_getlen(call->message),len)));
             free(call);
             break;
         case COPIPE:

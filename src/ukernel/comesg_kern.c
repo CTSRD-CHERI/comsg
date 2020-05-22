@@ -156,7 +156,7 @@ int lookup_port(char * port_name,sys_coport_t ** port_buf)
     {
         if(strncmp(port_name,coport_table.table[i].name,COPORT_NAME_LEN)==0)
         {
-            *port_buf=cheri_csetbounds(&coport_table.table[i].port,sizeof(sys_coport_t));
+            *port_buf=coport_table.table[i].port_cap;
             return 0;
         }   
     }
@@ -480,7 +480,7 @@ void *cocarrier_recv(void *args)
                 continue;
         }
         len=MIN(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->message));
-        memcpy(cocarrier_send_args->message,cocarrier_buf[index],len);
+        cocarrier_send_args->message=cocarrier_buf[index];
         cocarrier->start++;
         cocarrier->length--;
         if (cocarrier->length==0)
@@ -539,7 +539,7 @@ void *cocarrier_send(void *args)
         }
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         //allocate ukernel owned buffer
-        msg_buf=ukern_fast_malloc(cheri_getlen(cocarrier_send_args->message));
+        msg_buf=ukern_malloc(cheri_getlen(cocarrier_send_args->message));
         //copy data into buffer
         memcpy(msg_buf,cocarrier_send_args->message,cheri_getlen(cocarrier_send_args->message));
         //reduce cap permissions on buffer
@@ -655,10 +655,9 @@ void *coport_open(void *args)
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
             prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
-        }
-        if(prt->type==COCARRIER)
-        {
-            prt=cheri_seal(prt,seal_cap);
+            if(prt->type==COCARRIER)
+                prt=cheri_seal(prt,seal_cap);
+            coport_table.table[index].port_cap=prt; //ensure consistency
         }
         coport_args->port=prt;
         printf("coport_perms: %lu\n",cheri_getperm(prt));
