@@ -258,7 +258,7 @@ void * buffer_malloc(size_t len)
 	buffer_idx=buffer_table.next++;
 	buffer_table.length++;
 	pthread_mutex_unlock(&buffer_table.lock);
-	memset(buf_entry.mem,0,len);
+	memset(buf_entry.mem,0,cheri_getlen(buf_entry.mem));
 	return buf_entry.mem;
 }
 

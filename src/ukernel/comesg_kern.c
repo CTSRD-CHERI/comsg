@@ -557,7 +557,7 @@ void *cocarrier_send(void *args)
                 cocarrier->event&=COPOLL_WERR;
                 //cocarrier->status=COPORT_OPEN;
                 atomic_thread_fence(memory_order_release);
-                ukern_fast_free(msg_buf);
+                ukern_free(msg_buf);
 
                 //buffer is full - return error
                 cocarrier_send_args->status=-1;
@@ -568,7 +568,7 @@ void *cocarrier_send(void *args)
         if(cheri_gettag(cocarrier_buf[index]))
         {
         	//auto overwrite old messages once we've wrapped around
-        	ukern_fast_free(cocarrier_buf[index]);
+        	ukern_free(cocarrier_buf[index]);
         }
         cocarrier_buf[index]=msg_buf;
         cocarrier->end=index;
