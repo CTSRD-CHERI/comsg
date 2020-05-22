@@ -103,7 +103,7 @@ int cosend(coport_t port, const void * buf, size_t len)
     void * __capability switcher_code;
     void * __capability switcher_data;
     void * __capability func;
-    cocall_cocarrier_send_t * call;
+    cocall_cocarrier_send_t call;
 
     unsigned int old_end;
     int retval = len;
@@ -154,21 +154,20 @@ int cosend(coport_t port, const void * buf, size_t len)
             atomic_thread_fence(memory_order_release);
             break;
         case COCARRIER:
-            call=calloc(1,sizeof(cocall_cocarrier_send_t));
-            call->cocarrier=port;
-            call->message=cheri_csetbounds(buf,len);
-            call->message=cheri_andperm(call->message,COCARRIER_PERMS);
+            call.cocarrier=port;
+            call.message=cheri_csetbounds(buf,len);
+            call.message=cheri_andperm(call.message,COCARRIER_PERMS);
             
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);
-            cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
-            if(call->status<0)
+            cocall(switcher_code,switcher_data,func,&call,sizeof(cocall_cocarrier_send_t));
+            if(call.status<0)
             {
                 warn("error occurred during cocarrier send");
-                errno=call->error;
+                errno=call.error;
                 return -1;
             }
             else
-                retval=call->status;
+                retval=call.status;
             break;
         case COPIPE:
             for(;;)
@@ -205,7 +204,7 @@ int corecv(coport_t port, void ** buf, size_t len)
     void * __capability switcher_code;
     void * __capability switcher_data;
     void * __capability func;
-    cocall_cocarrier_send_t * call;
+    cocall_cocarrier_send_t call;
     coport_status_t status_val;
     coport_type_t type;
     
@@ -228,11 +227,10 @@ int corecv(coport_t port, void ** buf, size_t len)
             }
         }
     }
-    
-    atomic_thread_fence(memory_order_acquire);
     switch(type)
     {
         case COCHANNEL:
+            atomic_thread_fence(memory_order_acquire);
             if (port->start==port->length)
             {
                 err(EAGAIN,"no message to receive");
@@ -259,29 +257,30 @@ int corecv(coport_t port, void ** buf, size_t len)
             memcpy(*buf,(char *)port->buffer+old_start, len);
             port->start=port->start+len;
             port->status=COPORT_OPEN;
+            atomic_thread_fence(memory_order_release);
             break;
         case COCARRIER:
-            call=calloc(1,sizeof(cocall_cocarrier_send_t));
-            call->cocarrier=port;
-            call->message=cheri_csetbounds(buf,len);
+            call.cocarrier=port;
+            
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
-            cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
-            if(call->status<0)
+            cocall(switcher_code,switcher_data,func,&call,sizeof(cocall_cocarrier_send_t));
+            if(call.status<0)
             {
-                err(call->error,"error occurred during cocarrier recv");
+                err(call.error,"error occurred during cocarrier recv");
             }
             
-             if(cheri_getlen(call->message)!=len)
+             if(cheri_getlen(call.message)!=len)
             {
                 warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
             }
-            if((cheri_getperm(call->message)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
+            if((cheri_getperm(call.message)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
             {
                 err(1,"received capability does not grant read permissions");
             }
-            free(call);
+            memcpy(*buf,call.message,MIN(cheri_getlen(buf),MIN(cheri_getlen(call.message),len)));
             break;
         case COPIPE:
+            atomic_thread_fence(memory_order_acquire);
             port->buffer=*buf;
             atomic_store_explicit(&port->status,COPORT_READY,memory_order_relaxed);
             atomic_thread_fence(memory_order_release);
@@ -290,18 +289,16 @@ int corecv(coport_t port, void ** buf, size_t len)
                 status_val=COPORT_DONE;
                 if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_OPEN))
                 {
+                    port->buffer=NULL;
                     break;
                 }
             }
-            port->buffer=NULL;
             break;
         default:
             err(1,"invalid coport type");
             break;
     }
-    atomic_thread_fence(memory_order_release);
     return len;
-    
 }
 
 coport_type_t coport_gettype(coport_t port)
@@ -358,7 +355,6 @@ int copoll(pollcoport_t * coports, int ncoports, int timeout)
     int status;
 
     for(int i = 0; i<ncoports; i++)
-    assert(cheri_getperm(coports[i].coport)&COPORT_PERM_POLL);
 
     /* cocall setup */
     //TODO-PBB: Only do this once.

@@ -32,7 +32,7 @@
 #include "commap.h"
 #include "sys_comsg.h"
 
-#define RANDOM_LEN 3
+#define RANDOM_LEN 20
 
 #define RECV_FLAGS 0
 #define MAX_FDS 255

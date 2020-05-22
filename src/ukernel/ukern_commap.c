@@ -69,8 +69,8 @@ static struct ukern_mapping_table mmap_tbl;
 static
 void remove_sockf(void)
 {
-    if (strcmp(path_prefix,bind_path)!=0)
-        unlink(bind_path);
+    unlink(rsock_addr.sun_path);
+    close(rsock_fd);
 }
 
 static

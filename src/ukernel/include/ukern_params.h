@@ -26,9 +26,9 @@
 #ifndef _UKERN_PARAMS_H
 #define _UKERN_PARAMS_H
 
-#define WORKER_COUNT 1
+#define WORKER_COUNT 4
 #define THREAD_STRING_LEN 16
-#define KEYSPACE 93
+#define KEYSPACE 62
 
 #define MAX_COMUTEXES 20
 #define MAX_COPOLL 255

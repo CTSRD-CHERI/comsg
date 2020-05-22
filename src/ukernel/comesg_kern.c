@@ -95,12 +95,12 @@ int rand_string(char * buf, long int len)
     for (i = 0; i < len-1; i++)
     {
         rand_no=random() % KEYSPACE;
-        c=(char)rand_no+0x21;
-        while(c=='"')
-        {
-            rand_no=random() % KEYSPACE;
-            c=(char)rand_no+0x21;
-        }
+        if (rand_no<10)
+            c=(char)rand_no+'0';
+        else if (rand_no<36)
+            c=(char)(rand_no % 26)+'A';
+        else 
+            c=(char)(rand_no % 26)+'a';
         s[i]=c;
     }
     s[len-1]='\0';
@@ -156,7 +156,7 @@ int lookup_port(char * port_name,sys_coport_t ** port_buf)
     {
         if(strncmp(port_name,coport_table.table[i].name,COPORT_NAME_LEN)==0)
         {
-            *port_buf=cheri_csetbounds(&coport_table.table[i].port,sizeof(sys_coport_t));
+            *port_buf=coport_table.table[i].port_cap;
             return 0;
         }   
     }
@@ -480,7 +480,7 @@ void *cocarrier_recv(void *args)
                 continue;
         }
         len=MIN(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->message));
-        memcpy(cocarrier_send_args->message,cocarrier_buf[index],len);
+        cocarrier_send_args->message=cocarrier_buf[index];
         cocarrier->start++;
         cocarrier->length--;
         if (cocarrier->length==0)
@@ -539,7 +539,7 @@ void *cocarrier_send(void *args)
         }
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         //allocate ukernel owned buffer
-        msg_buf=ukern_fast_malloc(cheri_getlen(cocarrier_send_args->message));
+        msg_buf=ukern_malloc(cheri_getlen(cocarrier_send_args->message));
         //copy data into buffer
         memcpy(msg_buf,cocarrier_send_args->message,cheri_getlen(cocarrier_send_args->message));
         //reduce cap permissions on buffer
@@ -557,7 +557,7 @@ void *cocarrier_send(void *args)
                 cocarrier->event&=COPOLL_WERR;
                 //cocarrier->status=COPORT_OPEN;
                 atomic_thread_fence(memory_order_release);
-                ukern_fast_free(msg_buf);
+                ukern_free(msg_buf);
 
                 //buffer is full - return error
                 cocarrier_send_args->status=-1;
@@ -568,7 +568,7 @@ void *cocarrier_send(void *args)
         if(cheri_gettag(cocarrier_buf[index]))
         {
         	//auto overwrite old messages once we've wrapped around
-        	ukern_fast_free(cocarrier_buf[index]);
+        	ukern_free(cocarrier_buf[index]);
         }
         cocarrier_buf[index]=msg_buf;
         cocarrier->end=index;
@@ -663,13 +663,12 @@ void *coport_open(void *args)
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
             prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
-        }
-        if(prt->type==COCARRIER)
-        {
-            prt=cheri_seal(prt,seal_cap);
+            if(prt->type==COCARRIER)
+                prt=cheri_seal(prt,seal_cap);
+            coport_table.table[index].port_cap=prt; //ensure consistency
         }
         coport_args->port=prt;
-        printf("coport_perms: %lu\n",cheri_getperm(prt));
+        //printf("coport_perms: %lu\n",cheri_getperm(prt));
 
     }
     free(coport_args);
