@@ -123,7 +123,7 @@ void receive_data(void)
 	float ipc_time;
 	int status;
 
-	status=coopen(port_name,coport_type,&port);
+	
 	switch(coport_type)
 	{
 		case COCHANNEL:
@@ -140,6 +140,7 @@ void receive_data(void)
 			buffer=calloc(4096,sizeof(char));
 			break;
 	}
+	status=coopen(port_name,coport_type,&port);
 	/*if(port->status==COPORT_CLOSED)
 	{
 		err(1,"port closed before receiving");
@@ -255,19 +256,25 @@ int main(int argc, char * const argv[])
 
 	if (!receiver)
 	{
+		pp=getpid();
 		p=fork();
 		if (!p)
 		{
-			pp=getppid();
-			char ** new_argv = malloc(sizeof(char *)*(argc+1));
+			char ** new_argv = malloc(sizeof(char *)*(argc+2));
 			for(int i = 0; i < argc; i++)
 			{
 				new_argv[i]=malloc((strlen(argv[i])+1)*sizeof(char));
 				strcpy(new_argv[i],argv[i]);
 			}
-			new_argv[argc]=malloc((strlen("p")+1)*sizeof(char));
-			strcpy(new_argv[argc],"p");
-			coexecve(pp,new_argv[0],new_argv,environ);
+			new_argv[argc]=malloc((strlen("-p")+1)*sizeof(char));
+			strcpy(new_argv[argc],"-p");
+			new_argv[argc+1]=NULL;
+
+			int e=coexecve(pp,new_argv[0],new_argv,environ);
+			if (e==-1)
+				perror("Error:coexecve");
+			else
+				printf("coexecve");
 		}
 		else
 		{

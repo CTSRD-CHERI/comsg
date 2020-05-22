@@ -12,7 +12,7 @@ DEBUG=-v -g
 CFLAGS=$(DEBUG) -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
 	-mabi=purecap -fPIE -mstack-alignment=16 -fPIC
 
-LLDFLAGS=-pie -fuse-ld=lld 
+LLDFLAGS=-pie -fuse-ld=lld -Wl,-znow
 ifndef FORCE
 FORCE=--force --clean
 endif
@@ -43,7 +43,7 @@ endif
 
 ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
 	ukern_mman.o ukern_commap.o libcomsg.so
-	$(CC) $(CFLAGS) $(LLDFLAGS) -Wl,-znow $(LIB_PARAMS) -lcomsg $(INC_PARAMS)  \
+	$(CC) $(CFLAGS) $(LLDFLAGS) $(LIB_PARAMS) -lcomsg $(INC_PARAMS)  \
 	-o $(OUTDIR)/comesg_ukernel $(BUILDDIR)/comesg_kern.o \
 	$(BUILDDIR)/coport_utils.o $(BUILDDIR)/sys_comutex.o \
 	$(BUILDDIR)/comutex.o $(BUILDDIR)/ukern_mman.o $(BUILDDIR)/ukern_commap.o

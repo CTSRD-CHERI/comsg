@@ -95,12 +95,12 @@ int rand_string(char * buf, long int len)
     for (i = 0; i < len-1; i++)
     {
         rand_no=random() % KEYSPACE;
-        c=(char)rand_no+0x21;
-        while(c=='"')
-        {
-            rand_no=random() % KEYSPACE;
-            c=(char)rand_no+0x21;
-        }
+        if (rand_no<10)
+            c=(char)rand_no+'0';
+        else if (rand_no<36)
+            c=(char)(rand_no % 26)+'A';
+        else 
+            c=(char)(rand_no % 26)+'a';
         s[i]=c;
     }
     s[len-1]='\0';
@@ -660,7 +660,7 @@ void *coport_open(void *args)
             coport_table.table[index].port_cap=prt; //ensure consistency
         }
         coport_args->port=prt;
-        printf("coport_perms: %lu\n",cheri_getperm(prt));
+        //printf("coport_perms: %lu\n",cheri_getperm(prt));
 
     }
     free(coport_args);
