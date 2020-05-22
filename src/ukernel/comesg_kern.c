@@ -938,8 +938,8 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     else
     	private=false;
     /* split into threads */
-    thread_name=ukern_fast_malloc(THREAD_STRING_LEN*sizeof(char));
-    threads=(pthread_t *) ukern_malloc(WORKER_COUNT*sizeof(pthread_t));
+    thread_name=malloc(THREAD_STRING_LEN*sizeof(char));
+    threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
     if (!private)
     {
         w_i=atomic_fetch_add(&next_worker_i,1);
@@ -954,8 +954,8 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
 
     for (int i = 0; i < WORKER_COUNT; i++)
     {
-        thread=ukern_fast_malloc(sizeof(pthread_t));
-        args=ukern_fast_malloc(sizeof(worker_args_t));
+        thread=malloc(sizeof(pthread_t));
+        args=malloc(sizeof(worker_args_t));
         rand_string(thread_name,THREAD_STRING_LEN);
         strcpy(args->name,thread_name);
         args->cap=NULL;
@@ -976,10 +976,10 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
             threads[i]=*thread;
         }
         pthread_attr_destroy(&thread_attrs);
-        ukern_fast_free(thread);
-        ukern_fast_free(args);
+        free(thread);
+        free(args);
     }
-    ukern_fast_free(thread_name);
+    free(thread_name);
     return 0;
 }
 
@@ -1087,37 +1087,37 @@ int main(int argc, const char *argv[])
 
     /* listen for coopen requests */
     printf("Spawning request handlers...\n");
-    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COOPEN);
     pthread_attr_init(&thread_attrs);
     pthread_create(&coopen_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COUNLOCK);
     pthread_attr_init(&thread_attrs);
     pthread_create(&counlock_handler,&thread_attrs,manage_requests,handler_args);
     
-    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COMUTEX_INIT);
     pthread_attr_init(&thread_attrs);
     pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COLOCK);
     pthread_attr_init(&thread_attrs);
     pthread_create(&colock_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COCARRIER_SEND);
     pthread_attr_init(&thread_attrs);
     pthread_create(&cocarrier_send_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COCARRIER_RECV);
     pthread_attr_init(&thread_attrs);
     pthread_create(&cocarrier_recv_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=ukern_malloc(sizeof(request_handler_args_t));
+    handler_args=malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COPOLL);
     pthread_attr_init(&thread_attrs);
     pthread_create(&copoll_handler,&thread_attrs,manage_requests,handler_args);

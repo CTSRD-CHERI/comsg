@@ -27,7 +27,7 @@
 #include "comsg.h"
 #include "coport.h"
 
-#define STATCOUNTERS_NO_CTOR_DTOR
+
 
 #include <inttypes.h>
 #include <time.h>
@@ -169,7 +169,7 @@ void receive_data(void)
 	printf("----------------------------------------------------");
 	coclose(port);
 	port=NULL;
-	//if(port->type!=COCARRIER) free(buffer);
+	if(coport_type!=COCARRIER) free(buffer);
 }	
 
 static
