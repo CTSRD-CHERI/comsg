@@ -96,6 +96,11 @@ int rand_string(char * buf, long int len)
     {
         rand_no=random() % KEYSPACE;
         c=(char)rand_no+0x21;
+        while(c=='"')
+        {
+            rand_no=random() % KEYSPACE;
+            c=(char)rand_no+0x21;
+        }
         s[i]=c;
     }
     s[len-1]='\0';
@@ -268,7 +273,6 @@ bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e)
 
 void *copoll_deliver(void *args)
 {
-    coport_eventmask_t event;
 	sys_coport_t *cocarrier;
 	coport_listener_t *l,*l_temp;
 	pthread_mutex_lock(&global_copoll_lock);
@@ -430,7 +434,7 @@ void *cocarrier_recv(void *args)
 {
 	int error;
     uint index;
-    coport_status_t status;
+    //coport_status_t status;
     uint len;
 
     worker_args_t * data = args;
@@ -463,7 +467,7 @@ void *cocarrier_recv(void *args)
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         cocarrier_buf=cocarrier->buffer;
         atomic_thread_fence(memory_order_acquire);
-        atomic_store_explicit(cocarrier->status,COPORT_BUSY,memory_order_release);
+        atomic_store_explicit(&cocarrier->status,COPORT_BUSY,memory_order_release);
         index=cocarrier->start;
         if(cocarrier->length==0)
         {
@@ -484,7 +488,7 @@ void *cocarrier_recv(void *args)
         else
             cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR);
         
-        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
         atomic_thread_fence(memory_order_release);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
@@ -502,7 +506,7 @@ void *cocarrier_send(void *args)
     //todo implement
     int error;
     size_t index;
-    coport_status_t status;
+    //coport_status_t status;
 
     worker_args_t * data = args;
     cocall_cocarrier_send_t * cocarrier_send_args;
@@ -575,7 +579,7 @@ void *cocarrier_send(void *args)
         else
             cocarrier->event=(COPOLL_IN | cocarrier->event) & ~COPOLL_WERR;
         //check if anyone is waiting on messages to arrive
-        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
         atomic_thread_fence(memory_order_release);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
@@ -650,7 +654,6 @@ void *coport_open(void *args)
             strcpy(table_entry.name,coport_args->args.name);
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
-            //printf("buffer_perms: %lx\n",cheri_getperm(port->buffer));
             prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
         }
         if(prt->type==COCARRIER)
@@ -658,6 +661,8 @@ void *coport_open(void *args)
             prt=cheri_seal(prt,seal_cap);
         }
         coport_args->port=prt;
+        printf("coport_perms: %lu\n",cheri_getperm(prt));
+
     }
     free(coport_args);
     return 0;
