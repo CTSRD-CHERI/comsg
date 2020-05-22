@@ -96,11 +96,6 @@ int rand_string(char * buf, long int len)
     {
         rand_no=random() % KEYSPACE;
         c=(char)rand_no+0x21;
-        while(c=='"')
-        {
-            rand_no=random() % KEYSPACE;
-            c=(char)rand_no+0x21;
-        }
         s[i]=c;
     }
     s[len-1]='\0';
@@ -273,6 +268,7 @@ bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e)
 
 void *copoll_deliver(void *args)
 {
+    coport_eventmask_t event;
 	sys_coport_t *cocarrier;
 	coport_listener_t *l,*l_temp;
 	pthread_mutex_lock(&global_copoll_lock);
@@ -434,7 +430,7 @@ void *cocarrier_recv(void *args)
 {
 	int error;
     uint index;
-    //coport_status_t status;
+    coport_status_t status;
     uint len;
 
     worker_args_t * data = args;
@@ -467,7 +463,7 @@ void *cocarrier_recv(void *args)
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         cocarrier_buf=cocarrier->buffer;
         atomic_thread_fence(memory_order_acquire);
-        atomic_store_explicit(&cocarrier->status,COPORT_BUSY,memory_order_release);
+        atomic_store_explicit(cocarrier->status,COPORT_BUSY,memory_order_release);
         index=cocarrier->start;
         if(cocarrier->length==0)
         {
@@ -488,7 +484,7 @@ void *cocarrier_recv(void *args)
         else
             cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR);
         
-        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
         atomic_thread_fence(memory_order_release);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
@@ -506,7 +502,7 @@ void *cocarrier_send(void *args)
     //todo implement
     int error;
     size_t index;
-    //coport_status_t status;
+    coport_status_t status;
 
     worker_args_t * data = args;
     cocall_cocarrier_send_t * cocarrier_send_args;
@@ -579,7 +575,7 @@ void *cocarrier_send(void *args)
         else
             cocarrier->event=(COPOLL_IN | cocarrier->event) & ~COPOLL_WERR;
         //check if anyone is waiting on messages to arrive
-        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
+        atomic_store_explicit(cocarrier->status,COPORT_OPEN,memory_order_release);
         atomic_thread_fence(memory_order_release);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
@@ -654,6 +650,7 @@ void *coport_open(void *args)
             strcpy(table_entry.name,coport_args->args.name);
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
+            //printf("buffer_perms: %lx\n",cheri_getperm(port->buffer));
             prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
         }
         if(prt->type==COCARRIER)
@@ -661,8 +658,6 @@ void *coport_open(void *args)
             prt=cheri_seal(prt,seal_cap);
         }
         coport_args->port=prt;
-        printf("coport_perms: %lu\n",cheri_getperm(prt));
-
     }
     free(coport_args);
     return 0;
@@ -938,8 +933,8 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     else
     	private=false;
     /* split into threads */
-    thread_name=malloc(THREAD_STRING_LEN*sizeof(char));
-    threads=(pthread_t *) malloc(WORKER_COUNT*sizeof(pthread_t));
+    thread_name=ukern_fast_malloc(THREAD_STRING_LEN*sizeof(char));
+    threads=(pthread_t *) ukern_malloc(WORKER_COUNT*sizeof(pthread_t));
     if (!private)
     {
         w_i=atomic_fetch_add(&next_worker_i,1);
@@ -954,8 +949,8 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
 
     for (int i = 0; i < WORKER_COUNT; i++)
     {
-        thread=malloc(sizeof(pthread_t));
-        args=malloc(sizeof(worker_args_t));
+        thread=ukern_fast_malloc(sizeof(pthread_t));
+        args=ukern_fast_malloc(sizeof(worker_args_t));
         rand_string(thread_name,THREAD_STRING_LEN);
         strcpy(args->name,thread_name);
         args->cap=NULL;
@@ -976,10 +971,10 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
             threads[i]=*thread;
         }
         pthread_attr_destroy(&thread_attrs);
-        free(thread);
-        free(args);
+        ukern_fast_free(thread);
+        ukern_fast_free(args);
     }
-    free(thread_name);
+    ukern_fast_free(thread_name);
     return 0;
 }
 
@@ -1087,37 +1082,37 @@ int main(int argc, const char *argv[])
 
     /* listen for coopen requests */
     printf("Spawning request handlers...\n");
-    handler_args=malloc(sizeof(request_handler_args_t));
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COOPEN);
     pthread_attr_init(&thread_attrs);
     pthread_create(&coopen_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=malloc(sizeof(request_handler_args_t));
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COUNLOCK);
     pthread_attr_init(&thread_attrs);
     pthread_create(&counlock_handler,&thread_attrs,manage_requests,handler_args);
     
-    handler_args=malloc(sizeof(request_handler_args_t));
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COMUTEX_INIT);
     pthread_attr_init(&thread_attrs);
     pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=malloc(sizeof(request_handler_args_t));
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COLOCK);
     pthread_attr_init(&thread_attrs);
     pthread_create(&colock_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=malloc(sizeof(request_handler_args_t));
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COCARRIER_SEND);
     pthread_attr_init(&thread_attrs);
     pthread_create(&cocarrier_send_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=malloc(sizeof(request_handler_args_t));
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COCARRIER_RECV);
     pthread_attr_init(&thread_attrs);
     pthread_create(&cocarrier_recv_handler,&thread_attrs,manage_requests,handler_args);
 
-    handler_args=malloc(sizeof(request_handler_args_t));
+    handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COPOLL);
     pthread_attr_init(&thread_attrs);
     pthread_create(&copoll_handler,&thread_attrs,manage_requests,handler_args);
