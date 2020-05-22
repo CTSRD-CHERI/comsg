@@ -237,6 +237,8 @@ close_replyfd(void)
 {
 	int * fd;
 	fd=pthread_getspecific(replyfd);
+	if(fd==NULL)
+		return;
 	close(fd[0]);
 	close(fd[1]);
 	free(fd);
@@ -256,7 +258,7 @@ int * get_replyfd(void)
 {
 	int * fd;
 	int error;
-	pthread_once(&init_replyfd_once, init_replyfd);
+	
 	if (pthread_getspecific(replyfd))
 		return ((int *)pthread_getspecific(replyfd));
 	else
@@ -583,6 +585,7 @@ void commap_setup(void)
 	LIST_INIT(&map_tbl.maps);
 	pthread_atfork(NULL,NULL,clear_table_after_fork);
 	atexit(clear_table_at_exit);
+	pthread_once(&init_replyfd_once, init_replyfd);
 }
 
 __attribute__ ((destructor)) static 

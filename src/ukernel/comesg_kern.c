@@ -96,6 +96,11 @@ int rand_string(char * buf, long int len)
     {
         rand_no=random() % KEYSPACE;
         c=(char)rand_no+0x21;
+        while(c=='"')
+        {
+            rand_no=random() % KEYSPACE;
+            c=(char)rand_no+0x21;
+        }
         s[i]=c;
     }
     s[len-1]='\0';
@@ -649,7 +654,6 @@ void *coport_open(void *args)
             strcpy(table_entry.name,coport_args->args.name);
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
-            //printf("buffer_perms: %lx\n",cheri_getperm(port->buffer));
             prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
         }
         if(prt->type==COCARRIER)
@@ -657,6 +661,8 @@ void *coport_open(void *args)
             prt=cheri_seal(prt,seal_cap);
         }
         coport_args->port=prt;
+        printf("coport_perms: %lu\n",cheri_getperm(prt));
+
     }
     free(coport_args);
     return 0;

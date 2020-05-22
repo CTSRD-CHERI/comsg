@@ -35,7 +35,7 @@ run : ukernel cochatter
 ifdef dev
 	git commit -a --message="$(BUILD_TIME)"
 endif
-	$(CHERIBUILD_DIR)/cheribuild.py --skip-update -v $(FORCE) --with-libstatcounters \
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update -v $(FORCE) \
 	--cheribsd-purecap/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel' 'usr.bin/cochatter'" \
 	cheribsd-purecap disk-image-purecap run-purecap \
@@ -47,7 +47,7 @@ ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
 	-o $(OUTDIR)/comesg_ukernel $(BUILDDIR)/comesg_kern.o \
 	$(BUILDDIR)/coport_utils.o $(BUILDDIR)/sys_comutex.o \
 	$(BUILDDIR)/comutex.o $(BUILDDIR)/ukern_mman.o $(BUILDDIR)/ukern_commap.o
-	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) --with-libstatcounters \
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) \
 	--cheribsd-mips-purecap/subdir="'usr.bin/comesg_ukernel'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel'" \
 	cheribsd-mips-purecap disk-image-mips-purecap
@@ -55,7 +55,7 @@ ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
 cochatter : comsg_chatterer.o libcomsg.so
 	$(CC) $(CFLAGS)  $(LLDFLAGS) $(LIB_PARAMS) -lcomsg $(INC_PARAMS) \
 	-o $(OUTDIR)/cochatter $(BUILDDIR)/comsg_chatterer.o
-	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) --with-libstatcounters  \
+	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) \
 	--cheribsd-mips-purecap/subdir="'usr.bin/cochatter'" \
 	--cheribsd/subdir="'usr.bin/cochatter'" \
 	cheribsd-mips-purecap disk-image-mips-purecap

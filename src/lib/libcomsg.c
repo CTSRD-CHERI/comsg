@@ -110,7 +110,7 @@ int cosend(coport_t port, const void * buf, size_t len)
     coport_status_t status_val;
     coport_type_t type;
     
-    assert(cheri_getperm(port)&COPORT_PERM_SEND);
+    assert(cheri_getperm(port) & COPORT_PERM_SEND);
     assert(cheri_getsealed(port)!=0);
 
     if(cheri_gettype(port)==libcomsg_otype)

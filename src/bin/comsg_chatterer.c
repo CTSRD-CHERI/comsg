@@ -27,6 +27,8 @@
 #include "comsg.h"
 #include "coport.h"
 
+#define STATCOUNTERS_NO_CTOR_DTOR
+
 #include <inttypes.h>
 #include <time.h>
 #include <sys/types.h>
@@ -45,7 +47,9 @@ static const char * one_k_str = "SIqfubhhJOVdGGMvw09vqHs7S8miUyi1JBaFNGbtKYy4vUs
 static unsigned long int message_len = 10;
 static unsigned long int runs = 1;
 static unsigned long int total_size = 10;
-static const char * port_name = "benchmark_port";
+static const char * port_names[] = { "benchmark_portA", "benchmark_portB", "benchmark_portC" };
+static char * port_name;
+
 static coport_t port = (void * __capability)-1;
 
 //static const char * message_str = "";
@@ -101,10 +105,14 @@ void send_data(void)
 	clock_gettime(CLOCK_REALTIME,&end_timestamp);
 	timespecsub(&end_timestamp,&start_timestamp);
 	statcounters_diff(&result,&bank2,&bank1);
-	statcounters_dump(&result);
+	
 	ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
-	printf("transferred %lu bytes in %lf\n", total_size, ipc_time);
+	
+	printf("Sent %lu bytes in %lf\n", total_size, ipc_time);
 	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+	statcounters_dump(&result);
+	coclose(port);
+	port=NULL;
 }
 
 void receive_data(void)
@@ -151,18 +159,22 @@ void receive_data(void)
 	//printf("message received:%s\n",(char *)buffer);
 	timespecsub(&end,&start);
 	statcounters_diff(&result,&bank2,&bank1);
-	statcounters_dump(&result);
+	
 	ipc_time=(float)end.tv_sec + (float)end.tv_nsec / 1000000000;
-	printf("transferred %lu bytes in %lf\n", total_size, ipc_time);
-	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+	printf("Received %lu bytes in %lf\n", total_size, ipc_time);
+	
 
+	printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+	statcounters_dump(&result);
+	printf("----------------------------------------------------");
+	coclose(port);
+	port=NULL;
 	//if(port->type!=COCARRIER) free(buffer);
 }	
 
 static
 void prepare_message(void)
 {
-	total_size = message_len * runs;
 	unsigned int i, message_remaining, data_copied, to_copy;
 	message_str=calloc(message_len+1,sizeof(char));
 	if (message_len%1024==0)
@@ -183,7 +195,7 @@ void prepare_message(void)
 			to_copy=MIN(message_remaining,1024);
 			memcpy(message_str+data_copied,one_k_str,to_copy);
 			data_copied+=to_copy;
-			if (message_remaining<to_copy)
+			if (message_remaining==0)
 				break;
 			message_remaining-=to_copy;
 		}
@@ -198,11 +210,13 @@ int main(int argc, char * const argv[])
 	char * strptr;
 	pid_t p,pp;
 	int receiver = 0;
-
-	while((opt=getopt(argc,argv,"o:t:r:b:p"))!=-1)
+	port_name=malloc(strlen(port_names[0])+1);
+	while((opt=getopt(argc,argv,"ot:r:b:p"))!=-1)
 	{
 		switch(opt)
 		{
+			case 'o':
+				break;
 			case 'b':
 				message_len = strtol(optarg, &strptr, 10);
 				if (*optarg == '\0' || *strptr != '\0' || message_len <= 0)
@@ -225,7 +239,19 @@ int main(int argc, char * const argv[])
 		}
 	}
 	if (total_size % message_len !=0)
-		err(1,"total size must be a multiple of buffer size");
+	{
+		if(total_size!=10 && message_len !=10)
+		{
+			err(1,"total size must be a multiple of buffer size");
+		}
+		else
+		{
+			if(total_size==0)
+				total_size=message_len;
+			else if (message_len==10)
+				message_len=total_size;
+		}
+	}
 
 	if (!receiver)
 	{
@@ -233,11 +259,11 @@ int main(int argc, char * const argv[])
 		if (!p)
 		{
 			pp=getppid();
-			char ** new_argv = malloc(sizeof(char *)*argc);
+			char ** new_argv = malloc(sizeof(char *)*(argc+1));
 			for(int i = 0; i < argc; i++)
 			{
 				new_argv[i]=malloc((strlen(argv[i])+1)*sizeof(char));
-				strncpy(new_argv[i],argv[i],(strlen(argv[i])+1)*sizeof(char));
+				strcpy(new_argv[i],argv[i]);
 			}
 			new_argv[argc]=malloc((strlen("p")+1)*sizeof(char));
 			strcpy(new_argv[argc],"p");
@@ -247,11 +273,14 @@ int main(int argc, char * const argv[])
 		{
 			prepare_message();
 			coport_type=COCARRIER;
+			strcpy(port_name,port_names[0]);
 			for(unsigned int i = 0; i < runs; i++)
 				send_data();
+			strcpy(port_name,port_names[1]);
 			coport_type=COPIPE;
 			for(unsigned int i = 0; i < runs; i++)
 				send_data();
+			strcpy(port_name,port_names[2]);
 			coport_type=COCHANNEL;
 			for(unsigned int i = 0; i < runs; i++)
 				send_data();
@@ -261,11 +290,14 @@ int main(int argc, char * const argv[])
 	{
 		prepare_message();
 		coport_type=COCARRIER;
+		strcpy(port_name,port_names[0]);
 		for(unsigned int i = 0; i < runs; i++)
 			receive_data();
+		strcpy(port_name,port_names[1]);
 		coport_type=COPIPE;
 		for(unsigned int i = 0; i < runs; i++)
 			receive_data();
+		strcpy(port_name,port_names[2]);
 		coport_type=COCHANNEL;
 		for(unsigned int i = 0; i < runs; i++)
 			receive_data();

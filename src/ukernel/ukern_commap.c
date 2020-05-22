@@ -375,7 +375,7 @@ void *co_unmap(void *args)
 
     coaccept_init(&code,&data,arg_data->name,&target);
     arg_data->cap=target;
-    update_worker_args(arg_data,U_COMMAP);
+    update_worker_args(arg_data,U_COMUNMAP);
     for (;;)
     {
         coaccept(code,data,&cookie,comunmap_args,sizeof(comunmap_args_t));
