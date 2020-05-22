@@ -511,7 +511,7 @@ void * ukern_mman(void *args)
 				//message buffers have a much shorter lifespan than coport data structures
 				//and are subject to fewer requirements WRT sharing as they are only ever
 				//accessed by the microkernel
-				task->subject=calloc(1,task->len);
+				task->subject=calloc(task->len,sizeof(char));
 				break;
 			case MESSAGE_BUFFER_FREE:
 				free(task->subject);

@@ -228,11 +228,10 @@ int corecv(coport_t port, void ** buf, size_t len)
             }
         }
     }
-    
-    atomic_thread_fence(memory_order_acquire);
     switch(type)
     {
         case COCHANNEL:
+            atomic_thread_fence(memory_order_acquire);
             if (port->start==port->length)
             {
                 err(EAGAIN,"no message to receive");
@@ -259,6 +258,7 @@ int corecv(coport_t port, void ** buf, size_t len)
             memcpy(*buf,(char *)port->buffer+old_start, len);
             port->start=port->start+len;
             port->status=COPORT_OPEN;
+            atomic_thread_fence(memory_order_release);
             break;
         case COCARRIER:
             call=calloc(1,sizeof(cocall_cocarrier_send_t));
@@ -283,6 +283,7 @@ int corecv(coport_t port, void ** buf, size_t len)
             free(call);
             break;
         case COPIPE:
+            atomic_thread_fence(memory_order_acquire);
             port->buffer=*buf;
             atomic_store_explicit(&port->status,COPORT_READY,memory_order_relaxed);
             atomic_thread_fence(memory_order_release);
@@ -294,15 +295,13 @@ int corecv(coport_t port, void ** buf, size_t len)
                     break;
                 }
             }
-            port->buffer=NULL;
+            atomic_store_explicit(port->buffer,NULL,memory_order_release);
             break;
         default:
             err(1,"invalid coport type");
             break;
     }
-    atomic_thread_fence(memory_order_release);
     return len;
-    
 }
 
 coport_type_t coport_gettype(coport_t port)
