@@ -110,11 +110,11 @@ ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
 endif
 
-libcomsg.so: src/lib/libcomsg.c src/lib/coproc.c \
+libcomsg.so: src/lib/libcomsg.c src/lib/statcounters.c src/lib/coproc.c \
 	include/coproc.h include/coport.h  include/comutex.h\
 	src/ukernel/include/sys_comsg.h include/comsg.h \
 	include/commap.h src/lib/commap.c
-	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so src/lib/libcomsg.c src/lib/commap.c src/lib/coproc.c
+	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so src/lib/libcomsg.c src/lib/commap.c src/lib/coproc.c  src/lib/statcounters.c
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
 	rm -f $(CHERIBSD_DIR)/lib/libcomsg/*.o

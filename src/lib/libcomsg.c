@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <sched.h>
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
@@ -44,6 +45,7 @@
 #include "coproc.h"
 #include "coport.h"
 #include "comsg.h"
+#include <statcounters.h>
 
 #define LIBCOMSG_OTYPE 1
 //Sealing root
@@ -103,16 +105,18 @@ int cosend(coport_t port, const void * buf, size_t len)
     void * __capability switcher_code;
     void * __capability switcher_data;
     void * __capability func;
-    cocall_cocarrier_send_t call;
+    cocall_cocarrier_send_t * call;
 
     unsigned int old_end;
     int retval = len;
+    unsigned long unread;
     coport_status_t status_val;
     coport_type_t type;
-    
-    assert(cheri_getperm(port) & COPORT_PERM_SEND);
-    assert(cheri_getsealed(port)!=0);
 
+    int i = 0;
+    
+    //assert(cheri_getperm(port) & COPORT_PERM_SEND); //doesn't work properly
+    assert(cheri_getsealed(port)!=0);
     if(cheri_gettype(port)==libcomsg_otype)
     {
         port=cheri_unseal(port,libcomsg_sealroot);
@@ -120,8 +124,10 @@ int cosend(coport_t port, const void * buf, size_t len)
     }
     else
     {
+        call=calloc(1,sizeof(cocall_cocarrier_send_t));
         type=COCARRIER;
     }
+    assert(cheri_gettag(port));
     switch(type)
     {
         case COCHANNEL:
@@ -132,11 +138,21 @@ int cosend(coport_t port, const void * buf, size_t len)
                 {
                     break;
                 }
+                else
+                {
+                    i++;
+                    if(i%1000==0)
+                    {
+                        continue;
+                        sched_yield();
+                    }
+                }
             }
             atomic_thread_fence(memory_order_acquire);
-            if((port->length-((port->end-port->start)%port->length))<len)
+            unread=(port->end-port->start)%port->length;
+            if((port->length-unread)<len)
             {
-                err(1,"message too big/buffer is full");
+                err(EAGAIN,"cosend: message (%luB) too big/buffer (%luB) is full (%luB)",len,port->length,unread);
             }
             old_end=port->end;
             port->end=(port->end+len)%port->length;
@@ -144,30 +160,43 @@ int cosend(coport_t port, const void * buf, size_t len)
             {
                 memcpy((char *)port->buffer+old_end, buf, port->length-old_end);
                 memcpy((char *)port->buffer+old_end, (const char *)buf+port->length-old_end, (old_end+len)%port->length);
-
             }
             else
             {
                 memcpy((char *)port->buffer+old_end, buf, len);
             }
+            port->event|=COPOLL_IN;
+            if ((port->end-port->start)%port->length==port->length)
+            {
+                port->event&=~COPOLL_OUT;
+            }
             atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
             atomic_thread_fence(memory_order_release);
             break;
         case COCARRIER:
-            call.cocarrier=port;
-            call.message=cheri_csetbounds(buf,len);
-            call.message=cheri_andperm(call.message,COCARRIER_PERMS);
+            call->cocarrier=port;
+            call->message=cheri_csetbounds(buf,len);
+            call->status=0;
+            call->error=0;
+            call->message=cheri_andperm(call->message,COCARRIER_PERMS);
             
-            ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);
-            cocall(switcher_code,switcher_data,func,&call,sizeof(cocall_cocarrier_send_t));
-            if(call.status<0)
+            if(ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func)!=0)
+                perror("cosend: error in ukern_lookup");
+
+            if(cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t))!=0)
+                perror("cosend: error in cocall");
+            if(call->status==-1)
             {
-                warn("error occurred during cocarrier send");
-                errno=call.error;
-                return -1;
+                warn("cosend: error occurred during cocarrier send\n");
+                errno=call->error;
+                retval=-call->status;
             }
             else
-                retval=call.status;
+            {
+                retval=call->status;
+            }
+            if (cheri_gettag(call))
+                free(call);
             break;
         case COPIPE:
             for(;;)
@@ -177,24 +206,35 @@ int cosend(coport_t port, const void * buf, size_t len)
                 {
                     break;
                 }
+                else
+                {
+                    i++;
+                    if(i%1000==0)
+                    {
+                        continue;
+                        sched_yield();
+                    }
+                }
             }
             atomic_thread_fence(memory_order_acquire);
             if(cheri_getlen(port->buffer)<len)
             {
-                err(1,"recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
+                err(EMSGSIZE,"cosend: recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
                 errno=EINVAL;
                 return -1;
             }
             memcpy(port->buffer,buf,len);
-            atomic_store_explicit(&port->status,COPORT_DONE,memory_order_relaxed);
+            port->status=COPORT_DONE;
             atomic_thread_fence(memory_order_release);
+            sched_yield();
             break;
         default:
             errno=EINVAL;
             return -1;
     }
-    
-    return retval;
+    if(retval==-1)
+        return retval;
+    return len;
 }
 
 int corecv(coport_t port, void ** buf, size_t len)
@@ -204,11 +244,330 @@ int corecv(coport_t port, void ** buf, size_t len)
     void * __capability switcher_code;
     void * __capability switcher_data;
     void * __capability func;
-    cocall_cocarrier_send_t call;
+    cocall_cocarrier_send_t *call;
     coport_status_t status_val;
     coport_type_t type;
+    uint i=0;
+    int retval = len;
     
-    assert(cheri_getperm(port)&COPORT_PERM_RECV);
+    //assert(cheri_getperm(port)&COPORT_PERM_RECV); //doesn't work
+    assert(cheri_getsealed(port)!=0);
+    if(cheri_gettype(port)!=libcomsg_otype)
+    {
+        call=calloc(1,sizeof(cocall_cocarrier_send_t));
+        type=COCARRIER;
+    }
+    else
+    {
+        port=cheri_unseal(port,libcomsg_sealroot);
+        type=port->type;
+        
+    }
+    switch(type)
+    {
+        case COCHANNEL:
+            
+            for(;;)
+            {
+                status_val=COPORT_OPEN;
+                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+                {
+                    break;
+                }
+                else
+                {
+                    continue;
+                    i++;
+                    if (i%1000==0)
+                    {
+                        continue;
+                        sched_yield();
+                    }
+                }
+            }
+            atomic_thread_fence(memory_order_acquire);
+            if (port->start==port->length)
+            {
+                err(EAGAIN,"corecv: no message to receive");
+            }
+            if(port->length<len)
+            {
+                err(EMSGSIZE,"corecv: expected message length %lu larger than buffer", len);
+            }
+            if(!cheri_gettag(port->buffer))
+            {
+                err(EPIPE,"corecv: coport is closed");
+            }
+            old_start=port->start;
+            port->start=port->start+len;
+            memcpy(*buf,(char *)port->buffer+old_start, len);
+            port->start=port->start+len;
+            port->event|=COPOLL_OUT;
+            if (port->end==port->start)
+            {
+                port->event&=~COPOLL_IN;
+            }
+            port->status=COPORT_OPEN;
+            atomic_thread_fence(memory_order_release);
+            break;
+        case COCARRIER:
+            call->cocarrier=port;
+            call->error=0;
+            call->status=0;
+            ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
+            cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
+            if(call->status==-1)
+            {
+                errno=call->error;
+                warn("corecv: error occurred during cocarrier recv");
+                retval=call->status;
+            }
+            else 
+            {
+                if(cheri_getlen(call->message)!=len)
+                {
+                    warn("corecv: message length (%lu) does not match len (%lu)",cheri_getlen(call->message),len);
+                }
+                if((cheri_getperm(call->message)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
+                {
+                    err(1,"corecv: received capability does not grant read permissions");
+                }
+                memcpy(*buf,call->message,MIN(cheri_getlen(buf),MIN(cheri_getlen(call->message),len)));
+            
+            }
+            free(call);
+            break;
+        case COPIPE:
+            for(;;)
+            {
+                status_val=COPORT_OPEN;
+                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+                {
+                    i=0;
+                    break;
+                }
+                else
+                {
+                    continue;
+                    i++;
+                    if (i%1000==0)
+                    {
+                        continue;
+                        sched_yield();
+                    }
+                }
+            }
+            atomic_thread_fence(memory_order_acquire);
+            port->buffer=*buf;
+            port->status=COPORT_READY;
+            atomic_thread_fence(memory_order_release);
+            sched_yield();
+            for(;;)
+            {
+                status_val=COPORT_DONE;
+                if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_OPEN))
+                {
+                    port->buffer=NULL;
+                    break;
+                }
+                else
+                {
+                    continue;
+                    i++;
+                    if (i%3000==0)
+                    {
+                        continue;
+                        sched_yield();
+                    }
+                }
+            }
+            retval=0;
+            break;
+        default:
+            err(1,"corecv: invalid coport type");
+            break;
+    }
+    if(retval==-1)
+        return retval;
+    return len;
+}
+
+int benchmark_cosend(coport_t port, const void * buf, size_t len, FILE * fp)
+{
+    void * __capability switcher_code;
+    void * __capability switcher_data;
+    void * __capability func;
+    cocall_cocarrier_send_t * call;
+
+    unsigned int old_end;
+    int retval = len;
+    unsigned long unread;
+    coport_status_t status_val;
+    coport_type_t type;
+    int i = 0;
+
+    statcounters_bank_t bank_start,bank_end,result;
+    statcounters_bank_t oop_start,oop_end,oop_total;
+    statcounters_zero(&bank_start);
+    statcounters_zero(&bank_end);
+    statcounters_zero(&result);
+    statcounters_zero(&oop_start);
+    statcounters_zero(&oop_end);
+    statcounters_zero(&oop_total);
+    statcounters_sample(&bank_start);
+    //assert(cheri_getperm(port) & COPORT_PERM_SEND); //doesn't work properly
+    assert(cheri_getsealed(port)!=0);
+    if(cheri_gettype(port)==libcomsg_otype)
+    {
+        port=cheri_unseal(port,libcomsg_sealroot);
+        type=port->type;
+    }
+    else
+    {
+        call=calloc(1,sizeof(cocall_cocarrier_send_t));
+        type=COCARRIER;
+    }
+    assert(cheri_gettag(port));
+    switch(type)
+    {
+        case COCHANNEL:
+            for(;;)
+            {
+                status_val=COPORT_OPEN;
+                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+                {
+                    break;
+                }
+                else
+                {
+                    i++;
+                    if(i%7000==0)
+                    {
+                        statcounters_sample(&oop_start);
+                        if(sched_yield()==-1)
+                            continue;
+                        statcounters_sample(&oop_end);
+                        statcounters_diff(&oop_end,&oop_end,&oop_start);
+                        statcounters_add(&oop_total,&oop_total,&oop_end);
+                    }
+                }
+            }
+            atomic_thread_fence(memory_order_acquire);
+            unread=(port->end-port->start)%port->length;
+            if((port->length-unread)<len)
+            {
+                err(EAGAIN,"cosend: message (%luB) too big/buffer (%luB) is full (%luB)",len,port->length,unread);
+            }
+            old_end=port->end;
+            port->end=(port->end+len)%port->length;
+            if(old_end+len>port->length)
+            {
+                memcpy((char *)port->buffer+old_end, buf, port->length-old_end);
+                memcpy((char *)port->buffer+old_end, (const char *)buf+port->length-old_end, (old_end+len)%port->length);
+            }
+            else
+            {
+                memcpy((char *)port->buffer+old_end, buf, len);
+            }
+            port->event|=COPOLL_IN;
+            if ((port->end-port->start)%port->length==port->length)
+            {
+                port->event&=~COPOLL_OUT;
+            }
+            atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
+            atomic_thread_fence(memory_order_release);
+            break;
+        case COCARRIER:
+            call->cocarrier=port;
+            call->message=cheri_csetbounds(buf,len);
+            call->message=cheri_andperm(call->message,COCARRIER_PERMS);
+            
+            ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);
+            cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
+            if(call->status<0)
+            {
+                err(call->error,"cosend: error occurred during cocarrier send\n");
+                errno=call->error;
+                return -1;
+            }
+            else
+            {
+                retval=call->status;
+            }
+            if (cheri_gettag(call))
+                free(call);
+            break;
+        case COPIPE:
+            for(;;)
+            {
+                status_val=COPORT_READY;
+                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+                {
+                    break;
+                }
+                else
+                {
+                    i++;
+                    if(i%3000==0)
+                    {
+                        statcounters_sample(&oop_start);
+                        if(sched_yield()==-1)
+                            continue;
+                        statcounters_sample(&oop_end);
+                        statcounters_diff(&oop_end,&oop_end,&oop_start);
+                        statcounters_add(&oop_total,&oop_total,&oop_end);
+                    }
+                }
+            }
+            atomic_thread_fence(memory_order_acquire);
+            if(cheri_getlen(port->buffer)<len)
+            {
+                err(EMSGSIZE,"cosend: recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
+                errno=EINVAL;
+                return -1;
+            }
+            memcpy(port->buffer,buf,len);
+            port->status=COPORT_DONE;
+            atomic_thread_fence(memory_order_release);
+            break;
+        default:
+            errno=EINVAL;
+            return -1;
+    }
+    statcounters_sample(&bank_end);
+    statcounters_diff(&result,&bank_end,&bank_start);
+    statcounters_diff(&result,&result,&oop_total);
+    if(i==0)
+        statcounters_dump_with_args(&result,"COSEND","","malta",fp,CSV_HEADER);
+    else
+        statcounters_dump_with_args(&result,"COSEND","","malta",fp,CSV_NOHEADER);
+    return retval;
+}
+
+int benchmark_corecv(coport_t port, void ** buf, size_t len, FILE * fp)
+{
+    //we need more atomicity on changes to end
+    int old_start;
+    void * __capability switcher_code;
+    void * __capability switcher_data;
+    void * __capability func;
+    cocall_cocarrier_send_t *call;
+    coport_status_t status_val;
+    coport_type_t type;
+    uint i=0;
+    int retval = len;
+
+    statcounters_bank_t bank_start,bank_end,result;
+    statcounters_bank_t oop_start,oop_end,oop_total;
+    statcounters_zero(&bank_start);
+    statcounters_zero(&bank_end);
+    statcounters_zero(&result);
+    statcounters_zero(&oop_start);
+    statcounters_zero(&oop_end);
+    statcounters_zero(&oop_total);
+    statcounters_sample(&bank_start);
+
+    //assert(cheri_getperm(port)&COPORT_PERM_RECV); //doesn't work
     assert(cheri_getsealed(port)!=0);
     if(cheri_gettype(port)!=libcomsg_otype)
     {
@@ -218,31 +577,11 @@ int corecv(coport_t port, void ** buf, size_t len)
     {
         port=cheri_unseal(port,libcomsg_sealroot);
         type=port->type;
-        for(;;)
-        {
-            status_val=COPORT_OPEN;
-            if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
-            {
-                break;
-            }
-        }
+        
     }
     switch(type)
     {
         case COCHANNEL:
-            atomic_thread_fence(memory_order_acquire);
-            if (port->start==port->length)
-            {
-                err(EAGAIN,"no message to receive");
-            }
-            if(port->length<len)
-            {
-                err(EMSGSIZE,"message too big");
-            }
-            if(port->buffer==NULL)
-            {
-                err(EPIPE,"coport is closed");
-            }
             
             for(;;)
             {
@@ -251,38 +590,108 @@ int corecv(coport_t port, void ** buf, size_t len)
                 {
                     break;
                 }
+                else
+                {
+                    i++;
+                    if (i%7000==0)
+                    {
+                        
+                        statcounters_sample(&oop_start);
+                        if(sched_yield()==-1)
+                            continue;
+                        statcounters_sample(&oop_end);
+                        statcounters_diff(&oop_end,&oop_end,&oop_start);
+                        statcounters_add(&oop_total,&oop_total,&oop_end);
+                        
+                        continue;
+                    }
+                }
+            }
+            atomic_thread_fence(memory_order_acquire);
+            if (port->start==port->length)
+            {
+                err(EAGAIN,"corecv: no message to receive");
+            }
+            if(port->length<len)
+            {
+                err(EMSGSIZE,"corecv: expected message length %lu larger than buffer", len);
+            }
+            if(!cheri_gettag(port->buffer))
+            {
+                err(EPIPE,"corecv: coport is closed");
             }
             old_start=port->start;
             port->start=port->start+len;
             memcpy(*buf,(char *)port->buffer+old_start, len);
             port->start=port->start+len;
+            port->event|=COPOLL_OUT;
+            if (port->end==port->start)
+            {
+                port->event&=~COPOLL_IN;
+            }
             port->status=COPORT_OPEN;
             atomic_thread_fence(memory_order_release);
             break;
         case COCARRIER:
-            call.cocarrier=port;
-            
+            call=calloc(1,sizeof(cocall_cocarrier_send_t));
+            call->cocarrier=port;
+            call->error=0;
+            call->status=0;
+            call->message=NULL;
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
-            cocall(switcher_code,switcher_data,func,&call,sizeof(cocall_cocarrier_send_t));
-            if(call.status<0)
+            cocall(switcher_code,switcher_data,func,call,sizeof(cocall_cocarrier_send_t));
+            if(call->status<0)
             {
-                err(call.error,"error occurred during cocarrier recv");
+                errno=call->error;
+                warn("corecv: error occurred during cocarrier recv");
+                retval=call->status;
+                return retval;
             }
+            if(!cheri_gettag(call))
+            {
+                err(1,"corecv: received capability is untagged");
+            }
+            if(cheri_getlen(call->message)!=len)
+            {
+                warn("corecv: message length (%lu) does not match len (%lu)",cheri_getlen(call->message),len);
+            }
+            if((cheri_getperm(call->message)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
+            {
+                err(1,"corecv: received capability does not grant read permissions");
+            }
+            memcpy(*buf,call->message,MIN(cheri_getlen(buf),MIN(cheri_getlen(call->message),len)));
             
-             if(cheri_getlen(call.message)!=len)
-            {
-                warn("message length (%lu) does not match len (%lu)",cheri_getlen(buf),len);
-            }
-            if((cheri_getperm(call.message)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP))==0)
-            {
-                err(1,"received capability does not grant read permissions");
-            }
-            memcpy(*buf,call.message,MIN(cheri_getlen(buf),MIN(cheri_getlen(call.message),len)));
+            free(call);
             break;
         case COPIPE:
+            for(;;)
+            {
+                status_val=COPORT_OPEN;
+                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+                {
+                    i=0;
+                    break;
+                }
+                else
+                {
+                    i++;
+                    if (i%3000==0)
+                    {
+                        
+                        statcounters_sample(&oop_start);
+                        if(sched_yield()==-1)
+                            continue;
+                        statcounters_sample(&oop_end);
+                        statcounters_diff(&oop_end,&oop_end,&oop_start);
+                        statcounters_add(&oop_total,&oop_total,&oop_end);
+                        
+                        continue;
+                    }
+                }
+            }
             atomic_thread_fence(memory_order_acquire);
             port->buffer=*buf;
-            atomic_store_explicit(&port->status,COPORT_READY,memory_order_relaxed);
+            port->status=COPORT_READY;
             atomic_thread_fence(memory_order_release);
             for(;;)
             {
@@ -292,12 +701,33 @@ int corecv(coport_t port, void ** buf, size_t len)
                     port->buffer=NULL;
                     break;
                 }
+                else
+                {
+                    i++;
+                    if (i%3000==0)
+                    {
+                        statcounters_sample(&oop_start);
+                        if(sched_yield()==-1)
+                            continue;
+                        statcounters_sample(&oop_end);
+                        statcounters_diff(&oop_end,&oop_end,&oop_start);
+                        statcounters_add(&oop_total,&oop_total,&oop_end);
+                        continue;
+                    }
+                }
             }
             break;
         default:
-            err(1,"invalid coport type");
+            err(1,"corecv: invalid coport type");
             break;
     }
+    statcounters_sample(&bank_end);
+    statcounters_diff(&result,&bank_end,&bank_start);
+    statcounters_diff(&result,&result,&oop_total);
+    if(i==0)
+        statcounters_dump_with_args(&result,"CORECV","","malta",fp,CSV_HEADER);
+    else
+        statcounters_dump_with_args(&result,"CORECV","","malta",fp,CSV_NOHEADER);
     return len;
 }
 
@@ -326,7 +756,6 @@ pollcoport_t make_pollcoport(coport_t port, coport_eventmask_t events)
 {
     pollcoport_t pcpt;
 
-    assert(coport_gettype(port)==COCARRIER);
     pcpt.coport=port;
     pcpt.events=events;
     pcpt.revents=0;
@@ -343,21 +772,18 @@ int coclose(coport_t port)
     return 0;
 }
 
-int copoll(pollcoport_t * coports, int ncoports, int timeout)
+static
+int cocarrier_poll(pollcoport_t * coports, int ncoports, int timeout)
 {
     void * __capability switcher_code;
     void * __capability switcher_data;
     void * __capability func;
-
     copoll_args_t * call;
     pollcoport_t * call_coports;
+
+
     uint error;
     int status;
-
-    for(int i = 0; i<ncoports; i++)
-
-    /* cocall setup */
-    //TODO-PBB: Only do this once.
     call=calloc(1,sizeof(copoll_args_t));
     //allocate our own for safety purposes
     call_coports=calloc(ncoports,sizeof(pollcoport_t));
@@ -366,7 +792,8 @@ int copoll(pollcoport_t * coports, int ncoports, int timeout)
     call->coports=call_coports;
     call->ncoports=ncoports;
     call->timeout=timeout;
-
+    /* cocall setup */
+    //TODO-PBB: Only do this once.
 
     //possible deferred call to malloc ends up in cocall, causing exceptions?
     error=ukern_lookup(&switcher_code,&switcher_data,U_COPOLL,&func);
@@ -377,7 +804,7 @@ int copoll(pollcoport_t * coports, int ncoports, int timeout)
         return -1;
     }
     error=cocall(switcher_code,switcher_data,func,call,sizeof(cocall_coopen_t));
-
+    assert(error==0);
     errno=call->error;
     status=call->status;
     if(status!=0)
@@ -391,6 +818,39 @@ int copoll(pollcoport_t * coports, int ncoports, int timeout)
     free(call);
 
     return (status);
+}
+
+int copoll(pollcoport_t * coports, int ncoports, int timeout)
+{
+    
+
+    assert(ncoports>0);
+    assert(cheri_gettag(coports));
+
+    for(int i = 1; i<ncoports; i++)
+        assert((coport_gettype(coports[i].coport)==coport_gettype(coports[i-1].coport))||(coport_gettype(coports[i].coport)!=COCARRIER && (coport_gettype(coports[i-1].coport)!=COCARRIER)));
+
+    
+    if(coport_gettype(coports[0].coport)==COCARRIER)
+        return(cocarrier_poll(coports,ncoports,timeout));
+
+    err(ENOSYS,"copoll: copoll on non-cocarrier coports not yet implemented");
+    for(;;sched_yield())
+    {
+        for(int i = 0;i<ncoports;i++)
+        {
+            switch(coport_gettype(coports[i].coport))
+            {
+                case COPIPE:
+                    break;
+                case COCHANNEL:
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    
 }
 
 __attribute__ ((constructor)) static 

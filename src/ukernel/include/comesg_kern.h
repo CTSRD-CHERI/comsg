@@ -51,7 +51,7 @@
 typedef struct _worker_args_t 
 {
 	char name[LOOKUP_STRING_LEN];
-	_Atomic(void * __capability) cap;
+	void * __capability cap;
 } worker_args_t;
 
 typedef struct _worker_map_entry_t
@@ -94,7 +94,7 @@ typedef struct _comutex_tbl_t
 
 
 int generate_id(void);
-int rand_string(char * buf,long int len);
+int rand_string(char * buf, unsigned long len);
 int add_port(coport_tbl_entry_t entry);
 int add_mutex(comutex_tbl_entry_t entry);
 int lookup_port(char * port_name,sys_coport_t ** port_buf);

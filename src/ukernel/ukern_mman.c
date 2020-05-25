@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <err.h>
 #include <errno.h>
-
+#include <assert.h>
 #include "ukern_mman.h"
 #include "ukern_params.h"
 #include "sys_comsg.h"
@@ -43,9 +43,10 @@ int reserve_region(void)
 	{
 		err(errno,"mapping region failed\n");
 	}
-	entry.mem=new_page;
+	entry.map_cap=new_page;
+	entry.mem=cheri_setoffset(new_page,cheri_getlen(new_page)-1);
 	entry.type=REGION_RESERVED;
-	entry.size=UKERN_MAP_LEN;
+	entry.size=cheri_getlen(new_page);;
 	entry.free=entry.size;
 	pthread_mutex_init(&entry.lock,NULL);
 	memcpy(&table[region_table.next],&entry,sizeof(region_table_entry_t));
@@ -74,9 +75,10 @@ int map_region(void)
 	{
 		err(errno,"mapping region failed\n");
 	}
-	entry.mem=new_page;
+	entry.map_cap=new_page;
+	entry.mem=cheri_setoffset(new_page,cheri_getlen(new_page)-1);;
 	entry.type=REGION_MAPPED;
-	entry.size=UKERN_MAP_LEN;
+	entry.size=cheri_getlen(new_page);
 	entry.free=entry.size;
 	pthread_mutex_init(&entry.lock,NULL);
 	memcpy(&region_table.table[region_table.next],&entry,sizeof(region_table_entry_t));
@@ -99,7 +101,10 @@ int map_reservation(int index)
 	printf("region is at %lx\n", cheri_getaddress(region));
 	mapped=EXTEND_UKERN(region->mem,region->size);
 	// explicitly set offset to make it clear that we use it 
-	region->mem=cheri_setoffset(mapped,0);
+	region->mem=cheri_setoffset(mapped,cheri_getlen(mapped)-1);
+	region->map_cap=mapped;
+	region->size=cheri_getlen(region->mem);
+	region->free=region->size;
 	region->type=REGION_MAPPED;
 	pthread_mutex_unlock(&region_table.lock);
 	return 0;
@@ -109,6 +114,8 @@ int check_region(int entry_index, size_t len)
 {
 	int error;
 	region_table_entry_t * entry = &region_table.table[entry_index];
+	if (entry->type==REGION_NONE)
+		return 0;
 	pthread_mutex_lock(&entry->lock);
 	if(entry->type==REGION_RESERVED)
 	{
@@ -120,29 +127,34 @@ int check_region(int entry_index, size_t len)
 	}
 	else if (entry->type==REGION_NONE)
 	{
+		//not reached
 		error=map_region();
-		if(error!=0)
+		if(error==-1)
 		{
 			err(error,"could not map region at index %d\n",entry_index);
 		}
 	}
-	if (entry->free>len)
+	if (entry->free>CHERI_REPRESENTABLE_LENGTH(len))
 	{
 		pthread_mutex_unlock(&entry->lock);
-		return true;
+		return 1;
 	}
 	pthread_mutex_unlock(&entry->lock);
-	return false;
+	return 0;
 }
 
-
-
-region_table_entry_t * ukern_find_memory(int hint,void ** dest_cap, size_t len)
+static
+region_table_entry_t * ukern_find_memory(void ** dest_cap, size_t len)
 {
 	int i,index,error;
-	void * __capability memory;
-	int new_offset;
+	void * __capability memory = NULL;
+	void * __capability new_entry = NULL;
+	int new_offset = 0;
+	int new_top = 0;
+	int j;
 	region_table_entry_t * entry;
+	//unsigned long int mask;
+	unsigned long int base;
 
 	if (len>MAX_BUFFER_SIZE)
 	{
@@ -151,21 +163,48 @@ region_table_entry_t * ukern_find_memory(int hint,void ** dest_cap, size_t len)
 	/* walk the region table for the next region with space*/
 	/* if this gets multithreaded this should be write-blocking locks */
 	/* this is effectively just a placeholder for now */
+	len=CHERI_REPRESENTABLE_LENGTH(len);
+	//mask=CHERI_REPRESENTABLE_ALIGNMENT(len);
 	pthread_mutex_lock(&region_table.lock);
-	if(region_table.length==0)
+	if(region_table.length<=0)
 	{
 		index=map_region();
+	}
+	
+	assert(region_table.length!=0);
+	for (i = 0; i < region_table.length; ++i)
+	{
+		index=i;
 		entry=&region_table.table[index];
+		if(entry->type==REGION_NONE)
+		{
+			error=map_region();
+			if(error!=index)
+			{
+				err(1,"region mapping error");
+			}
+		}
 		pthread_mutex_lock(&entry->lock);
 		if (check_region(index,len))
 		{
-			memory=cheri_csetbounds(entry->mem,len);
+			base=CHERI_REPRESENTABLE_BASE(cheri_gettop(entry->mem)-len,len);
+			new_entry=cheri_setaddress(entry->mem,base);
+			memory=cheri_csetboundsexact(new_entry,len);
 			//printf("memory1 perms: %lx\n",cheri_getperm(memory));
 			memory=cheri_andperm(memory,BUFFER_PERMS);
 			//printf("memory2 perms: %lx\n",cheri_getperm(memory));
-			new_offset=cheri_getoffset(entry->mem)+len;
-			entry->mem=cheri_setoffset(entry->mem,new_offset);
-			entry->free=entry->free-len;
+			new_entry=cheri_setoffset(new_entry,0);
+			new_offset=CHERI_REPRESENTABLE_LENGTH(cheri_getlen(entry->mem)-cheri_getlen(memory));
+			new_entry=cheri_csetboundsexact(new_entry,new_offset);
+			j=1;
+			while(cheri_getbase(memory)<=cheri_gettop(new_entry))
+			{
+				j*=2;
+				new_top=CHERI_REPRESENTABLE_LENGTH(new_offset-j);
+				new_entry=cheri_csetboundsexact(new_entry,new_top);
+			}						
+			entry->mem=cheri_setaddress(new_entry,cheri_gettop(new_entry)-1);
+			entry->free=entry->free-cheri_getlen(memory);
 
 			pthread_mutex_unlock(&entry->lock);
 			pthread_mutex_unlock(&region_table.lock);
@@ -173,43 +212,6 @@ region_table_entry_t * ukern_find_memory(int hint,void ** dest_cap, size_t len)
 			return entry;
 		}
 		pthread_mutex_unlock(&entry->lock);
-	}
-	else
-	{
-		for (i = 0; i < region_table.length; ++i)
-		{
-			index=(i+hint)%region_table.length;
-			entry=&region_table.table[index];
-			if(entry->type==REGION_NONE)
-			{
-				error=map_region();
-				if(error!=index)
-				{
-					err(1,"region mapping error");
-				}
-			}
-			pthread_mutex_lock(&entry->lock);
-			if (check_region(index,len))
-			{
-				memory=cheri_csetbounds(entry->mem,len);
-				//printf("memory1 perms: %lx\n",cheri_getperm(memory));
-				memory=cheri_andperm(memory,BUFFER_PERMS);
-				//printf("memory2 perms: %lx\n",cheri_getperm(memory));
-				new_offset=cheri_getoffset(entry->mem)+len;
-				entry->mem=cheri_setoffset(entry->mem,new_offset);
-				entry->free=entry->free-len;
-
-				pthread_mutex_unlock(&entry->lock);
-				pthread_mutex_unlock(&region_table.lock);
-				*dest_cap=memory;
-				return entry;
-			}
-			pthread_mutex_unlock(&entry->lock);
-			/*if(entry->size!=entry->free)
-			{
-				//walk some data structure looking for free buffers that might suit our purposes
-			}*/
-		}
 	}
 	pthread_mutex_unlock(&region_table.lock);
 	return NULL;
@@ -229,12 +231,12 @@ int map_new_region(void)
 void * get_buffer_memory(region_table_entry_t ** region_dst,size_t len)
 {
 	int region_idx;
-	void * buffer;
+	void * __capability buffer = NULL;
 	region_table_entry_t * region;
 
 	region_idx=region_table.next;
-	region=ukern_find_memory(region_idx,&buffer,len);
-	if (buffer==NULL)
+	region=ukern_find_memory(&buffer,len);
+	if (region==NULL || buffer==NULL)
 	{
 		err(1,"unknown memory allocation error\n");
 	}
@@ -266,7 +268,7 @@ void buffer_free(void * __capability buf)
 {
 	/* just a placeholder really */
 	/* later i want to add facility to reuse/clean up old buffers */
-	//later is now
+	int can_free = 1;
 	buffer_table_entry_t buf_entry;
 	pthread_mutex_lock(&buffer_table.lock);
 	for (int i = 0; i < buffer_table.length; ++i)
@@ -278,6 +280,22 @@ void buffer_free(void * __capability buf)
 			{
 				buf_entry.type=BUFFER_FREED;
 				memset(buf_entry.mem,0,cheri_getlen(buf_entry.mem));
+				if(buf_entry.region!=&region_table.table[region_table.length-1])
+				{
+					for (int j = 0; i < buffer_table.length; ++j)
+					{
+						if(buffer_table.table[j].region==buf_entry.region)
+						{
+							if(buffer_table.table[j].type!=BUFFER_FREED)
+							{
+								can_free=0;
+								break;
+							}
+						}
+					}
+					if(can_free)
+						munmap(buf_entry.region->map_cap,UKERN_MAP_LEN);
+				}
 				break;
 			}
 		}
@@ -303,13 +321,18 @@ int region_table_setup(void)
 {
 	pthread_mutexattr_t mtx_attr;
 	pthread_mutexattr_init(&mtx_attr);
-	pthread_mutexattr_settype(&mtx_attr,PTHREAD_MUTEX_RECURSIVE);
+
+	errno=pthread_mutexattr_settype(&mtx_attr,PTHREAD_MUTEX_RECURSIVE);
+	if(errno)
+		perror("could not set mutex type\n");
+	
 	
 	region_table.length=0;
 	region_table.next=0;
-	region_table.table=calloc(MAX_COPORTS*2,sizeof(region_table_entry_t));
+	region_table.table=calloc(MAX_COPORTS*WORKER_COUNT,sizeof(region_table_entry_t));
+	pthread_mutex_init(&region_table.lock,&mtx_attr);
 
-	return pthread_mutex_init(&region_table.lock,&mtx_attr);
+	return 0;
 }
 
 int work_queue_setup(int len)

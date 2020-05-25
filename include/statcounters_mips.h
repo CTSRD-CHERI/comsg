@@ -1,6 +1,12 @@
-/*
- * Copyright (c) 2020 Peter S. Blandford-Baker
- * All rights reserved.
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2019 Alex Richardson
+ *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,17 +29,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _UKERN_PARAMS_H
-#define _UKERN_PARAMS_H
 
-#define WORKER_COUNT 1
-#define THREAD_STRING_LEN 16
-#define KEYSPACE 62
+/* This header provides statcounters_get_foo_count() for all statcounters supported by BERI */
 
-#define MAX_COMUTEXES 20
-#define MAX_COPOLL 255
-
-#define UKERN_PRIV 1
-
-
-#endif
+#define STATCOUNTER_ITEM(name, X, Y)	\
+static inline uint64_t statcounters_get_##name##_count(void)   \
+{                                           \
+    uint64_t ret;                           \
+    __asm __volatile(".word (0x1f << 26) | (0x0 << 21) | (12 << 16) | ("#X" << 11) | ( "#Y"  << 6) | 0x3b\n\tmove %0,$12" : "=r" (ret) :: "$12"); \
+    return ret;                             \
+}
+#include "statcounters_mips.inc"
+#undef STATCOUNTER_ITEM
