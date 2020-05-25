@@ -65,6 +65,7 @@ static long sealed_otype;
 pthread_mutex_t global_copoll_lock;
 pthread_cond_t global_cosend_cond;
 
+static pthread_mutex_t worker_map_lock;
 worker_map_entry_t worker_map[U_FUNCTIONS];
 worker_map_entry_t private_worker_map[UKERN_PRIV];
 
@@ -84,15 +85,23 @@ int generate_id(void)
     return random();
 }
 
-int rand_string(char * buf, long int len)
+static
+void debug_noop(int i)
+{
+    if(i>0)
+        printf("true");
+    return;
+}
+
+int rand_string(char * buf, unsigned long len)
 {
     char c;
     char * s;
     int rand_no;
-    long int i;
-    s = (char *) malloc(sizeof(char)*len);
+    unsigned long i;
+    s = buf;
     srandomdev();
-    for (i = 0; i < len-1; i++)
+    for (i = 0; i < MIN(len-1,cheri_getlen(buf)); i++)
     {
         rand_no=random() % KEYSPACE;
         if (rand_no<10)
@@ -103,9 +112,7 @@ int rand_string(char * buf, long int len)
             c=(char)(rand_no % 26)+'a';
         s[i]=c;
     }
-    s[len-1]='\0';
-    strcpy(buf,s);
-    free(s);
+    s[MIN(len-1,cheri_getlen(buf))]='\0';
     return i;
 }
 
@@ -162,7 +169,7 @@ int lookup_port(char * port_name,sys_coport_t ** port_buf)
     }
     //printf("port %s not found",port_name);
     *port_buf=NULL;
-    return 1;
+    return -1;
 }
 
 int lookup_mutex(char * mtx_name,sys_comutex_t ** mtx_buf)
@@ -342,7 +349,7 @@ void *cocarrier_poll(void *args)
     	//This could likely be organized much better.
     	//When the refactor comes, this will need an appointment with Dr Guillotin
         error=coaccept(sw_code,sw_data,&caller_cookie,copoll_args,sizeof(copoll_args_t));
-        targets=ukern_fast_malloc(sizeof(pollcoport_t)*copoll_args->ncoports);
+        targets=ukern_malloc(sizeof(pollcoport_t)*copoll_args->ncoports);
         memcpy(targets,copoll_args->coports,sizeof(pollcoport_t)*copoll_args->ncoports);
         ncoports=copoll_args->ncoports;
         for(i = 0; i<ncoports;i++)
@@ -433,9 +440,10 @@ void *cocarrier_poll(void *args)
 void *cocarrier_recv(void *args)
 {
 	int error;
-    uint index;
-    //coport_status_t status;
-    uint len;
+    size_t index=0;
+    size_t new_len=0;
+    coport_status_t status;
+    //uint len;
 
     worker_args_t * data = args;
     cocall_cocarrier_send_t * cocarrier_send_args;
@@ -448,13 +456,14 @@ void *cocarrier_recv(void *args)
     sys_coport_t * cocarrier;
     void ** __capability cocarrier_buf;
 
-    cocarrier_send_args=malloc(sizeof(cocall_cocarrier_send_t));
+    cocarrier_send_args=ukern_malloc(sizeof(cocall_cocarrier_send_t));
 
     error=coaccept_init(&sw_code,&sw_data,data->name,&target);
     data->cap=target;
     update_worker_args(data,U_COCARRIER_RECV);
     for(;;)
     {
+        debug_noop(index);
     	error=coaccept(sw_code,sw_data,&caller_cookie,cocarrier_send_args,sizeof(cocall_cocarrier_send_t));
         //perform checks
         cocarrier=cocarrier_send_args->cocarrier;
@@ -466,36 +475,44 @@ void *cocarrier_recv(void *args)
         }
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         cocarrier_buf=cocarrier->buffer;
-        atomic_thread_fence(memory_order_acquire);
-        atomic_store_explicit(&cocarrier->status,COPORT_BUSY,memory_order_release);
-        index=cocarrier->start;
-        if(cocarrier->length==0)
+        status=COPORT_OPEN;
+        while(!atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
         {
-                cocarrier->event&=COPOLL_RERR;
-                atomic_thread_fence(memory_order_release);
-
-                //buffer is empty - return error
-                cocarrier_send_args->status=-1;
-                cocarrier_send_args->error=EAGAIN;
-                continue;
+            status=COPORT_OPEN;
         }
-        len=MIN(cheri_getlen(cocarrier_buf[index]),cheri_getlen(cocarrier_send_args->message));
+        atomic_thread_fence(memory_order_acq_rel);
+        //atomic_store_explicit(&cocarrier->status,COPORT_BUSY,memory_order_release);
+        if(cocarrier->length==0 || !(cocarrier->event & COPOLL_IN))
+        {
+            cocarrier->event|=COPOLL_RERR;
+            atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
+            atomic_thread_fence(memory_order_release);
+
+            //buffer is empty - return error
+            cocarrier_send_args->status=-1;
+            cocarrier_send_args->error=EAGAIN;
+            continue;
+        }
+        index=cocarrier->start++;
+        new_len=--cocarrier->length;
         cocarrier_send_args->message=cocarrier_buf[index];
-        cocarrier->start++;
-        cocarrier->length--;
-        if (cocarrier->length==0)
-        	cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR) & ~COPOLL_IN;
+        if (new_len==0)
+        {
+        	cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~(COPOLL_RERR | COPOLL_IN));
+        }
         else
+        {
             cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR);
-        
+        }
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
-        atomic_thread_fence(memory_order_release);
+
+        atomic_thread_fence(memory_order_acq_rel);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
             pthread_cond_signal(&global_cosend_cond);
         }
 
-        cocarrier_send_args->status=len;
+        cocarrier_send_args->status=cheri_getlen(cocarrier_send_args->message);
         cocarrier_send_args->error=0;
     }
     return args;
@@ -505,12 +522,14 @@ void *cocarrier_send(void *args)
 {
     //todo implement
     int error;
-    size_t index;
-    //coport_status_t status;
+    size_t index = 0;
+    size_t new_len = 0;
+    coport_status_t status;
 
     worker_args_t * data = args;
     cocall_cocarrier_send_t * cocarrier_send_args;
 
+    
     void * __capability sw_code;
     void * __capability sw_data;
     void * __capability caller_cookie;
@@ -518,85 +537,89 @@ void *cocarrier_send(void *args)
 
     sys_coport_t * cocarrier;
     void * __capability msg_buf;
+    void * __capability call_buf;
     void ** __capability cocarrier_buf;
 
-    cocarrier_send_args=malloc(sizeof(cocall_cocarrier_send_t));
+    cocarrier_send_args=ukern_malloc(sizeof(cocall_cocarrier_send_t));
 
     error=coaccept_init(&sw_code,&sw_data,data->name,&target);
     data->cap=target;
     update_worker_args(data,U_COCARRIER_SEND);
     for(;;)
     {
+        debug_noop(index);
+
         error=coaccept(sw_code,sw_data,&caller_cookie,cocarrier_send_args,sizeof(cocall_cocarrier_send_t));
+        call_buf=cocarrier_send_args->message;
+        //allocate ukernel owned buffer
+        msg_buf=ukern_malloc(cheri_getlen(cocarrier_send_args->message));
+        //copy data into buffer
+        memcpy(msg_buf,call_buf,cheri_getlen(cocarrier_send_args->message));
         //perform checks
         cocarrier=cocarrier_send_args->cocarrier;
         if(!(valid_cocarrier(cocarrier)))
         {
             cocarrier_send_args->status=-1;
             cocarrier_send_args->error=EINVAL;
+            ukern_free(msg_buf);
+            printf("cocarrier_send: invalid cocarrier\n");
 
             continue;
         }
-        cocarrier=cheri_unseal(cocarrier,root_seal_cap);
-        //allocate ukernel owned buffer
-        msg_buf=ukern_malloc(cheri_getlen(cocarrier_send_args->message));
-        //copy data into buffer
-        memcpy(msg_buf,cocarrier_send_args->message,cheri_getlen(cocarrier_send_args->message));
         //reduce cap permissions on buffer
         msg_buf=cheri_andperm(msg_buf,COCARRIER_PERMS);
         //toggle state to busy
+        cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         cocarrier_buf=cocarrier->buffer;
-        //add buffer to cocarrrier
-        cocarrier_buf=cocarrier->buffer;
-        atomic_thread_fence(memory_order_acquire);
-        index=(cocarrier->end+1)%COCARRIER_SIZE;
-        if(cocarrier->length>0)
+        //
+        status=COPORT_OPEN;
+        while(!atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
         {
-            if(index==cocarrier->start)
-            {
-                cocarrier->event&=COPOLL_WERR;
-                //cocarrier->status=COPORT_OPEN;
-                atomic_thread_fence(memory_order_release);
-                ukern_free(msg_buf);
-
-                //buffer is full - return error
-                cocarrier_send_args->status=-1;
-                cocarrier_send_args->error=EAGAIN;
-                continue;
-            }
+            status=COPORT_OPEN;
+            pthread_yield();
         }
+        //add buffer to cocarrrier
+        atomic_thread_fence(memory_order_acq_rel);
+        if(cocarrier->length>=COCARRIER_SIZE || !(cocarrier->event & COPOLL_OUT))
+        {
+            cocarrier->event|=COPOLL_WERR;
+            cocarrier->status=COPORT_OPEN;
+            atomic_thread_fence(memory_order_acq_rel);
+            ukern_free(msg_buf);
+            printf("cocarrier_send: buffer full\n");
+            //buffer is full - return error
+            cocarrier_send_args->status=-1;
+            cocarrier_send_args->error=EAGAIN;
+            continue;
+        }
+        index=++cocarrier->end;
+        new_len=++cocarrier->length;
         if(cheri_gettag(cocarrier_buf[index]))
         {
         	//auto overwrite old messages once we've wrapped around
         	ukern_free(cocarrier_buf[index]);
+            cocarrier_buf[index]=NULL;
         }
         cocarrier_buf[index]=msg_buf;
-        cocarrier->end=index;
-        cocarrier->length++;
-        
+
         if(cocarrier->length==COCARRIER_SIZE)
-        	cocarrier->event=(((COPOLL_IN | cocarrier->event) & ~COPOLL_WERR) & ~COPOLL_OUT);
+        	cocarrier->event=((COPOLL_IN | cocarrier->event) & ~(COPOLL_WERR | COPOLL_OUT));
         else
             cocarrier->event=(COPOLL_IN | cocarrier->event) & ~COPOLL_WERR;
-        //check if anyone is waiting on messages to arrive
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
-        atomic_thread_fence(memory_order_release);
+
+        atomic_thread_fence(memory_order_acq_rel);
+
+        //check if anyone is waiting on messages to arrive
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
             pthread_cond_signal(&global_cosend_cond);
         }
         //release
-<<<<<<< HEAD
-        atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
-        atomic_thread_fence(memory_order_release);
 
-        cocarrier_send_args->status=0;
-=======
-       
-        cocarrier_send_args->status=cheri_getlen(cocarrier_send_args->message);
->>>>>>> 98a90f2... Many additions
+        cocarrier_send_args->status=cheri_getlen(msg_buf);
         cocarrier_send_args->error=0;
-        
+        msg_buf=NULL;
     }
     free(cocarrier_send_args);
     return 0;
@@ -639,8 +662,8 @@ void *coport_open(void *args)
         /* check if port exists */
         /* if it doesn't, we need to be sure we don't get into a race to create it */
 
-        lookup=lookup_port(coport_args->args.name,&prt);
-        if(lookup==1)
+        lookup=lookup_port(port_name,&prt);
+        if(lookup==-1)
         {
             
             /* if it doesn't, set up coport */
@@ -671,7 +694,7 @@ void *coport_open(void *args)
         //printf("coport_perms: %lu\n",cheri_getperm(prt));
 
     }
-    free(coport_args);
+    ukern_free(coport_args);
     return 0;
 }
 
@@ -883,7 +906,7 @@ int coaccept_init(
     error=cosetup(COSETUP_COACCEPT,code_cap,data_cap);
     if (error!=0)
     {
-        err(1,"ERROR: Could not cosetup.\n");
+        err(errno,"ERROR: Could not cosetup.\n");
     }
     //printf("Attempting to coregister with name %s\n",target_name);
 
@@ -932,12 +955,11 @@ int comutex_tbl_setup(void)
 
 int spawn_workers(void * func, pthread_t * threads, const char * name)
 {
-    pthread_t * thread;
     pthread_attr_t thread_attrs;
     worker_args_t * args;
     int e;
     int w_i;
-    char * thread_name;
+    char thread_name[LOOKUP_STRING_LEN];
     bool private;
 
     if (name[0]=='_')
@@ -945,8 +967,7 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     else
     	private=false;
     /* split into threads */
-    thread_name=ukern_fast_malloc(THREAD_STRING_LEN*sizeof(char));
-    threads=(pthread_t *) ukern_malloc(WORKER_COUNT*sizeof(pthread_t));
+    pthread_mutex_lock(&worker_map_lock);
     if (!private)
     {
         w_i=atomic_fetch_add(&next_worker_i,1);
@@ -958,18 +979,17 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     	strcpy(private_worker_map[w_i].func_name,name);
     }
     //  printf("workers for %s\n",name);
-
+    pthread_attr_init(&thread_attrs);
     for (int i = 0; i < WORKER_COUNT; i++)
     {
-        thread=ukern_fast_malloc(sizeof(pthread_t));
-        args=ukern_fast_malloc(sizeof(worker_args_t));
-        rand_string(thread_name,THREAD_STRING_LEN);
+        args=ukern_malloc(sizeof(worker_args_t));
+        rand_string(&thread_name[0],THREAD_STRING_LEN);
         strcpy(args->name,thread_name);
         args->cap=NULL;
         //printf("%s",thread_name);
-        e=pthread_attr_init(&thread_attrs);
+        
         //printf("thr_name %s\n",args->name);
-        e=pthread_create(thread,&thread_attrs,func,args);
+        e=pthread_create(&threads[i],&thread_attrs,func,args);
         if (e==0)
         {
         	if (!private)
@@ -980,13 +1000,9 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
             {
             	memcpy(&private_worker_map[w_i].workers[i],args,sizeof(worker_args_t));
             }
-            threads[i]=*thread;
         }
-        pthread_attr_destroy(&thread_attrs);
-        ukern_fast_free(thread);
-        ukern_fast_free(args);
     }
-    ukern_fast_free(thread_name);
+    pthread_mutex_unlock(&worker_map_lock);
     return 0;
 }
 
@@ -1045,6 +1061,7 @@ int main(int argc, const char *argv[])
     printf("Starting comesg microkernel...\n");
     printf("Starting memory manager...\n");
     pthread_attr_init(&thread_attrs);
+    pthread_mutex_init(&worker_map_lock,NULL);
     pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
 
     error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);

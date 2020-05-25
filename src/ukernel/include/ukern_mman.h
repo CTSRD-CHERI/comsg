@@ -43,10 +43,9 @@
 #define UKERN_MAP_LEN (1UL<<PDRSHIFT)
 #define UKERN_MMAP_FLAGS (\
 	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
+	| MAP_PREFAULT_READ )
 #define UKERN_RESERVE_FLAGS (\
-	MAP_GUARD | MAP_EXCL | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER )
+	MAP_GUARD | MAP_ALIGNED_CHERI )
 #define UKERN_EXTEND_FLAGS ( UKERN_MMAP_FLAGS | MAP_FIXED | MAP_EXCL )
 #define UKERN_MMAP_PROT ( PROT_READ | PROT_WRITE )
 
@@ -62,7 +61,7 @@
 #define RESERVE_UKERN(a,b) mmap(a,b,UKERN_MMAP_PROT,UKERN_RESERVE_FLAGS,-1,0)
 
 
-typedef enum {BUFFER_ACTIVE=0,BUFFER_FREED=1} buffer_type_t;
+typedef enum {BUFFER_NONE=0,BUFFER_ACTIVE=1,BUFFER_FREED=-1} buffer_type_t;
 
 typedef enum {REGION_NONE,REGION_RESERVED,REGION_MAPPED} region_type_t;
 typedef enum {BUFFER_ALLOCATE, BUFFER_FREE, MESSAGE_BUFFER_ALLOCATE, MESSAGE_BUFFER_FREE} queue_action_t;
@@ -70,6 +69,7 @@ typedef enum {BUFFER_ALLOCATE, BUFFER_FREE, MESSAGE_BUFFER_ALLOCATE, MESSAGE_BUF
 typedef struct _region_table_entry
 {
 	pthread_mutex_t lock;
+	void * __capability map_cap;
 	_Atomic(void *  __capability) mem;
 	region_type_t type;
 	_Atomic size_t size;
@@ -126,7 +126,6 @@ int reserve_region(void);
 int map_region(void);
 int map_reservation(int index);
 int check_region(int entry_index, size_t len);
-region_table_entry_t * ukern_find_memory(int hint,void ** dest_cap, size_t len);
 int map_new_region(void);
 void * __capability get_buffer_memory(region_table_entry_t ** region_dst,size_t len);
 void * __capability buffer_malloc(size_t len);

@@ -58,5 +58,6 @@ struct ukern_mapping_table {
 
 
 void *ukern_mmap(void *args);
-
+void *co_unmap(void *args);
+void *co_mmap(void *args);
 #endif
