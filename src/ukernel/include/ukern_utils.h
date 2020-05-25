@@ -23,37 +23,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COMESG_KERN
-#define _COMESG_KERN
+#ifndef UKERN_UTILS_H
+#define UKERN_UTILS_H
 
-#include <pthread.h>
-#include <stdatomic.h>
-#include <cheri/cherireg.h>
-#include <stdbool.h>
-#include <sys/queue.h>
+#define KEYSPACE 62
 
-#include "coport.h"
-#include "sys_comsg.h"
-#include "sys_comutex.h"
-#include "ukern_params.h"
-
-
-
-/*#define TBL_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | \
-	CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL |\
-	CHERI_PERM_STORE_LOCAL_CAP )*/
-#define WORKER_FUNCTIONS ( U_FUNCTIONS + UKERN_PRIV )
-
-void *copoll_deliver(void *args);
-void *cocarrier_poll(void *args);
-void *cocarrier_register(void *args);
-void *cocarrier_recv(void *args);
-void *cocarrier_send(void *args);
-void *coport_open(void *args);
-int main(int argc, const char *argv[]);
-
-
-extern coport_tbl_t coport_table;
-extern comutex_tbl_t comutex_table;
+int generate_id(void);
+int rand_string(char * buf, size_t len);
+//In case of desperation while debugging, break glass.-PBB
+void debug_noop(int i); 
 
 #endif

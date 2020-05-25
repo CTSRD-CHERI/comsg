@@ -23,37 +23,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COMESG_KERN
-#define _COMESG_KERN
+#ifndef UKERN_REQUESTS_H
+#define UKERN_REQUESTS_H
 
 #include <pthread.h>
-#include <stdatomic.h>
-#include <cheri/cherireg.h>
-#include <stdbool.h>
-#include <sys/queue.h>
 
-#include "coport.h"
-#include "sys_comsg.h"
-#include "sys_comutex.h"
-#include "ukern_params.h"
+typedef struct _worker_args_t 
+{
+	char name[LOOKUP_STRING_LEN];
+	void * __capability cap;
+} worker_args_t;
 
+typedef struct _worker_map_entry_t
+{
+	char func_name[LOOKUP_STRING_LEN];
+	worker_args_t workers[WORKER_COUNT];
+} worker_map_entry_t;
 
+typedef struct _request_handler_args_t
+{
+	char func_name[LOOKUP_STRING_LEN];
+} request_handler_args_t;
 
-/*#define TBL_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | \
-	CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL |\
-	CHERI_PERM_STORE_LOCAL_CAP )*/
-#define WORKER_FUNCTIONS ( U_FUNCTIONS + UKERN_PRIV )
-
-void *copoll_deliver(void *args);
-void *cocarrier_poll(void *args);
-void *cocarrier_register(void *args);
-void *cocarrier_recv(void *args);
-void *cocarrier_send(void *args);
-void *coport_open(void *args);
-int main(int argc, const char *argv[]);
-
-
-extern coport_tbl_t coport_table;
-extern comutex_tbl_t comutex_table;
+void update_worker_args(worker_args_t * args, const char * function_name);
+void *manage_requests(void *args);
+int spawn_workers(void * func, pthread_t * threads, const char * name);
+int coaccept_init(
+    void * __capability * __capability  code_cap,
+    void * __capability * __capability  data_cap, 
+    const char * target_name,
+    void * __capability * __capability target_cap);
 
 #endif

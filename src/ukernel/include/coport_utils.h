@@ -5,5 +5,8 @@
 #include "comesg_kern.h"
 
 int init_port(coport_type_t type, sys_coport_t * p);
+bool valid_coport(sys_coport_t * addr);
+bool valid_cocarrier(sys_coport_t * addr);
+
 
 #endif

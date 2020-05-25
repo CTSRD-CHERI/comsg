@@ -23,37 +23,50 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COMESG_KERN
-#define _COMESG_KERN
+#ifndef UKERN_TABLES_H
+#define UKERN_TABLES_H
+
+#include "coport.h"
 
 #include <pthread.h>
 #include <stdatomic.h>
-#include <cheri/cherireg.h>
-#include <stdbool.h>
-#include <sys/queue.h>
 
-#include "coport.h"
-#include "sys_comsg.h"
-#include "sys_comutex.h"
-#include "ukern_params.h"
+#define TBL_FLAGS (\
+	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
+	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
+#define TBL_PERMS ( PROT_READ | PROT_WRITE )
 
+typedef struct _coport_tbl_entry_t
+{
+	unsigned int id;
+	sys_coport_t port;
+	sys_coport_t * port_cap;
+	char name[COPORT_NAME_LEN];
+} coport_tbl_entry_t;
 
+typedef struct _coport_tbl_t
+{
+	_Atomic int index;
+	coport_tbl_entry_t * table;
+} coport_tbl_t;
 
-/*#define TBL_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | \
-	CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL |\
-	CHERI_PERM_STORE_LOCAL_CAP )*/
-#define WORKER_FUNCTIONS ( U_FUNCTIONS + UKERN_PRIV )
+typedef struct _comutex_tbl_entry_t
+{
+	unsigned int id;
+	sys_comutex_t mtx;
+} comutex_tbl_entry_t;
 
-void *copoll_deliver(void *args);
-void *cocarrier_poll(void *args);
-void *cocarrier_register(void *args);
-void *cocarrier_recv(void *args);
-void *cocarrier_send(void *args);
-void *coport_open(void *args);
-int main(int argc, const char *argv[]);
+typedef struct _comutex_tbl_t
+{
+	int index;
+	pthread_mutex_t lock;
+	comutex_tbl_entry_t * table;
+} comutex_tbl_t;
 
+void init_coport_table_entry(coport_tbl_entry_t * entry, const sys_coport * port, const char * name);
+int coport_tbl_setup(void);
+int lookup_port(char * port_name,sys_coport_t ** port_buf);
+int add_port(coport_tbl_entry_t entry);
 
-extern coport_tbl_t coport_table;
-extern comutex_tbl_t comutex_table;
 
 #endif

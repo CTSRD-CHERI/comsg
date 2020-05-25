@@ -22,6 +22,9 @@ CHERIBSD_DIR=$(CHERI_ROOT)/cheribsd
 CHERIBUILD_DIR=$(CHERI_ROOT)/cheribuild/
 endif
 
+UKRN_SRCDIR=src/ukernel
+UKRN_INCDIR=$(UKRN_SRCDIR)/include
+
 default : ukernel cochatter libcomsg.so
 	#cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
 	#cp $(OUTDIR)/cochatter $(CHERI_FSDIR)/root/bin
@@ -135,10 +138,9 @@ ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
 endif
 
-coport_utils.o: src/lib/coport_utils.c include/coport_utils.h \
-	include/coport.h src/ukernel/include/ukern_mman.h \
-	include/comutex.h src/ukernel/include/sys_comsg.h \
-	src/ukernel/include/comesg_kern.h src/ukernel/include/sys_comutex.h
+coport_utils.o: $(UKRN_SRCDIR)/coport_utils.c \
+	$(UKRN_INCDIR)/coport_utils.h \
+
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/coport_utils.c \
 	-o $(BUILDDIR)/coport_utils.o
 ifdef CHERIBSD_DIR
