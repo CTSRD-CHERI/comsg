@@ -37,6 +37,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <err.h>
+#include <pthread.h>
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -72,6 +73,9 @@ static coport_type_t coport_type = COCARRIER;
 void send_data(void);
 void receive_data(void);
 int main(int argc, char * const argv[]);
+
+
+static statcounters_bank_t send_start, recv_end;
 
 /*
 static void send_timestamp(struct timespec * timestamp)
@@ -116,12 +120,12 @@ void send_data(void)
 	for(unsigned long i = 0; i<runs; i++){
 		f = fopen(name,"a+");
 
-		statcounters_zero(&bank1);
+		statcounters_zero(&send_start);
 		statcounters_zero(&bank2);
 		statcounters_zero(&result);
 
 		clock_gettime(CLOCK_REALTIME,&start_timestamp);
-		statcounters_sample(&bank1);
+		statcounters_sample(&send_start);
 		if (coport_type!=COCHANNEL)
 		{
 			for(unsigned int j = 0; j<(total_size/message_len); j++)
@@ -152,7 +156,7 @@ void send_data(void)
 			err(errno,"error!");
 		}
 		timespecsub(&end_timestamp,&start_timestamp);
-		statcounters_diff(&result,&bank2,&bank1);
+		statcounters_diff(&result,&bank2,&send_start);
 		
 		ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
 		
@@ -161,6 +165,8 @@ void send_data(void)
 		
 		//statcounters_dump_with_args calls fclose
 		#if 1
+		if(coport_type==COPIPE)
+			continue; //uninterested in time spent spinning before we actually start
 		if(i==0)
 			statcounters_dump_with_args(&result,"COSEND","","malta",f,CSV_HEADER);
 		else
@@ -220,7 +226,7 @@ void receive_data(void)
 			{
 				status=corecv(port,(void **)&buffer,message_len);
 			}
-			statcounters_sample(&bank2);
+			statcounters_sample(&recv_end);
 			clock_gettime(CLOCK_REALTIME,&end);
 		}
 		else
@@ -231,7 +237,7 @@ void receive_data(void)
 			{
 				status=corecv(port,(void **)&buffer,4096);
 			}
-			statcounters_sample(&bank2);
+			statcounters_sample(&recv_end);
 			clock_gettime(CLOCK_REALTIME,&end);
 			
 		}
@@ -252,7 +258,7 @@ void receive_data(void)
 		}
 		//printf("message received:%s\n",(char *)buffer);
 		timespecsub(&end,&start);
-		statcounters_diff(&result,&bank2,&bank1);
+		statcounters_diff(&result,&recv_end,&bank1);
 		
 		ipc_time=(float)end.tv_sec + (float)end.tv_nsec / 1000000000;
 		printf("Received %lu bytes in %lf\n", total_size, ipc_time);
@@ -266,6 +272,26 @@ void receive_data(void)
 		else
 			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_NOHEADER);
 		statcounters_dump(&result);
+		switch(coport_type)
+		{
+			case COCHANNEL:
+				sprintf(name,"/root/COCHANNEL_wholeop_b%lu_t%lu.dat",message_len,total_size);
+				break;
+			case COPIPE:
+				sprintf(name,"/root/COPIPE_wholeop_b%lu_t%lu.dat",message_len,total_size);
+				break;
+			case COCARRIER:
+				sprintf(name,"/root/COCARRIER_wholeop_b%lu_t%lu.dat",message_len,total_size);
+				break;
+			default:
+				break;
+		}
+		f= fopen(name,"a+");
+		statcounters_diff(&result,&recv_end,&send_start);
+		if(i==0)
+			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_HEADER);
+		else
+			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_NOHEADER);
 		#endif
 	}
 	coclose(port);
@@ -307,12 +333,51 @@ void prepare_message(void)
 }
 
 
+static
+void *do_send(void* args)
+{
+	prepare_message();
+	port_name=malloc(strlen(port_names[1])+1);
+	strcpy(port_name,port_names[1]);
+	coport_type=COPIPE;
+	
+	send_data();
+	coport_type=COCARRIER;
+	strcpy(port_name,port_names[0]);
+	send_data();
+	#if 0
+	strcpy(port_name,port_names[2]);
+	coport_type=COCHANNEL;
+	for(unsigned int i = 0; i < runs; i++)
+		send_data();
+	#endif
+	return args;
+}
+
+static
+void *do_recv(void* args)
+{
+	port_name=malloc(strlen(port_names[1])+1);
+	strcpy(port_name,port_names[1]);
+	coport_type=COPIPE;
+	receive_data();
+	coport_type=COCARRIER;
+	strcpy(port_name,port_names[0]);
+	receive_data();
+	#if 0
+	strcpy(port_name,port_names[2]);
+	coport_type=COCHANNEL;
+	receive_data();
+	#endif
+}
+
 int main(int argc, char * const argv[])
 {
 	int opt;
 	char * strptr;
 	pid_t p,pp;
-	int receiver = 0;
+	int receive = 0;
+	pthread_t sender, receiver;
 	
 	while((opt=getopt(argc,argv,"ot:r:b:p"))!=-1)
 	{
@@ -357,7 +422,9 @@ int main(int argc, char * const argv[])
 		total_size=message_len;
 	}
 
-
+	pthread_create(&sender,NULL,do_send,NULL);
+	pthread_create(&receiver,NULL,do_recv,NULL);
+	/*
 	if (!receiver)
 	{
 		statcounters_reset();
@@ -384,21 +451,7 @@ int main(int argc, char * const argv[])
 		}
 		else
 		{
-			prepare_message();
-			port_name=malloc(strlen(port_names[1])+1);
-			strcpy(port_name,port_names[1]);
-			coport_type=COPIPE;
 			
-			send_data();
-			coport_type=COCARRIER;
-			strcpy(port_name,port_names[0]);
-			send_data();
-			#if 0
-			strcpy(port_name,port_names[2]);
-			coport_type=COCHANNEL;
-			for(unsigned int i = 0; i < runs; i++)
-				send_data();
-			#endif
 		}
 	}
 	else
@@ -416,6 +469,9 @@ int main(int argc, char * const argv[])
 		receive_data();
 		#endif
 	}
+	*/
+	pthread_join(&sender);
+	pthread_join(&receiver);
 	return sleep(10);
 }
 /*
