@@ -32,11 +32,11 @@
 #include "ukern_utils.h"
 #include "ukern_requests.h"
 #include "ukern_tables.h"
+#include "coport_utils.h"
+#include "sys_comsg.h"
 
 #include "coport.h"
-#include "coport_utils.h"
 #include "coproc.h"
-#include "sys_comsg.h"
 
 #include <cheri/cheric.h>
 #include <machine/sysarch.h>
