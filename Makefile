@@ -22,6 +22,7 @@ CHERIBSD_DIR=$(CHERI_ROOT)/cheribsd
 CHERIBUILD_DIR=$(CHERI_ROOT)/cheribuild/
 endif
 
+INCDIR=include
 UKRN_SRCDIR=src/ukernel
 UKRN_INCDIR=$(UKRN_SRCDIR)/include
 
@@ -45,11 +46,13 @@ endif
 	cheribsd-mips-purecap disk-image-mips-purecap run-mips-purecap
 
 ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
-	ukern_mman.o ukern_commap.o libcomsg.so
+	ukern_mman.o ukern_commap.o libcomsg.so ukern_tables.o ukern_requests.o \
+	ukern_utils.o
 	$(CC) $(CFLAGS) $(LLDFLAGS) $(LIB_PARAMS) -lcomsg $(INC_PARAMS)  \
 	-o $(OUTDIR)/comesg_ukernel $(BUILDDIR)/comesg_kern.o \
 	$(BUILDDIR)/coport_utils.o $(BUILDDIR)/sys_comutex.o \
-	$(BUILDDIR)/comutex.o $(BUILDDIR)/ukern_mman.o $(BUILDDIR)/ukern_commap.o
+	$(BUILDDIR)/comutex.o $(BUILDDIR)/ukern_mman.o $(BUILDDIR)/ukern_commap.o \
+	$(BUILDDIR)/utils.o $(BUILDDIR)/ukern_tables.o $(BUILDDIR)/ukern_requests.o
 	$(CHERIBUILD_DIR)/cheribuild.py --skip-update $(FORCE) \
 	--cheribsd-mips-purecap/subdir="'usr.bin/comesg_ukernel'" \
 	--cheribsd/subdir="'usr.bin/comesg_ukernel'" \
@@ -64,27 +67,20 @@ cochatter : comsg_chatterer.o libcomsg.so
 	cheribsd-mips-purecap disk-image-mips-purecap
 
 comsg_chatterer.o : src/bin/comsg_chatterer.c include/comsg.h \
-	src/ukernel/include/sys_comsg.h include/coport.h \
+	$(UKRN_INCDIR)/sys_comsg.h include/coport.h \
 	include/comutex.h include/coproc.h include/commap.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/bin/comsg_chatterer.c \
 	-o $(BUILDDIR)/comsg_chatterer.o
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/cochatter;)
 
 comesg_kern.o : src/ukernel/comesg_kern.c \
-	src/ukernel/include/ukern_params.h \
-	src/ukernel/include/comesg_kern.h include/coport.h \
-	include/comutex.h src/ukernel/include/sys_comsg.h \
-	src/ukernel/include/sys_comutex.h include/coport_utils.h \
-	include/coproc.h include/comsg.h
+	$(UKRN_INCDIR)/ukern_params.h $(UKRN_INCDIR)/ukern_mman.h \
+	$(UKRN_INCDIR)/comesg_kern.h include/coport.h \
+	include/comutex.h $(UKRN_INCDIR)/sys_comsg.h \
+	$(UKRN_INCDIR)/coport_utils.h $(UKRN_INCDIR)/ukern_commap.h \
+	include/coproc.h include/comsg.h $(UKRN_INCDIR)/ukern_utils.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/ukernel/comesg_kern.c \
 	-o $(BUILDDIR)/comesg_kern.o
-	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
-
-ukern_mman.o : src/ukernel/ukern_mman.c \
-	src/ukernel/include/ukern_mman.h src/ukernel/include/ukern_params.h \
-	src/ukernel/include/sys_comsg.h
-	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/ukernel/ukern_mman.c \
-	-o $(BUILDDIR)/ukern_mman.o
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
 
 ukern_commap.o : src/ukernel/ukern_commap.c \
@@ -139,11 +135,46 @@ ifdef CHERIBSD_DIR
 endif
 
 coport_utils.o: $(UKRN_SRCDIR)/coport_utils.c \
-	$(UKRN_INCDIR)/coport_utils.h \
-
+	$(UKRN_INCDIR)/coport_utils.h $(UKRN_INCDIR)/sys_comsg.h \
+	$(UKRN_INCDIR)/comesg_kern.h include/coport.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/coport_utils.c \
 	-o $(BUILDDIR)/coport_utils.o
 ifdef CHERIBSD_DIR
 	cp $< $(CHERIBSD_DIR)/usr.bin/comesg_ukernel
 	cp $< $(CHERIBSD_DIR)/usr.bin/cochatter
+endif
+
+ukern_tables.o : $(UKRN_SRCDIR)/ukern_tables.c \
+	$(UKRN_INCDIR)/ukern_tables.h $(UKRN_INCDIR)/ukern_mman.h \
+	$(UKRN_INCDIR)/ukern_utils.h $(INCDIR)/coport.h \
+	$(UKRN_INCDIR)/comesg_kern.h
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c $(UKRN_SRCDIR)/ukern_tables.c \
+	-o $(BUILDDIR)/ukern_tables.o
+ifdef CHERIBSD_DIR
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
+endif
+
+ukern_requests.o : $(UKRN_SRCDIR)/ukern_requests.c \
+	$(UKRN_INCDIR)/ukern_requests.h $(UKRN_INCDIR)/ukern_mman.h 
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c $(UKRN_SRCDIR)/ukern_requests.c \
+	-o $(BUILDDIR)/ukern_requests.o
+ifdef CHERIBSD_DIR
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
+endif
+
+ukern_mman.o : $(UKRN_SRCDIR)/ukern_mman.c \
+	$(UKRN_INCDIR)/ukern_mman.h $(UKRN_INCDIR)/ukern_params.h \
+	$(UKRN_INCDIR)/sys_comsg.h
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c $(UKRN_SRCDIR)/ukern_mman.c \
+	-o $(BUILDDIR)/ukern_mman.o
+ifdef CHERIBSD_DIR
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
+endif
+
+ukern_utils.o: $(UKRN_SRCDIR)/ukern_utils.c \
+	$(UKRN_INCDIR)/ukern_utils.h 
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/ukern_utils.c \
+	-o $(BUILDDIR)/ukern_utils.o
+ifdef CHERIBSD_DIR
+	cp $< $(CHERIBSD_DIR)/usr.bin/comesg_ukernel
 endif
