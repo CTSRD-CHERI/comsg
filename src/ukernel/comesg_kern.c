@@ -60,18 +60,13 @@
 #define DEBUG
 
 static void * __capability root_seal_cap;
-static otype_t seal_cap;
-static long sealed_otype;
+otype_t seal_cap;
+long sealed_otype;
 
 pthread_mutex_t global_copoll_lock;
 pthread_cond_t global_cosend_cond;
 
-static pthread_mutex_t worker_map_lock;
-worker_map_entry_t worker_map[U_FUNCTIONS];
-worker_map_entry_t private_worker_map[UKERN_PRIV];
 
-_Atomic int next_worker_i = 0;
-_Atomic int next_priv_worker_i = 0;
 
 _Atomic unsigned int next_port_index = 0;
 
@@ -281,6 +276,8 @@ void *cocarrier_recv(void *args)
         //atomic_store_explicit(&cocarrier->status,COPORT_BUSY,memory_order_release);
         if(cocarrier->length==0 || !(cocarrier->event & COPOLL_IN))
         {
+            printf("cocarrier_length=%lu\n",cocarrier->length);
+            printf("cocarrier_events=%x\n",cocarrier->event);
             cocarrier->event|=COPOLL_RERR;
             atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
             atomic_thread_fence(memory_order_release);
@@ -478,7 +475,7 @@ void *coport_open(void *args)
             strcpy(table_entry.name,coport_args->args.name);
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
-            prt=cheri_csetbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
+            prt=cheri_setbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
             if(prt->type==COCARRIER)
                 prt=cheri_seal(prt,seal_cap);
             coport_table.table[index].port_cap=prt; //ensure consistency
@@ -499,9 +496,9 @@ int main(int argc, const char *argv[])
 
     pthread_t memory_manager, commap_manager;
     pthread_t coopen_threads[WORKER_COUNT];
-    pthread_t counlock_threads[WORKER_COUNT];
-    pthread_t comutex_init_threads[WORKER_COUNT];
-    pthread_t colock_threads[WORKER_COUNT];
+    //pthread_t counlock_threads[WORKER_COUNT];
+    //pthread_t comutex_init_threads[WORKER_COUNT];
+    //pthread_t colock_threads[WORKER_COUNT];
     pthread_t cocarrier_send_threads[WORKER_COUNT];
     pthread_t cocarrier_recv_threads[WORKER_COUNT];
     pthread_t copoll_threads[WORKER_COUNT];
@@ -509,9 +506,9 @@ int main(int argc, const char *argv[])
     //pthread_t coclose_threads[WORKER_COUNT];
 
     pthread_t coopen_handler;
-    pthread_t counlock_handler;
-    pthread_t comutex_init_handler;
-    pthread_t colock_handler;
+    //pthread_t counlock_handler;
+   // pthread_t comutex_init_handler;
+   // pthread_t colock_handler;
     pthread_t cocarrier_send_handler;
     pthread_t cocarrier_recv_handler;
     pthread_t copoll_handler;
@@ -540,7 +537,7 @@ int main(int argc, const char *argv[])
     printf("Starting comesg microkernel...\n");
     printf("Starting memory manager...\n");
     pthread_attr_init(&thread_attrs);
-    pthread_mutex_init(&worker_map_lock,NULL);
+   
     pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
 
     error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
@@ -556,8 +553,16 @@ int main(int argc, const char *argv[])
         //i apologise
         __asm("nop");
     }
+    pthread_mutexattr_t lock_attr;
+    pthread_condattr_t cond_attr;
+
+    pthread_mutexattr_init(&lock_attr);
+    pthread_mutex_init(&global_copoll_lock,&lock_attr);
+    pthread_condattr_init(&cond_attr);
+    pthread_cond_init(&global_cosend_cond,&cond_attr);
+
     error+=coport_tbl_setup();
-    error+=comutex_tbl_setup();
+    //error+=comutex_tbl_setup();
     if(error!=0)
     {
         err(1,"Initial setup failed!!");
@@ -568,12 +573,14 @@ int main(int argc, const char *argv[])
     /* perform setup */
     printf("Spawning co-open listeners...\n");
     error+=spawn_workers(&coport_open,coopen_threads,U_COOPEN);
+    /*
     printf("Spawning comutex_init listeners...\n");
     error+=spawn_workers(&comutex_setup,comutex_init_threads,U_COMUTEX_INIT);
     printf("Spawning colock listeners...\n");
     error+=spawn_workers(&comutex_lock,colock_threads,U_COLOCK);
     printf("Spawning counlock listeners...\n");
     error+=spawn_workers(&comutex_unlock,counlock_threads,U_COUNLOCK);
+    */
     printf("Spawning cocarrier send listeners...\n");
     error+=spawn_workers(&cocarrier_send,cocarrier_send_threads,U_COCARRIER_SEND);
     printf("Spawning cocarrier recv listeners...\n");
@@ -594,7 +601,7 @@ int main(int argc, const char *argv[])
     strcpy(handler_args->func_name,U_COOPEN);
     pthread_attr_init(&thread_attrs);
     pthread_create(&coopen_handler,&thread_attrs,manage_requests,handler_args);
-
+    /*
     handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COUNLOCK);
     pthread_attr_init(&thread_attrs);
@@ -604,12 +611,12 @@ int main(int argc, const char *argv[])
     strcpy(handler_args->func_name,U_COMUTEX_INIT);
     pthread_attr_init(&thread_attrs);
     pthread_create(&comutex_init_handler,&thread_attrs,manage_requests,handler_args);
-
+    
     handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COLOCK);
     pthread_attr_init(&thread_attrs);
     pthread_create(&colock_handler,&thread_attrs,manage_requests,handler_args);
-
+    */
     handler_args=ukern_malloc(sizeof(request_handler_args_t));
     strcpy(handler_args->func_name,U_COCARRIER_SEND);
     pthread_attr_init(&thread_attrs);

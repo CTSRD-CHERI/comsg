@@ -28,6 +28,9 @@
 
 #define KEYSPACE 62
 
+#include <stddef.h>
+
+
 int generate_id(void);
 int rand_string(char * buf, size_t len);
 //In case of desperation while debugging, break glass.-PBB

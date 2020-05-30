@@ -28,6 +28,7 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 #include <stdbool.h>
 #include <sys/queue.h>
@@ -52,8 +53,8 @@ void *cocarrier_send(void *args);
 void *coport_open(void *args);
 int main(int argc, const char *argv[]);
 
+extern otype_t seal_cap;
+extern long sealed_otype;
 
-extern coport_tbl_t coport_table;
-extern comutex_tbl_t comutex_table;
 
 #endif

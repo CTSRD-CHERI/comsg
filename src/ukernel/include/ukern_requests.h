@@ -26,6 +26,9 @@
 #ifndef UKERN_REQUESTS_H
 #define UKERN_REQUESTS_H
 
+#include "sys_comsg.h"
+#include "ukern_params.h"
+
 #include <pthread.h>
 
 typedef struct _worker_args_t 
@@ -53,5 +56,8 @@ int coaccept_init(
     void * __capability * __capability  data_cap, 
     const char * target_name,
     void * __capability * __capability target_cap);
+
+extern worker_map_entry_t worker_map[U_FUNCTIONS];
+extern worker_map_entry_t private_worker_map[UKERN_PRIV];
 
 #endif

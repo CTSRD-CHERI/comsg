@@ -28,7 +28,8 @@
 #include "commap.h"
 #include "sys_comsg.h"
 
-#include "comesg_kern.h"
+#include "ukern_utils.h"
+#include "ukern_requests.h"
 #include "ukern_params.h"
 #include "coproc.h"
 
@@ -134,7 +135,7 @@ static
 token_t generate_token(struct ukern_mapping * m)
 {
     token_t t;
-    t=cheri_csetbounds(m,sizeof(struct ukern_mapping));
+    t=cheri_setbounds(m,sizeof(struct ukern_mapping));
     t=cheri_andperm(t,TOKEN_PERMS);
     t=cheri_seal(t,token_seal_cap);
 

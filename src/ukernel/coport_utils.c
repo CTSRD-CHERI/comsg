@@ -26,48 +26,39 @@
 
 #include "coport_utils.h"
 
+#include "sys_comsg.h"
+#include "ukern_mman.h"
+#include "comesg_kern.h"
+#include "coport.h"
+#include "ukern_tables.h"
+
 #include <cheri/cheric.h>
 #include <sys/mman.h>
 #include <stdatomic.h>
 #include <err.h>
 #include <stdbool.h>
+#include <stddef.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include "sys_comsg.h"
-#include "ukern_mman.h"
-#include "comesg_kern.h"
-#include "coport.h"
+
 
 bool valid_coport(sys_coport_t * addr)
 {
-    ptrdiff_t table_offset;
-    vaddr_t port_addr = (vaddr_t) addr;
-    int index;
-
     if(cheri_getlen(addr)<sizeof(sys_coport_t))
     {
         printf("too small to represent coport\n");
         return false;
     }
-    else if(!cheri_is_address_inbounds(coport_table.table,port_addr))
+    else if(!in_coport_table(addr))
     {
-        printf("address not in bounds\n");
         return false;
     }
-    else
-    {
-        table_offset=port_addr-cheri_getbase(coport_table.table);
-        index=table_offset/sizeof(coport_tbl_entry_t);
-        if(&coport_table.table[index].port!=addr)
-        {
-            printf("offset looks wrong\n");
-            return false;
-        }
-    }
     return true;
+    
 }
 
 bool valid_cocarrier(sys_coport_t * addr)
@@ -76,10 +67,6 @@ bool valid_cocarrier(sys_coport_t * addr)
     {
         printf("wrong type\n");
         return false;
-    }
-    else
-    {
-        addr=cheri_unseal(addr,root_seal_cap);
     }
     if(!valid_coport(addr))
     {
@@ -103,7 +90,7 @@ int init_port(coport_type_t type, sys_coport_t* p)
 		p->length=0;
 		p->end=-1;
 		p->buffer=ukern_malloc(COCARRIER_SIZE);
-		LIST_INIT(&port.listeners);
+		LIST_INIT(&p->listeners);
 	}
 	else
 	{
@@ -116,22 +103,15 @@ int init_port(coport_type_t type, sys_coport_t* p)
 	p->status=COPORT_OPEN;
 	p->start=0;
 	p->type=type;
-	port.event=COPOLL_INIT_EVENTS;
+	p->event=COPOLL_INIT_EVENTS;
 	//memset(&p->read_lock,0,sizeof(comutex_t));
 	//memset(&p->write_lock,0,sizeof(comutex_t));
 
 	return 0;
 }
 
-void init_coport_table_entry(coport_tbl_entry_t * entry, const sys_coport * port, const char * name)
-{
-	coport_tbl_entry_t e;
 
-	e.port=port;
-	strncpy(entry.name,name,COPORT_NAME_LEN);
-	e.id=generate_id();
-}
-
+inline
 bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e)
 {
 	return ((bool) cocarrier->event & e);

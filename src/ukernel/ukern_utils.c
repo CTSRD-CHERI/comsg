@@ -24,7 +24,10 @@
  * SUCH DAMAGE.
  */
 
+#include "ukern_utils.h"
+
 #include <cheri/cheric.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <sys/param.h>
 
@@ -38,7 +41,8 @@ int rand_string(char * buf, size_t len)
 {
     char c;
     int rand_no;
-    len=MIN(len,cheri_getlen(buf))
+    //last character should contain a NULL
+    len=MIN(len+1,cheri_getlen(buf)-1);
     srandomdev();
     for (size_t i = 0; i < len; i++)
     {
