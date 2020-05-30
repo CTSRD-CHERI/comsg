@@ -100,8 +100,10 @@ coport_t coport_clearperm(coport_t p,int perms)
     return cheri_andperm(p,perms);
 }
 
-int cosend(coport_t port, const void * buf, size_t len)
+int cosend(coport_t prt, const void * buf, size_t len)
 {
+    coport_t port=prt;
+
     void * __capability switcher_code;
     void * __capability switcher_data;
     void * __capability func;
@@ -140,11 +142,13 @@ int cosend(coport_t port, const void * buf, size_t len)
                 }
                 else
                 {
+                    continue;
+
                     i++;
-                    if(i%1000==0)
+                    if(i%10==0)
                     {
-                        continue;
-                        sched_yield();
+                        pthread_yield();
+                        continue;   
                     }
                 }
             }
@@ -170,12 +174,12 @@ int cosend(coport_t port, const void * buf, size_t len)
             {
                 port->event&=~COPOLL_OUT;
             }
-            atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_relaxed);
+            port->status=COPORT_OPEN;
             atomic_thread_fence(memory_order_release);
             break;
         case COCARRIER:
             call->cocarrier=port;
-            call->message=cheri_csetbounds(buf,len);
+            call->message=cheri_setbounds(buf,len);
             call->status=0;
             call->error=0;
             call->message=cheri_andperm(call->message,COCARRIER_PERMS);
@@ -208,15 +212,16 @@ int cosend(coport_t port, const void * buf, size_t len)
                 }
                 else
                 {
+                    continue;
                     i++;
-                    if(i%1000==0)
+                    if(i%3==0)
                     {
+                        pthread_yield();
                         continue;
-                        sched_yield();
                     }
                 }
             }
-            atomic_thread_fence(memory_order_acquire);
+            atomic_thread_fence(memory_order_acq_rel);
             if(cheri_getlen(port->buffer)<len)
             {
                 err(EMSGSIZE,"cosend: recipient buffer len %lu too small for message of length %lu",cheri_getlen(port->buffer),len);
@@ -225,8 +230,7 @@ int cosend(coport_t port, const void * buf, size_t len)
             }
             memcpy(port->buffer,buf,len);
             port->status=COPORT_DONE;
-            atomic_thread_fence(memory_order_release);
-            sched_yield();
+            atomic_thread_fence(memory_order_acq_rel);
             break;
         default:
             errno=EINVAL;
@@ -237,9 +241,10 @@ int cosend(coport_t port, const void * buf, size_t len)
     return len;
 }
 
-int corecv(coport_t port, void ** buf, size_t len)
+int corecv(coport_t prt, void ** buf, size_t len)
 {
     //we need more atomicity on changes to end
+    coport_t port=prt;
     int old_start;
     void * __capability switcher_code;
     void * __capability switcher_data;
@@ -277,11 +282,12 @@ int corecv(coport_t port, void ** buf, size_t len)
                 else
                 {
                     continue;
+
                     i++;
-                    if (i%1000==0)
+                    if (i%10==0)
                     {
+                        pthread_yield();
                         continue;
-                        sched_yield();
                     }
                 }
             }
@@ -350,10 +356,10 @@ int corecv(coport_t port, void ** buf, size_t len)
                 {
                     continue;
                     i++;
-                    if (i%1000==0)
+                    if (i%7==0)
                     {
+                        pthread_yield();
                         continue;
-                        sched_yield();
                     }
                 }
             }
@@ -361,11 +367,10 @@ int corecv(coport_t port, void ** buf, size_t len)
             port->buffer=*buf;
             port->status=COPORT_READY;
             atomic_thread_fence(memory_order_release);
-            sched_yield();
             for(;;)
             {
                 status_val=COPORT_DONE;
-                if(atomic_compare_exchange_weak(&port->status,&status_val,COPORT_OPEN))
+                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_OPEN,memory_order_release,memory_order_acquire))
                 {
                     port->buffer=NULL;
                     break;
@@ -373,11 +378,13 @@ int corecv(coport_t port, void ** buf, size_t len)
                 else
                 {
                     continue;
+
                     i++;
-                    if (i%3000==0)
+                    if (i%3==0)
                     {
+                        pthread_yield();
                         continue;
-                        sched_yield();
+
                     }
                 }
             }
@@ -479,7 +486,7 @@ int benchmark_cosend(coport_t port, const void * buf, size_t len, FILE * fp)
             break;
         case COCARRIER:
             call->cocarrier=port;
-            call->message=cheri_csetbounds(buf,len);
+            call->message=cheri_setbounds(buf,len);
             call->message=cheri_andperm(call->message,COCARRIER_PERMS);
             
             ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);

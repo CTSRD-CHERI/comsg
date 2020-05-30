@@ -28,8 +28,10 @@
 
 #include "coport.h"
 
-#include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
+#include <pthread.h>
+
 
 #define TBL_FLAGS (\
 	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
@@ -50,23 +52,14 @@ typedef struct _coport_tbl_t
 	coport_tbl_entry_t * table;
 } coport_tbl_t;
 
-typedef struct _comutex_tbl_entry_t
-{
-	unsigned int id;
-	sys_comutex_t mtx;
-} comutex_tbl_entry_t;
 
-typedef struct _comutex_tbl_t
-{
-	int index;
-	pthread_mutex_t lock;
-	comutex_tbl_entry_t * table;
-} comutex_tbl_t;
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, const sys_coport * port, const char * name);
+void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
 int coport_tbl_setup(void);
 int lookup_port(char * port_name,sys_coport_t ** port_buf);
 int add_port(coport_tbl_entry_t entry);
+bool in_coport_table(void * __capability addr);
 
+//extern comutex_tbl_t comutex_table;
+extern coport_tbl_t coport_table;
 
 #endif

@@ -24,12 +24,27 @@
  * SUCH DAMAGE.
  */
 
-#include "ukern/ukern_mman.h"
-#include "ukern/ukern_requests.h"
+#include "ukern_mman.h"
+#include "ukern_requests.h"
+#include "coproc.h"
+#include "ukern_utils.h"
+
+#include <err.h>
+#include <errno.h>
 
 #include <pthread.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+
+static pthread_mutex_t worker_map_lock;
+static pthread_once_t once = PTHREAD_ONCE_INIT;
+
+_Atomic int next_worker_i = 0;
+_Atomic int next_priv_worker_i = 0;
+
+worker_map_entry_t worker_map[U_FUNCTIONS];
+worker_map_entry_t private_worker_map[UKERN_PRIV];
 
 int coaccept_init(
     void * __capability * __capability  code_cap,
@@ -128,8 +143,15 @@ void *manage_requests(void *args)
     ukern_free(lookup);
 }
 
+static void init_worker_map_lock(void)
+{
+    pthread_mutex_init(&worker_map_lock,NULL);
+    return;
+}
+
 int spawn_workers(void * func, pthread_t * threads, const char * name)
 {
+    pthread_once(&once,init_worker_map_lock);
     pthread_attr_t thread_attrs;
     worker_args_t * args;
     int e;

@@ -35,6 +35,24 @@
 //NOTE-PBB: Many of these functions, if used, would be better situated in the
 //relevant ukern_* files for the subsystems they pertain to.
 
+
+typedef struct _comutex_tbl_entry_t
+{
+    unsigned int id;
+    sys_comutex_t mtx;
+} comutex_tbl_entry_t;
+
+typedef struct _comutex_tbl_t
+{
+    int index;
+    pthread_mutex_t lock;
+    comutex_tbl_entry_t * table;
+} comutex_tbl_t;
+
+
+const int COMTX_TBL_LEN = (MAX_COMUTEXES*sizeof(comutex_tbl_entry_t));
+
+
 int comutex_tbl_setup(void)
 {
     pthread_mutexattr_t lock_attr;

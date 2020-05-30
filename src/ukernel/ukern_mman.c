@@ -189,19 +189,19 @@ region_table_entry_t * ukern_find_memory(void ** dest_cap, size_t len)
 		{
 			base=CHERI_REPRESENTABLE_BASE(cheri_gettop(entry->mem)-len,len);
 			new_entry=cheri_setaddress(entry->mem,base);
-			memory=cheri_csetboundsexact(new_entry,len);
+			memory=cheri_setboundsexact(new_entry,len);
 			//printf("memory1 perms: %lx\n",cheri_getperm(memory));
 			memory=cheri_andperm(memory,BUFFER_PERMS);
 			//printf("memory2 perms: %lx\n",cheri_getperm(memory));
 			new_entry=cheri_setoffset(new_entry,0);
 			new_offset=CHERI_REPRESENTABLE_LENGTH(cheri_getlen(entry->mem)-cheri_getlen(memory));
-			new_entry=cheri_csetboundsexact(new_entry,new_offset);
+			new_entry=cheri_setboundsexact(new_entry,new_offset);
 			j=1;
 			while(cheri_getbase(memory)<=cheri_gettop(new_entry))
 			{
 				j*=2;
 				new_top=CHERI_REPRESENTABLE_LENGTH(new_offset-j);
-				new_entry=cheri_csetboundsexact(new_entry,new_top);
+				new_entry=cheri_setboundsexact(new_entry,new_top);
 			}						
 			entry->mem=cheri_setaddress(new_entry,cheri_gettop(new_entry)-1);
 			entry->free=entry->free-cheri_getlen(memory);
@@ -399,12 +399,26 @@ work_queue_item_t * queue_get_job(work_queue_t * queue)
 		pthread_cond_wait(&queue->not_empty,&queue->lock);
 	}
 	job=&queue->items[queue->start];
+	pthread_mutex_lock(&job->lock);
 	queue->start=(queue->start+1)%queue->max_len;
-	queue->count-=1;
-	pthread_cond_signal(&queue->not_full);
 	pthread_mutex_unlock(&queue->lock);
 	return job;
 }
+
+static
+void queue_job_done(work_queue_t * queue,work_queue_item_t * job)
+{
+	pthread_mutex_lock(&queue->lock);
+	
+	pthread_cond_signal(&job->processed);
+	pthread_mutex_unlock(&job->lock);
+
+	queue->count-=1;	
+	pthread_cond_signal(&queue->not_full);
+	pthread_mutex_unlock(&queue->lock);
+	return;
+}
+
 
 work_queue_item_t queue_do_job(work_queue_t * queue,work_queue_item_t job)
 {
@@ -520,7 +534,6 @@ void * ukern_mman(void *args)
 		{
 			err(1,"no task returned");
 		}
-		pthread_mutex_lock(&task->lock);
 		switch (task->action)
 		{
 			case BUFFER_ALLOCATE:
@@ -543,8 +556,7 @@ void * ukern_mman(void *args)
 			default:
 				err(1,"invalid operation %d specified",task->action);
 		}
-		pthread_cond_signal(&task->processed);
-		pthread_mutex_unlock(&task->lock);
+		queue_job_done(&jobs_queue,task);
 		
 	}
 }
