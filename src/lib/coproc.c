@@ -27,6 +27,7 @@
 #include <err.h>
 #include <string.h>
 #include <cheri/cheric.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -41,7 +42,132 @@
 #include <stdbool.h>
 
 #include "coproc.h"
+#include "sys_comsg.h"
 
+struct _coproc_lookup
+{
+	LIST_ENTRY(_coproc_lookup) lookups;
+	char target_name[LOOKUP_STRING_LEN];
+	void * __capability target_cap;
+};
+typedef struct _coproc_thread cplk_t;
+
+struct _coproc_thread
+{
+	LIST_ENTRY(_coproc_thread) entries;
+	pthread_t tid;
+	void * __capability codecap;
+	void * __capability datacap;
+	LIST_HEAD(,_coproc_lookup) lookups;
+};
+typedef struct _coproc_thread cpthr_t;
+
+typedef struct lookup_table
+{
+	LIST_HEAD(,_coproc_thread) entries;
+	int count;
+} coproc_lookup_tbl_t;
+
+static coproc_lookup_tbl_t coproc_cache;
+
+typedef struct handler_table
+{
+	LIST_HEAD(,_coproc_lookup) entries;
+	int count;
+} 
+static handler_tbl_t request_handler_cache;
+
+static
+int add_or_lookup_thread(cpthr_t *entry)
+{
+	//return 1 if found
+	//return 0 if created
+	int error;
+	pthread_t tid = pthread_self();
+	cpthr_t *thrd, *thrd_temp;
+	LIST_FOREACH_SAFE(thrd, &coproc_cache.entries, entries, thrd_temp) {
+		if (thrd->tid==tid) {
+			*entry=thrd;
+			return 1;
+		}
+	}
+
+	thrd = calloc(1,sizeof(cpthr_t));
+	thrd->tid = tid;
+	error=cosetup(COSETUP_COCALL,&thrd->codecap,&thrd->datacap);
+	if(error!=0)
+	{
+		err(ESRCH,"cosetup failed\n");
+	}
+	LIST_INIT(&thrd->lookups);
+	LIST_INSERT_HEAD(&coproc_cache.entries,thrd,entries);
+	*entry = thrd;
+	coproc_cache->count++;
+	return 0;
+}
+
+static
+void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
+{
+	int error = 0;
+	cplk_t *known_worker;
+	cplk_t *request_handler = NULL;
+	cplk_t *possible_handler;
+	cocall_lookup_t *lookup_data;
+
+	LIST_FOREACH(known_worker, &thread->lookups, lookups) {
+		if (strcmp(known_worker->target_name,target_name)==0)
+		{
+			return known_worker->target_cap;
+		}
+	}
+	LIST_FOREACH(possible_handler, &request_handler_cache.entries, lookups) {
+		if (strcmp(possible_handler->target_name,target_name)==0)
+		{
+			request_handler = possible_handler;
+			break;
+		}
+	}
+	if(!request_handler)
+	{
+		request_handler = calloc(1,sizeof(cplk_t));
+		error=colookup(target_name,&request_handler->target_cap);
+		if(error!=0)
+		{
+			err(ESRCH,"colookup of %s failed",target_name);
+		}
+		strcpy(request_handler->target_name,target_name);
+		LIST_INSERT_HEAD(&request_handler_cache.entries,request_handler,lookups);
+	}
+
+	lookup_data=calloc(1,sizeof(cocall_lookup_t));
+	strcpy(lookup_data->target,target_name);
+	lookup_data->cap=NULL;
+
+	error=cocall(thread->sw_code,thread->sw_data,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
+	if(error!=0)
+	{
+		warn("cocall failed, trying a fresh colookup\n");
+	}
+	error=colookup(target_name,&request_handler->target_cap);
+	if(error!=0)
+	{
+		err(ESRCH,"colookup of %s failed",target_name);
+	}
+	error=cocall(thread->sw_code,thread->sw_data,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
+	if(error!=0)
+	{
+		err(ESRCH,"cocall failed\n");
+	}
+
+	known_worker = calloc(1,sizeof(cplk_t));
+	strcpy(known_worker->target_name, target_name);
+	known_worker->target_cap = lookup_data->cap;
+	
+	LIST_INSERT_HEAD(&thread->lookups,known_worker,lookups);
+	free(lookup_data);
+	return known_worker->target_cap;
+}
 
 int ukern_lookup(void * __capability * __capability code, 
 	void * __capability * __capability data, const char * target_name, 
@@ -50,38 +176,45 @@ int ukern_lookup(void * __capability * __capability code,
 	int error;
 	cocall_lookup_t * lookup_data;
 	void * __capability lookup_cap;
-	void * __capability sw_code;
-	void * __capability sw_data;
+	cpthr_t *this_thread = NULL;
+	cplk_t *func_entry = NULL; 
 
+	add_or_lookup_thread(this_thread);
+	*code=this_thread->codecap;
+	*data=this_thread->datacap;
 
-	error=cosetup(COSETUP_COCALL,&sw_code,&sw_data);
-	if(error!=0)
-	{
-		err(ESRCH,"cosetup failed\n");
-	}
-	*code=sw_code;
-	*data=sw_data;
-	if(strlen(target_name)>COPORT_NAME_LEN)
-	{
-		err(ESRCH,"target name too long\n");
-	}
-
-	error=colookup(target_name,&lookup_cap);
-	if(error!=0)
-	{
-		err(ESRCH,"colookup of %s failed\n",target_name);
-	}
-	lookup_data=malloc(sizeof(cocall_lookup_t));
-	memset(lookup_data,0,sizeof(cocall_lookup_t));
-	strcpy(lookup_data->target,target_name);
-	lookup_data->cap=(void * __capability)NULL;
-	error=cocall(sw_code,sw_data,lookup_cap,lookup_data,sizeof(cocall_lookup_t));
-	if(error!=0)
-	{
-		err(ESRCH,"cocall failed\n");
-	}
-	//error=colookup(lookup_data->target,target_cap);
-	*target_cap=lookup_data->cap;
-	//free(lookup_data);
+	*target_cap=fast_colookup(target_name,this_thread);
 	return 0;
+}
+
+
+static void 
+clear_table_after_fork(void)
+{
+	cpthr_t *thrd, *thrd_temp;
+	cplk_t *lkp, *lkp_temp;
+	thrd=LIST_FIRST(&coproc_cache.entries);
+	while (thrd!=NULL) {
+		lkp=LIST_FIRST(&thrd.lookups);
+		while (lkp!=NULL)
+		{
+			lkp_temp = LIST_NEXT(lkp,lookups);
+			free(lkp);
+			lkp=lkp_temp;
+		}
+		thrd_temp = LIST_NEXT(thrd,entries);
+		free(thrd);
+		thrd=thrd_temp;
+	}
+
+}
+
+
+__attribute__ ((constructor)) static 
+void coproc_init(void)
+{
+    LIST_INIT(&coproc_cache.entries);
+    LIST_INIT(&request_handler_cache.entries);
+	pthread_atfork(NULL,NULL,clear_table_after_fork);
+
 }
