@@ -570,6 +570,9 @@ int main(int argc, const char *argv[])
     pthread_create(&commap_manager,&thread_attrs,ukern_mmap,NULL);
 
     /* perform setup */
+
+    printf("Press enter to proceed\n");
+    while( getchar() != '\n');
     printf("Spawning co-open listeners...\n");
     error+=spawn_workers(&coport_open,coopen_threads,U_COOPEN);
     /*
