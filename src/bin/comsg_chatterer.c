@@ -43,6 +43,8 @@
 #include <stdio.h>
 #include <statcounters.h>
 #include <stdatomic.h>
+#include <machine/sysarch.h>
+#include <machine/cheri.h>
 
 extern char **environ;
 
@@ -56,6 +58,9 @@ static char * port_name;
 
 static int may_start=0;
 static int waiting_threads = 0;
+static int acked_threads = 0;
+static int trace = 0;
+static int switching_types = 0;
 
 static pthread_mutex_t start_lock;
 static pthread_mutex_t async_lock; //to ensure async_lockhronous operations don't get mixed up
@@ -94,12 +99,18 @@ static void send_timestamp(struct timespec * timestamp)
 */
 void send_data(void)
 {
+	int intval = 1;
 	int error = 0;
+
 	coport_t port = (void * __capability)-1;
 	statcounters_bank_t bank2,result;
-	struct timespec start_timestamp,end_timestamp;
-	double ipc_time;
+	//struct timespec start_timestamp,end_timestamp;
+	struct timespec sleepytime;
+	sleepytime.tv_sec=0;
+	sleepytime.tv_nsec=100;
+	//double ipc_time;
 	int status;
+	
 	char * name = malloc(sizeof(char)*255);
 	switch(coport_type)
 	{
@@ -115,36 +126,52 @@ void send_data(void)
 		default:
 			break;
 	}
+
 	
-	status=coopen(port_name,coport_type,&port);
 	FILE * f;
 
-
+	error=pthread_mutex_lock(&start_lock);
+	if(error)
+		err(error,"send_data: lock start_lock failed");
+	while(waiting_threads!=acked_threads)
+	{
+		pthread_mutex_unlock(&start_lock);
+		sched_yield();
+		pthread_mutex_lock(&start_lock);
+	}
+	waiting_threads++;
+	pthread_cond_signal(&waiting);
+	pthread_cond_wait(&may_continue,&start_lock);
+	pthread_mutex_unlock(&start_lock);
+	
+	
 	for(unsigned long i = 0; i<runs; i++){
 		f = fopen(name,"a+");
-
+		sleepytime.tv_sec=0;
+		sleepytime.tv_nsec=10000;
+		if(coport_type!=COCARRIER){
+			nanosleep(&sleepytime,&sleepytime);
+			sched_yield();
+		}
+		status=coopen(port_name,coport_type,&port);
 		statcounters_zero(&send_start);
 		statcounters_zero(&bank2);
 		statcounters_zero(&result);
 
 		if(coport_type==COCARRIER)
 		{
-			error=pthread_mutex_lock(&async_lock);
-			if(error)
-				err(error,"send_data: lock async_lock failed");
+			while(pthread_mutex_trylock(&async_lock))
+				sched_yield();
 			error=pthread_mutex_lock(&output_lock); //keep it quiet during
 			if(error)
 				err(error,"send_data: lock output_lock failed");
-
 		}
-		else
+		if (trace)
 		{
-			error=pthread_mutex_lock(&start_lock);
-			pthread_cond_signal(&waiting);
-			pthread_cond_wait(&may_continue,&start_lock);
-			pthread_mutex_unlock(&start_lock);
+			intval=1;
+			sysarch(QEMU_SET_QTRACE, &intval);
+			//CHERI_START_TRACE;
 		}
-		
 		
 		if (coport_type!=COCHANNEL)
 		{
@@ -160,7 +187,6 @@ void send_data(void)
 				status=cosend(port,message_str,4096);
 			}
 		}
-		clock_gettime(CLOCK_REALTIME,&start_timestamp);
 		statcounters_sample(&send_start);
 		if (coport_type!=COCHANNEL)
 		{
@@ -177,37 +203,36 @@ void send_data(void)
 			}
 		}
 		statcounters_sample(&bank2);
-		clock_gettime(CLOCK_REALTIME,&end_timestamp);
+		if (trace)
+		{
+			intval=0;
+			sysarch(QEMU_SET_QTRACE, &intval);
+			//CHERI_START_TRACE;
+		}
+		//clock_gettime(CLOCK_REALTIME,&end_timestamp);
+		
 		if (coport_type!=COCHANNEL)
 		{
 			for(unsigned int j = 0; j<(total_size/message_len); j++)
 			{
-				status=cosend(port,message_str,message_len);
+				//status=cosend(port,message_str,message_len);
 			}
 		}
 		else
 		{
 			for(unsigned int j = 0; j<(total_size/4096); j++)
 			{
-				status=cosend(port,message_str,4096);
+				//status=cosend(port,message_str,4096);
 			}
 		}
 
 		if(coport_type==COCARRIER)
 		{
-			while(!pthread_mutex_unlock(&async_lock));
-			while(!pthread_mutex_unlock(&output_lock));
+			pthread_mutex_unlock(&async_lock);
 		}
-		
-		else
-		{
-			error=pthread_mutex_lock(&start_lock);
-			pthread_cond_signal(&waiting);
-			pthread_cond_wait(&may_continue,&start_lock);
-			pthread_mutex_unlock(&start_lock);
-		}
+		sched_yield();
 		error=pthread_mutex_lock(&output_lock);
-		if(error)
+		if(error && coport_type!=COCARRIER)
 			err(error,"send_data: lock failed");
 		if(status==-1)
 		{
@@ -221,41 +246,45 @@ void send_data(void)
 			}
 			err(errno,"error!");
 		}
-		timespecsub(&end_timestamp,&start_timestamp);
+		//timespecsub(&end_timestamp,&start_timestamp);
 		statcounters_diff(&result,&bank2,&send_start);
+
 		
-		ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
+		//ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
 		
-		printf("Sent %lu bytes in %lf\n", total_size, ipc_time);
-		printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+		//printf("Sent %lu bytes in %lf\n", total_size, ipc_time);
+		//printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+		printf("Sent %lu bytes\n", total_size);
+
 		
 		//statcounters_dump_with_args calls fclose
-		#if 1 
 		if(i==0)
 			statcounters_dump_with_args(&result,"COSEND","","malta",f,CSV_HEADER);
 		else
 			statcounters_dump_with_args(&result,"COSEND","","malta",f,CSV_NOHEADER);		
 		statcounters_dump(&result);
-		pthread_mutex_unlock(&output_lock);
-
-
-		#endif
-
+		
+		while(pthread_mutex_unlock(&output_lock));
 	}
+	intval=0;
+	if (trace)
+		sysarch(QEMU_SET_QTRACE, &intval);
 	coclose(port);
 	port=NULL;
 	free(name);
+	
 }
 
 void receive_data(void)
 {
+	int intval = 1;
 	int error = 0;
 	coport_t port = (void * __capability)-1;
 	
 	statcounters_bank_t bank1,result;
 	char * buffer = NULL;
-	struct timespec start, end;
-	float ipc_time;
+	//struct timespec start, end;
+	//float ipc_time;
 	int status;
 
 	char * name = malloc(sizeof(char)*255);
@@ -277,15 +306,34 @@ void receive_data(void)
 			break;
 	}
 	FILE * f;
-	status=coopen(port_name,coport_type,&port);
+
+	
 	/*if(port->status==COPORT_CLOSED)
 	{
 		err(1,"port closed before receiving");
 	}*/
-
+	while(!may_start)
+		sched_yield();
+	error=pthread_mutex_lock(&start_lock);
+	if(error)
+		err(error,"rsend_data: lock start_lock failed");
+	while(waiting_threads!=acked_threads)
+	{
+		pthread_mutex_unlock(&start_lock);
+		pthread_mutex_lock(&start_lock);
+	}
+	waiting_threads++;
+	pthread_cond_signal(&waiting);
+	pthread_cond_wait(&may_continue,&start_lock);
+	pthread_mutex_unlock(&start_lock);
+	if(coport_type==COCARRIER && trace)
+		sysarch(QEMU_SET_QTRACE, &intval);
+	
 	for(unsigned long i = 0; i<runs; i++)
 	{
 		f= fopen(name,"a+");
+		status=coopen(port_name,coport_type,&port);
+		
 		statcounters_zero(&bank1);
 		statcounters_zero(&recv_end);
 
@@ -293,75 +341,72 @@ void receive_data(void)
 
 		if(coport_type==COCARRIER)
 		{
-			error=pthread_mutex_lock(&async_lock);
+			while(pthread_mutex_trylock(&async_lock))
+				sched_yield();
 			if(error)
 				err(error,"recv_data: lock async_lock failed");
 			error=pthread_mutex_lock(&output_lock); //keep it quiet during
 			if(error)
 				err(error,"recv_data: lock output_lock failed");
 		}
-		else
-		{
-			error=pthread_mutex_lock(&start_lock);
-			pthread_cond_signal(&waiting);
-			pthread_cond_wait(&may_continue,&start_lock);
-			pthread_mutex_unlock(&start_lock);
-		}
+
 
 		if (coport_type!=COCHANNEL)
 		{
+			//clock_gettime(CLOCK_REALTIME,&start);
+			
 			for(unsigned int j = 0; j<(total_size/message_len); j++)
 			{
 				status=corecv(port,(void **)&buffer,message_len);
 			}
-			clock_gettime(CLOCK_REALTIME,&start);
+			
 			statcounters_sample(&bank1);
 			for(unsigned int j = 0; j<(total_size/message_len); j++)
 			{
 				status=corecv(port,(void **)&buffer,message_len);
 			}
 			statcounters_sample(&recv_end);
-			clock_gettime(CLOCK_REALTIME,&end);
+			
+			//clock_gettime(CLOCK_REALTIME,&end);
+			
+			/*
 			for(unsigned int j = 0; j<(total_size/message_len); j++)
 			{
 				status=corecv(port,(void **)&buffer,message_len);
 			}
+			*/
 		}
 		else
 		{
+			//clock_gettime(CLOCK_REALTIME,&start);
+			
 			for(unsigned int j = 0; j<(total_size/4096); j++)
 			{
 				status=corecv(port,(void **)&buffer,4096);
 			}
-			clock_gettime(CLOCK_REALTIME,&start);
 			statcounters_sample(&bank1);
 			for(unsigned int j = 0; j<(total_size/4096); j++)
 			{
 				status=corecv(port,(void **)&buffer,4096);
 			}
 			statcounters_sample(&recv_end);
-			clock_gettime(CLOCK_REALTIME,&end);
+			//clock_gettime(CLOCK_REALTIME,&end);
+			
+			/*
 			for(unsigned int j = 0; j<(total_size/4096); j++)
 			{
 				status=corecv(port,(void **)&buffer,4096);
-			}
+			}*/
 			
 		}
 
 		if(coport_type==COCARRIER)
 		{
-			while(!pthread_mutex_unlock(&async_lock));
-			while(!pthread_mutex_unlock(&output_lock));
+			while(pthread_mutex_unlock(&async_lock));
 		}
-		else
-		{
-			error=pthread_mutex_lock(&start_lock);
-			pthread_cond_signal(&waiting);
-			pthread_cond_wait(&may_continue,&start_lock);
-			pthread_mutex_unlock(&start_lock);
-		}
+		sched_yield();
 		error=pthread_mutex_lock(&output_lock);
-		if(error)
+		if(error && coport_type!=COCARRIER)
 			err(error,"recv_data: lock output_lock failed");
 
 		if(status==-1)
@@ -375,15 +420,16 @@ void receive_data(void)
 			err(1,"buffer not written to");
 		}
 		//printf("message received:%s\n",(char *)buffer);
-		timespecsub(&end,&start);
+		//timespecsub(&end,&start);
 		statcounters_diff(&result,&recv_end,&bank1);
 		
-		ipc_time=(float)end.tv_sec + (float)end.tv_nsec / 1000000000;
-		printf("Received %lu bytes in %lf\n", total_size, ipc_time);
-		
+		//ipc_time=(float)end.tv_sec + (float)end.tv_nsec / 1000000000;
+		//printf("Received %lu bytes in %lf\n", total_size, ipc_time);
+		printf("Received %lu bytes\n", total_size);
 
-		printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
-		#if 1
+
+		//printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+
 
 		if(i==0)
 			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_HEADER);
@@ -407,16 +453,26 @@ void receive_data(void)
 			default:
 				break;
 		}
-		f= fopen(name,"a+");
+		f = fopen(name,"a+");
 		statcounters_diff(&result,&recv_end,&send_start);
 		if(i==0)
 			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_HEADER);
 		else
 			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_NOHEADER);
-		#endif
-		pthread_mutex_unlock(&output_lock);
+	
+		while(pthread_mutex_unlock(&output_lock));
+		coclose(port);
 	}
-	coclose(port);
+	intval=0;
+	if(coport_type==COCARRIER)
+	{
+		if (trace)
+		{	
+			sysarch(QEMU_SET_QTRACE, &intval);
+			//CHERI_STOP_TRACE;
+		}
+	}
+	
 	port=NULL;
 	free(buffer);
 	free(name);
@@ -426,10 +482,10 @@ static
 void prepare_message(void)
 {
 	unsigned int i, message_remaining, data_copied, to_copy;
+
 	message_str=calloc(message_len,sizeof(char));
 	if (message_len%1024==0)
 	{
-		;
 		for(i = 0; i < message_len-1024; i+=1024)
 		{
 			memcpy(message_str+i,one_k_str,1024);
@@ -456,39 +512,38 @@ void prepare_message(void)
 
 static int done = 0;
 
-static
-void thr_done(void * arg)
-{
-	done++;
-	if (arg)
-		return;
-}
 
 static
 void *do_send(void* args)
 {	
 	int error = 0;
 
-	pthread_cleanup_push(thr_done, (NULL));
+
 	pthread_mutex_lock(&async_lock);
 
 	prepare_message();
 	port_name=malloc(strlen(port_names[1])+1);
-	strcpy(port_name,port_names[1]);
+	
 	coport_type=COPIPE;
-	may_start++;
-	send_data();
-
-	coport_type=COCARRIER;
 	strcpy(port_name,port_names[0]);
 	may_start++;
+	
+	send_data();
+	switching_types++;
+	while(pthread_mutex_unlock(&async_lock));
+
 	error=pthread_mutex_lock(&start_lock);
 	pthread_cond_signal(&waiting);
 	pthread_cond_wait(&may_continue,&start_lock);
 	pthread_mutex_unlock(&start_lock);
 
+	strcpy(port_name,port_names[1]);
+	coport_type=COCARRIER;
+
+	may_start++;
 	send_data();
-	pthread_cleanup_pop(0);
+
+	done++;	
 	return args;
 }
 
@@ -496,17 +551,16 @@ static
 void *do_recv(void* args)
 {
 	int error = 0;
-
-	pthread_cleanup_push(&thr_done, NULL);
+	
 	receive_data();
-
+	switching_types++;
 	error=pthread_mutex_lock(&start_lock);
 	pthread_cond_signal(&waiting);
 	pthread_cond_wait(&may_continue,&start_lock);
 	pthread_mutex_unlock(&start_lock);
 
 	receive_data();
-	pthread_cleanup_pop(0);
+	done++;
 	return args;
 }
 
@@ -519,11 +573,14 @@ int main(int argc, char * const argv[])
 	int receive = 0;
 	pthread_t sender, receiver;
 	
-	while((opt=getopt(argc,argv,"ot:r:b:p"))!=-1)
+	while((opt=getopt(argc,argv,"ot:r:b:pqc:"))!=-1)
 	{
 		switch(opt)
 		{
 			case 'o':
+				break;
+			case 'q':
+				trace=1;
 				break;
 			case 'b':
 				message_len = strtol(optarg, &strptr, 10);
@@ -541,6 +598,9 @@ int main(int argc, char * const argv[])
 					err(1,"invalid total length");
 				break;
 			case 'p':
+				receive=1;
+				break;
+			case 'c':
 				receive=1;
 				break;
 			default:
@@ -561,36 +621,53 @@ int main(int argc, char * const argv[])
 	{
 		total_size=message_len;
 	}
+	struct timespec sleepytime;
+	sleepytime.tv_sec=0;
+	sleepytime.tv_nsec=100;
+	pthread_attr_t send_attr,recv_attr;
+	pthread_attr_init(&send_attr);
+	pthread_attr_init(&recv_attr);
+	
+	struct sched_param sched_params;
+	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	pthread_attr_setschedpolicy(&send_attr,SCHED_FIFO);
+	pthread_attr_setschedpolicy(&recv_attr,SCHED_FIFO);
+	pthread_attr_setschedparam(&send_attr,&sched_params);
+	pthread_attr_setschedparam(&recv_attr,&sched_params);
+	
 	pthread_mutexattr_t type;
 	pthread_mutexattr_init(&type);
 	pthread_mutexattr_settype(&type,PTHREAD_MUTEX_ERRORCHECK);
 	
 	pthread_mutex_init(&output_lock,&type);
-	
+	pthread_mutex_init(&start_lock,&type);
 
 	pthread_mutexattr_settype(&type,PTHREAD_MUTEX_RECURSIVE);
 	pthread_mutex_init(&async_lock,&type);
-	pthread_mutex_init(&async_lock,&type);
 	pthread_cond_init(&may_continue,NULL);
 	pthread_cond_init(&waiting,NULL);
-	pthread_mutex_init(&start_lock,&type);
-
+	
 	statcounters_reset();
 
 	pthread_mutex_lock(&start_lock);
-	pthread_create(&sender,NULL,do_send,NULL);
-	pthread_create(&receiver,NULL,do_recv,NULL);
 	
-	pthread_mutex_lock(&start_lock);
+	pthread_create(&sender,&send_attr,do_send,NULL);
+	sched_yield();
+	pthread_create(&receiver,&recv_attr,do_recv,NULL);
 	while (done<2)
 	{
-		waiting_threads=0;
-		while(waiting_threads<2)
+		pthread_cond_wait(&waiting,&start_lock);
+		acked_threads++;
+		pthread_cond_wait(&waiting,&start_lock);
+		acked_threads++;
+		if(switching_types==2)
 		{
-			pthread_cond_wait(&waiting,&start_lock);
-			waiting_threads++;
+			
 		}
 		pthread_cond_broadcast(&may_continue);
+		acked_threads=0;
+		waiting_threads=0;
+
 	}
 	pthread_mutex_unlock(&start_lock);
 	return 0;
