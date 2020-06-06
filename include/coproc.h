@@ -55,7 +55,7 @@ typedef struct _coopen_args_t
 typedef struct _cocall_coopen_t
 {
 	coopen_args_t args;
-	_Atomic(coport_t) port; 
+	coport_t port; 
 	int status;
 	int error;
 } __attribute__((__aligned__(16))) cocall_coopen_t;
@@ -80,7 +80,7 @@ typedef struct _colock_args_t counlock_args_t;
 
 typedef struct _cocarrier_send_args_t
 {
-	_Atomic(coport_t) cocarrier;
+	coport_t cocarrier;
 	void * __capability message;
 	int status;
 	int error;

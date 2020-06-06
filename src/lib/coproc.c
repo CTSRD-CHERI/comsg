@@ -110,11 +110,12 @@ int add_or_lookup_thread(cpthr_t **entry)
 	LIST_FOREACH_SAFE(thrd, &coproc_cache.entries, entries, thrd_temp) {
 		if (thrd->tid==tid) {
 			*entry=thrd;
+
 			return 1;
 		}
 	}
-
-	thrd = calloc(1,sizeof(cpthr_t));
+	thrd = malloc(sizeof(cpthr_t));
+	memset(thrd,0,sizeof(cpthr_t));
 	thrd->tid = tid;
 	error=cosetup(COSETUP_COCALL,&thrd->codecap,&thrd->datacap);
 	if(error!=0)
@@ -152,7 +153,9 @@ void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
 	}
 	if(!request_handler)
 	{
-		request_handler = calloc(1,sizeof(cplk_t));
+		request_handler = malloc(sizeof(cplk_t));
+		memset(request_handler,0,sizeof(cplk_t));
+
 		error=colookup(target_name,&request_handler->target_cap);
 		if(error!=0)
 		{
@@ -163,27 +166,32 @@ void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
 		LIST_INSERT_HEAD(&request_handler_cache.entries,request_handler,lookups);
 	}
 
-	lookup_data=calloc(1,sizeof(cocall_lookup_t));
+	lookup_data=malloc(sizeof(cocall_lookup_t));
+	memset(lookup_data,0,sizeof(cocall_lookup_t));
 	strcpy(lookup_data->target,target_name);
 	lookup_data->cap=NULL;
+
+	known_worker = malloc(sizeof(cplk_t));
+	memset(known_worker,0,sizeof(cplk_t));
 
 	error=cocall(thread->codecap,thread->datacap,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
 	if(error!=0)
 	{
 		warn("cocall failed, trying a fresh colookup\n");
+	
+		error=colookup(target_name,&request_handler->target_cap);
+		if(error!=0)
+		{
+			err(ESRCH,"colookup of %s failed",target_name);
+		}
+		error=cocall(thread->codecap,thread->datacap,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
+		if(error!=0)
+		{
+			err(ESRCH,"cocall failed\n");
+		}
 	}
-	error=colookup(target_name,&request_handler->target_cap);
-	if(error!=0)
-	{
-		err(ESRCH,"colookup of %s failed",target_name);
-	}
-	error=cocall(thread->codecap,thread->datacap,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
-	if(error!=0)
-	{
-		err(ESRCH,"cocall failed\n");
-	}
-
-	known_worker = calloc(1,sizeof(cplk_t));
+	
+	
 	strcpy(known_worker->target_name, target_name);
 	known_worker->target_cap = lookup_data->cap;
 	

@@ -57,3 +57,8 @@ setup.sh
 output
 build
 tests
+*.swo
+*.swp
+*.dump
+*.dat
+*.cvtrace

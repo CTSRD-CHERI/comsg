@@ -180,6 +180,11 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     }
     //  printf("workers for %s\n",name);
     pthread_attr_init(&thread_attrs);
+    /*pthread_attr_setschedpolicy(&thread_attrs,SCHED_RR);
+    struct sched_param sched_params;
+    sched_params.sched_priority = sched_get_priority_max(SCHED_RR)-1;
+    pthread_attr_setinheritsched(&thread_attrs,PTHREAD_EXPLICIT_SCHED);
+    pthread_attr_setschedparam(&thread_attrs,&sched_params);*/
     for (int i = 0; i < WORKER_COUNT; i++)
     {
         args=ukern_malloc(sizeof(worker_args_t));

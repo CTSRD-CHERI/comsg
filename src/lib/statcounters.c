@@ -284,6 +284,70 @@ int statcounters_sample (statcounters_bank_t * const cnt_bank)
     return 0;
 }
 
+int statcounters_sample_end (statcounters_bank_t * const cnt_bank)
+{
+    if (cnt_bank == NULL)
+        return -1;
+    cnt_bank->cycle                                       = statcounters_get_cycle_count();
+    cnt_bank->inst                                        = statcounters_get_inst_count();
+    cnt_bank->inst_user                                   = statcounters_get_inst_user_count();
+    cnt_bank->inst_kernel                                 = statcounters_get_inst_kernel_count();
+    cnt_bank->dtlb_miss                                   = statcounters_get_dtlb_miss_count();
+    cnt_bank->itlb_miss                                   = statcounters_get_itlb_miss_count();
+    cnt_bank->imprecise_setbounds                         = statcounters_get_imprecise_setbounds_count();
+    cnt_bank->unrepresentable_caps                        = statcounters_get_unrepresentable_caps_count();
+    cnt_bank->icache[STATCOUNTERS_WRITE_HIT]              = statcounters_get_icache_write_hit_count();
+    cnt_bank->icache[STATCOUNTERS_WRITE_MISS]             = statcounters_get_icache_write_miss_count();
+    cnt_bank->icache[STATCOUNTERS_READ_HIT]               = statcounters_get_icache_read_hit_count();
+    cnt_bank->icache[STATCOUNTERS_READ_MISS]              = statcounters_get_icache_read_miss_count();
+    cnt_bank->icache[STATCOUNTERS_EVICT]                  = statcounters_get_icache_evict_count();
+    cnt_bank->dcache[STATCOUNTERS_WRITE_HIT]              = statcounters_get_dcache_write_hit_count();
+    cnt_bank->dcache[STATCOUNTERS_WRITE_MISS]             = statcounters_get_dcache_write_miss_count();
+    cnt_bank->dcache[STATCOUNTERS_READ_HIT]               = statcounters_get_dcache_read_hit_count();
+    cnt_bank->dcache[STATCOUNTERS_READ_MISS]              = statcounters_get_dcache_read_miss_count();
+    cnt_bank->dcache[STATCOUNTERS_EVICT]                  = statcounters_get_dcache_evict_count();
+    cnt_bank->dcache[STATCOUNTERS_SET_TAG_WRITE]          = statcounters_get_dcache_set_tag_write_count();
+    cnt_bank->dcache[STATCOUNTERS_SET_TAG_READ]           = statcounters_get_dcache_set_tag_read_count();
+    cnt_bank->l2cache[STATCOUNTERS_WRITE_HIT]             = statcounters_get_l2cache_write_hit_count();
+    cnt_bank->l2cache[STATCOUNTERS_WRITE_MISS]            = statcounters_get_l2cache_write_miss_count();
+    cnt_bank->l2cache[STATCOUNTERS_READ_HIT]              = statcounters_get_l2cache_read_hit_count();
+    cnt_bank->l2cache[STATCOUNTERS_READ_MISS]             = statcounters_get_l2cache_read_miss_count();
+    cnt_bank->l2cache[STATCOUNTERS_EVICT]                 = statcounters_get_l2cache_evict_count();
+    cnt_bank->l2cache[STATCOUNTERS_SET_TAG_WRITE]         = statcounters_get_l2cache_set_tag_write_count();
+    cnt_bank->l2cache[STATCOUNTERS_SET_TAG_READ]          = statcounters_get_l2cache_set_tag_read_count();
+    cnt_bank->l2cachemaster[STATCOUNTERS_READ_REQ]        = statcounters_get_l2cachemaster_read_req_count();
+    cnt_bank->l2cachemaster[STATCOUNTERS_WRITE_REQ]       = statcounters_get_l2cachemaster_write_req_count();
+    cnt_bank->l2cachemaster[STATCOUNTERS_WRITE_REQ_FLIT]  = statcounters_get_l2cachemaster_write_req_flit_count();
+    cnt_bank->l2cachemaster[STATCOUNTERS_READ_RSP]        = statcounters_get_l2cachemaster_read_rsp_count();
+    cnt_bank->l2cachemaster[STATCOUNTERS_READ_RSP_FLIT]   = statcounters_get_l2cachemaster_read_rsp_flit_count();
+    cnt_bank->l2cachemaster[STATCOUNTERS_WRITE_RSP]       = statcounters_get_l2cachemaster_write_rsp_count();
+    cnt_bank->tagcache[STATCOUNTERS_WRITE_HIT]            = statcounters_get_tagcache_write_hit_count();
+    cnt_bank->tagcache[STATCOUNTERS_WRITE_MISS]           = statcounters_get_tagcache_write_miss_count();
+    cnt_bank->tagcache[STATCOUNTERS_READ_HIT]             = statcounters_get_tagcache_read_hit_count();
+    cnt_bank->tagcache[STATCOUNTERS_READ_MISS]            = statcounters_get_tagcache_read_miss_count();
+    cnt_bank->tagcache[STATCOUNTERS_EVICT]                = statcounters_get_tagcache_evict_count();
+    cnt_bank->tagcachemaster[STATCOUNTERS_READ_REQ]       = statcounters_get_tagcachemaster_read_req_count();
+    cnt_bank->tagcachemaster[STATCOUNTERS_WRITE_REQ]      = statcounters_get_tagcachemaster_write_req_count();
+    cnt_bank->tagcachemaster[STATCOUNTERS_WRITE_REQ_FLIT] = statcounters_get_tagcachemaster_write_req_flit_count();
+    cnt_bank->tagcachemaster[STATCOUNTERS_READ_RSP]       = statcounters_get_tagcachemaster_read_rsp_count();
+    cnt_bank->tagcachemaster[STATCOUNTERS_READ_RSP_FLIT]  = statcounters_get_tagcachemaster_read_rsp_flit_count();
+    cnt_bank->tagcachemaster[STATCOUNTERS_WRITE_RSP]      = statcounters_get_tagcachemaster_write_rsp_count();
+    cnt_bank->mipsmem[STATCOUNTERS_BYTE_READ]             = statcounters_get_mem_byte_read_count();
+    cnt_bank->mipsmem[STATCOUNTERS_BYTE_WRITE]            = statcounters_get_mem_byte_write_count();
+    cnt_bank->mipsmem[STATCOUNTERS_HWORD_READ]            = statcounters_get_mem_hword_read_count();
+    cnt_bank->mipsmem[STATCOUNTERS_HWORD_WRITE]           = statcounters_get_mem_hword_write_count();
+    cnt_bank->mipsmem[STATCOUNTERS_WORD_READ]             = statcounters_get_mem_word_read_count();
+    cnt_bank->mipsmem[STATCOUNTERS_WORD_WRITE]            = statcounters_get_mem_word_write_count();
+    cnt_bank->mipsmem[STATCOUNTERS_DWORD_READ]            = statcounters_get_mem_dword_read_count();
+    cnt_bank->mipsmem[STATCOUNTERS_DWORD_WRITE]           = statcounters_get_mem_dword_write_count();
+    cnt_bank->mipsmem[STATCOUNTERS_CAP_READ]              = statcounters_get_mem_cap_read_count();
+    cnt_bank->mipsmem[STATCOUNTERS_CAP_WRITE]             = statcounters_get_mem_cap_write_count();
+    cnt_bank->mipsmem[STATCOUNTERS_CAP_READ_TAG_SET]      = statcounters_get_mem_cap_read_tag_set_count();
+    cnt_bank->mipsmem[STATCOUNTERS_CAP_WRITE_TAG_SET]     = statcounters_get_mem_cap_write_tag_set_count();
+
+    return 0;
+}
+
 // diff two statcounters_banks into a third one
 void diff_statcounters (
     const statcounters_bank_t * const be,
@@ -696,6 +760,10 @@ uint64_t statcounters_sample_by_id (int id)
 
 	return (statcounter_names[id].counter_get());
 }
+
+#ifndef STATCOUNTERS_NO_CTOR_DTOR
+#define STATCOUNTERS_NO_CTOR_DTOR
+#endif
 
 #ifndef STATCOUNTERS_NO_CTOR_DTOR
 

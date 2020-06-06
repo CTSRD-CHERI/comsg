@@ -70,8 +70,8 @@ int map_region(void)
 	pthread_mutex_lock(&region_table.lock);
 
 	new_page=MAP_UKERN(NULL,UKERN_MAP_LEN);
-	memset(new_page,0,UKERN_MAP_LEN);
-	mlock(new_page,UKERN_MAP_LEN);
+	memset(new_page,0,cheri_getlen(new_page));
+	mlock(new_page,cheri_getlen(new_page));
 	if(errno!=0)
 	{
 		err(errno,"mapping region failed\n");
