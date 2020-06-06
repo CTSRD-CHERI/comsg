@@ -43,6 +43,8 @@
 #include <stdio.h>
 #include <statcounters.h>
 #include <stdatomic.h>
+#include <sys/cpuset.h>
+#include <sys/param.h>
 #include <machine/sysarch.h>
 #include <machine/cheri.h>
 
@@ -274,6 +276,7 @@ void send_data(void)
 	free(name);
 	
 }
+
 
 void receive_data(void)
 {
@@ -564,6 +567,10 @@ void *do_recv(void* args)
 	return args;
 }
 
+static cpusetid_t cochatter_setid;
+static cpuset_t fullset = CPUSET_T_INITIALIZER(CPUSET_FSET);
+static cpuset_t recv_cpu_set = CPUSET_T_INITIALIZER(0x1);
+static cpuset_t send_cpu_set;
 
 int main(int argc, char * const argv[])
 {
@@ -621,6 +628,9 @@ int main(int argc, char * const argv[])
 	{
 		total_size=message_len;
 	}
+	//cpuset(&cochatter_setid);
+	send_cpu_set = CPUSET_NAND(&fullset,&recv_cpu_set);
+
 	struct timespec sleepytime;
 	sleepytime.tv_sec=0;
 	sleepytime.tv_nsec=100;
@@ -628,6 +638,9 @@ int main(int argc, char * const argv[])
 	pthread_attr_init(&send_attr);
 	pthread_attr_init(&recv_attr);
 	
+	pthread_attr_getaffinity_np(&send_attr, sizeof(cpuset_t), &send_cpu_set);
+	pthread_attr_getaffinity_np(&recv_attr, sizeof(cpuset_t), &recv_cpu_set);
+
 	struct sched_param sched_params;
 	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 	pthread_attr_setschedpolicy(&send_attr,SCHED_FIFO);
