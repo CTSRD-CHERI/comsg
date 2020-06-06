@@ -30,11 +30,39 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/param.h>
+#include <machine/sysarch.h>
+#include <sys/sysctl.h>
+#include <unistd.h>
+
+static int multicore = 0;
 
 int generate_id(void)
 {
     // TODO: Replace this with something smarter.
     return random();
+}
+
+__attribute__ ((constructor)) static 
+void setup_utils(void)
+{
+    int mib[4];
+    int cores;
+    size_t len = sizeof(cores); 
+
+    /* set the mib for hw.ncpu */
+    mib[0] = CTL_HW;
+    mib[1] = HW_NCPU;
+
+    /* get the number of CPUs from the system */
+    sysctl(mib, 2, &cores, &len, NULL, 0);
+    if (cores>1)
+        multicore=1;
+}
+
+inline
+int is_multicore(void)
+{
+    return multicore;
 }
 
 int rand_string(char * buf, size_t len)

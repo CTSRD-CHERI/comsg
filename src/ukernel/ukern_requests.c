@@ -31,7 +31,7 @@
 
 #include <err.h>
 #include <errno.h>
-
+#include <stdio.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <string.h>
@@ -145,7 +145,10 @@ void *manage_requests(void *args)
 
 static void init_worker_map_lock(void)
 {
-    pthread_mutex_init(&worker_map_lock,NULL);
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr,PTHREAD_PROCESS_PRIVATE);
+    pthread_mutex_init(&worker_map_lock,&attr);
     return;
 }
 
@@ -154,7 +157,7 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     pthread_once(&once,init_worker_map_lock);
     pthread_attr_t thread_attrs;
     worker_args_t * args;
-    int e;
+    int e = 0;
     int w_i;
     char thread_name[LOOKUP_STRING_LEN];
     bool private;
@@ -186,18 +189,20 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
         //printf("%s",thread_name);
         
         //printf("thr_name %s\n",args->name);
-        e=pthread_create(&threads[i],&thread_attrs,func,args);
-        if (e==0)
+
+        if (!private)
         {
-        	if (!private)
-            {
-            	memcpy(&worker_map[w_i].workers[i],args,sizeof(worker_args_t));
-            }
-            else
-            {
-            	memcpy(&private_worker_map[w_i].workers[i],args,sizeof(worker_args_t));
-            }
+            memcpy(&worker_map[w_i].workers[i],args,sizeof(worker_args_t));
         }
+        else
+        {
+            memcpy(&private_worker_map[w_i].workers[i],args,sizeof(worker_args_t));
+        }
+        
+        e=pthread_create(&threads[i],&thread_attrs,func,args);
+        if(e)
+            err(e,"spawn_workers: could not spawn workers");
+        
     }
     pthread_mutex_unlock(&worker_map_lock);
     return 0;

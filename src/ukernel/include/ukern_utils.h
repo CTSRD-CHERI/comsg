@@ -35,5 +35,6 @@ int generate_id(void);
 int rand_string(char * buf, size_t len);
 //In case of desperation while debugging, break glass.-PBB
 void debug_noop(int i); 
+int is_multicore(void);
 
 #endif

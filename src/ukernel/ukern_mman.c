@@ -15,6 +15,7 @@
 #include "ukern_mman.h"
 #include "ukern_params.h"
 #include "sys_comsg.h"
+#include "ukern_utils.h"
 
 static buffer_table_t buffer_table;
 static region_table_t region_table;
@@ -411,7 +412,7 @@ void queue_job_done(work_queue_t * queue,work_queue_item_t * job)
 	pthread_mutex_lock(&queue->lock);
 	
 	pthread_cond_signal(&job->processed);
-	pthread_mutex_unlock(&job->lock);
+	while(pthread_mutex_unlock(&job->lock));
 
 	queue->count-=1;	
 	pthread_cond_signal(&queue->not_full);
@@ -443,7 +444,7 @@ work_queue_item_t queue_do_job(work_queue_t * queue,work_queue_item_t job)
 		pthread_cond_wait(&q_job->processed,&q_job->lock);
 	}
 	job.subject=q_job->subject;
-	pthread_mutex_unlock(&q_job->lock);
+	while(pthread_mutex_unlock(&q_job->lock));
 	return job;
 }
 

@@ -370,7 +370,7 @@ void *cocarrier_send(void *args)
         while(!atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
         {
             status=COPORT_OPEN;
-            pthread_yield();
+            //pthread_yield();
         }
         //add buffer to cocarrrier
         atomic_thread_fence(memory_order_acq_rel);
@@ -556,6 +556,7 @@ int main(int argc, const char *argv[])
     pthread_condattr_t cond_attr;
 
     pthread_mutexattr_init(&lock_attr);
+    pthread_mutexattr_setpshared(&lock_attr,PTHREAD_PROCESS_PRIVATE);
     pthread_mutex_init(&global_copoll_lock,&lock_attr);
     pthread_condattr_init(&cond_attr);
     pthread_cond_init(&global_cosend_cond,&cond_attr);
@@ -567,12 +568,11 @@ int main(int argc, const char *argv[])
         err(1,"Initial setup failed!!");
     }
     printf("Initial setup complete.\n");
-    pthread_create(&commap_manager,&thread_attrs,ukern_mmap,NULL);
 
     /* perform setup */
-
     printf("Press enter to proceed\n");
     while( getchar() != '\n');
+    pthread_create(&commap_manager,&thread_attrs,ukern_mmap,NULL);
     printf("Spawning co-open listeners...\n");
     error+=spawn_workers(&coport_open,coopen_threads,U_COOPEN);
     /*
@@ -640,7 +640,7 @@ int main(int argc, const char *argv[])
     pthread_attr_init(&thread_attrs);
     pthread_create(&coclose_handler,&thread_attrs,manage_requests,handler_args);
     */
-
+    printf("Done. Listening for calls.\n");
     pthread_join(coopen_threads[0],NULL);
     pthread_join(coopen_handler,NULL);
 

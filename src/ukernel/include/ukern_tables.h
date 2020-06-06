@@ -49,6 +49,8 @@ typedef struct _coport_tbl_entry_t
 typedef struct _coport_tbl_t
 {
 	_Atomic int index;
+	_Atomic int lookup_in_progress;
+	_Atomic int add_in_progress;
 	coport_tbl_entry_t * table;
 } coport_tbl_t;
 

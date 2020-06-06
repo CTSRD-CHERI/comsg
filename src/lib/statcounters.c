@@ -656,8 +656,8 @@ int statcounters_dump_with_args (
             break;
     }
     free(pname);
-    if (!use_stdout)
-        fclose(fp);
+    //if (!use_stdout)
+    //    fclose(fp);
     return 0;
 }
 

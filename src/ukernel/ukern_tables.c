@@ -44,6 +44,9 @@ const int COPORT_TBL_LEN = (MAX_COPORTS*sizeof(coport_tbl_entry_t));
 
 int lookup_port(char * port_name,sys_coport_t ** port_buf)
 {
+    while(coport_table.add_in_progress && !is_multicore())
+        sched_yield();
+    atomic_fetch_add(&coport_table.lookup_in_progress,1);
     if(strlen(port_name)>=COPORT_NAME_LEN)
     	err(1,"port name length too long");
     for(int i = 0; i<coport_table.index;i++)
@@ -51,11 +54,21 @@ int lookup_port(char * port_name,sys_coport_t ** port_buf)
         if(strncmp(port_name,coport_table.table[i].name,COPORT_NAME_LEN)==0)
         {
             *port_buf=coport_table.table[i].port_cap;
+            atomic_fetch_add(&coport_table.lookup_in_progress,-1);
             return 0;
         }
     }
-    *port_buf=NULL;
-    errno=ENOENT;
+    atomic_fetch_add(&coport_table.lookup_in_progress,-1);
+    //restart operation if something started writing to the table while we were reading it
+    if(coport_table.add_in_progress)
+    {
+        return lookup_port(port_name,port_buf);
+    }
+    else
+    {
+        *port_buf=NULL;
+        errno=ENOENT;
+    }
     return -1;
 }
 
@@ -63,13 +76,28 @@ int lookup_port(char * port_name,sys_coport_t ** port_buf)
 int add_port(coport_tbl_entry_t entry)
 {
     int entry_index;
-    
+    int intval = 0;
+    while(!atomic_compare_exchange_strong_explicit(&coport_table.add_in_progress,&intval,1,memory_order_acq_rel,memory_order_acquire))
+    {
+        intval=0;
+        if (!is_multicore())
+            sched_yield();
+    }
     if(coport_table.index==MAX_COPORTS)
     {
         return 1;
     }
+    for(int i = 0; i<coport_table.index;i++)
+    {
+        if(strncmp(entry.name,coport_table.table[i].name,COPORT_NAME_LEN)==0)
+        {
+            atomic_store_explicit(&coport_table.add_in_progress,0,memory_order_release);    
+            return i;
+        }
+    }
     entry_index=atomic_fetch_add(&coport_table.index,1);
-    memcpy(&coport_table.table[entry_index],&entry,sizeof(coport_tbl_entry_t));    
+    memcpy(&coport_table.table[entry_index],&entry,sizeof(coport_tbl_entry_t)); 
+    atomic_store_explicit(&coport_table.add_in_progress,0,memory_order_release);   
     return entry_index;
 }
 
@@ -114,6 +142,9 @@ int coport_tbl_setup(void)
 
     coport_table.index=0;
     coport_table.table=ukern_malloc(COPORT_TBL_LEN);
+    coport_table.lookup_in_progress=0;
+    coport_table.add_in_progress=0;
+
     mlock(coport_table.table,COPORT_TBL_LEN);
     
     /* reserve a superpage or two for this, entries should be small */

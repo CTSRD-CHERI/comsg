@@ -98,7 +98,7 @@ typedef struct __no_subobject_bounds _coport_listener
 
 struct _coport
 {
-    void * __capability buffer;
+    _Atomic(void * __capability) buffer;
     _Atomic size_t length;
     _Atomic size_t start;
     _Atomic size_t end;

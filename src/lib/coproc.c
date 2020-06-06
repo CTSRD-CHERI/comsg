@@ -33,6 +33,7 @@
 #include <stddef.h>
 #include <sys/cdefs.h>
 
+#include <machine/tls.h>
 #include <machine/param.h>
 #include <machine/sysarch.h>
 #include <sys/types.h>
@@ -44,13 +45,34 @@
 #include "coproc.h"
 #include "sys_comsg.h"
 
+#define TCB_ALIGN (CHERICAP_SIZE)
+
+struct tcb {
+	void			*tcb_dtv;
+	struct pthread		*tcb_thread;
+} __packed __aligned(TCB_ALIGN);
+
+static __inline struct pthread *
+_get_curthread_no_sysarch(void)
+{
+	uintcap_t _rv;
+
+	__asm__ __volatile__ (
+	    "creadhwr\t%0, $chwr_userlocal"
+	    : "=C" (_rv));
+
+	return (((struct tcb *)(_rv - TLS_TP_OFFSET - TLS_TCB_SIZE))->tcb_thread);
+}
+
+#define get_thread_self(x) _get_curthread_no_sysarch(x)
+
 struct _coproc_lookup
 {
 	LIST_ENTRY(_coproc_lookup) lookups;
 	char target_name[LOOKUP_STRING_LEN];
 	void * __capability target_cap;
 };
-typedef struct _coproc_thread cplk_t;
+typedef struct _coproc_lookup cplk_t;
 
 struct _coproc_thread
 {
@@ -74,16 +96,16 @@ typedef struct handler_table
 {
 	LIST_HEAD(,_coproc_lookup) entries;
 	int count;
-} 
+} handler_tbl_t;
 static handler_tbl_t request_handler_cache;
 
 static
-int add_or_lookup_thread(cpthr_t *entry)
+int add_or_lookup_thread(cpthr_t **entry)
 {
 	//return 1 if found
 	//return 0 if created
 	int error;
-	pthread_t tid = pthread_self();
+	pthread_t tid = get_thread_self();
 	cpthr_t *thrd, *thrd_temp;
 	LIST_FOREACH_SAFE(thrd, &coproc_cache.entries, entries, thrd_temp) {
 		if (thrd->tid==tid) {
@@ -102,7 +124,7 @@ int add_or_lookup_thread(cpthr_t *entry)
 	LIST_INIT(&thrd->lookups);
 	LIST_INSERT_HEAD(&coproc_cache.entries,thrd,entries);
 	*entry = thrd;
-	coproc_cache->count++;
+	coproc_cache.count++;
 	return 0;
 }
 
@@ -137,6 +159,7 @@ void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
 			err(ESRCH,"colookup of %s failed",target_name);
 		}
 		strcpy(request_handler->target_name,target_name);
+		request_handler_cache.count++;
 		LIST_INSERT_HEAD(&request_handler_cache.entries,request_handler,lookups);
 	}
 
@@ -144,7 +167,7 @@ void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
 	strcpy(lookup_data->target,target_name);
 	lookup_data->cap=NULL;
 
-	error=cocall(thread->sw_code,thread->sw_data,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
+	error=cocall(thread->codecap,thread->datacap,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
 	if(error!=0)
 	{
 		warn("cocall failed, trying a fresh colookup\n");
@@ -154,7 +177,7 @@ void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
 	{
 		err(ESRCH,"colookup of %s failed",target_name);
 	}
-	error=cocall(thread->sw_code,thread->sw_data,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
+	error=cocall(thread->codecap,thread->datacap,request_handler->target_cap,lookup_data,sizeof(cocall_lookup_t));
 	if(error!=0)
 	{
 		err(ESRCH,"cocall failed\n");
@@ -173,13 +196,9 @@ int ukern_lookup(void * __capability * __capability code,
 	void * __capability * __capability data, const char * target_name, 
 	void * __capability * __capability target_cap)
 {
-	int error;
-	cocall_lookup_t * lookup_data;
-	void * __capability lookup_cap;
 	cpthr_t *this_thread = NULL;
-	cplk_t *func_entry = NULL; 
 
-	add_or_lookup_thread(this_thread);
+	add_or_lookup_thread(&this_thread);
 	*code=this_thread->codecap;
 	*data=this_thread->datacap;
 
@@ -195,7 +214,7 @@ clear_table_after_fork(void)
 	cplk_t *lkp, *lkp_temp;
 	thrd=LIST_FIRST(&coproc_cache.entries);
 	while (thrd!=NULL) {
-		lkp=LIST_FIRST(&thrd.lookups);
+		lkp=LIST_FIRST(&thrd->lookups);
 		while (lkp!=NULL)
 		{
 			lkp_temp = LIST_NEXT(lkp,lookups);

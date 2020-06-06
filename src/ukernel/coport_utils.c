@@ -89,11 +89,12 @@ int init_port(coport_type_t type, sys_coport_t* p)
 	{
 		p->length=0;
 		p->end=-1;
-		p->buffer=ukern_malloc(COCARRIER_SIZE);
+		p->buffer=ukern_malloc(COPORT_BUF_LEN);
 		LIST_INIT(&p->listeners);
 	}
 	else
 	{
+		p->end=0;
 		p->length=COPORT_BUF_LEN;
 		p->buffer=ukern_malloc(COPORT_BUF_LEN);
 	}
