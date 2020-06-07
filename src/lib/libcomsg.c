@@ -124,7 +124,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 }
 
 inline
-coport_t coport_clearperm(coport_t p,int perms)
+coport_t coport_clearperm(coport_t p, int perms)
 {
     perms&=CHERI_PERMS_SWALL; //prevent trashing the rest of the perms word, which is unrelated to coport access control
     return cheri_andperm(p,perms);
@@ -149,7 +149,7 @@ int cosend(const coport_t prt, const void * buf, size_t len)
     struct timespec wait;
     wait.tv_sec=0;
     wait.tv_nsec=100;
-    int i = 0;
+    int i = 1;
     
     //assert(cheri_getperm(port) & COPORT_PERM_SEND); //doesn't work properly
     //assert(cheri_getsealed(port)!=0);
@@ -274,7 +274,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
     cocall_cocarrier_send_t call;
     coport_status_t status_val;
     coport_type_t type;
-    uint i=0;
+    uint i=1;
     int retval = len;
     
     //assert(cheri_getperm(port)&COPORT_PERM_RECV); //doesn't work
@@ -556,5 +556,7 @@ void libcomsg_init(void)
     sysctl(mib, 2, &cores, &len, NULL, 0);
     if (cores>1)
         multicore=1;
-    
+    #if 1
+    multicore=0;
+    #endif
 }
