@@ -36,10 +36,11 @@
 
 static int multicore = 0;
 
+static int id = 1;
 int generate_id(void)
 {
     // TODO: Replace this with something smarter.
-    return random();
+    return id++;
 }
 
 __attribute__ ((constructor)) static 

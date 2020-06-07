@@ -27,6 +27,7 @@
 #include "comesg_kern.h"
 
 #include "ukern_mman.h"
+#include "ukern_msg_malloc.c"
 #include "ukern_params.h"
 #include "ukern_commap.h"
 #include "ukern_utils.h"
@@ -346,7 +347,7 @@ void *cocarrier_send(void *args)
         error=coaccept(sw_code,sw_data,&caller_cookie,cocarrier_send_args,sizeof(cocall_cocarrier_send_t));
         call_buf=cocarrier_send_args->message;
         //allocate ukernel owned buffer
-        msg_buf=ukern_malloc(cheri_getlen(cocarrier_send_args->message));
+        msg_buf=get_mem(cheri_getlen(cocarrier_send_args->message));
         //copy data into buffer
         memcpy(msg_buf,call_buf,cheri_getlen(cocarrier_send_args->message));
         //perform checks
@@ -391,7 +392,7 @@ void *cocarrier_send(void *args)
         if(cheri_gettag(cocarrier_buf[index]))
         {
         	//auto overwrite old messages once we've wrapped around
-        	ukern_free(cocarrier_buf[index]);
+        	//ukern_free(cocarrier_buf[index]);
             cocarrier_buf[index]=NULL;
         }
         cocarrier_buf[index]=msg_buf;
@@ -493,7 +494,7 @@ int main(int argc, const char *argv[])
     int error = 0;
     request_handler_args_t * handler_args;
 
-    pthread_t memory_manager, commap_manager;
+    pthread_t memory_manager, commap_manager, msg_mman;
     pthread_t coopen_threads[WORKER_COUNT];
     //pthread_t counlock_threads[WORKER_COUNT];
     //pthread_t comutex_init_threads[WORKER_COUNT];
@@ -538,6 +539,7 @@ int main(int argc, const char *argv[])
     pthread_attr_init(&thread_attrs);
    
     pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
+    pthread_create(&msg_mman,&thread_attrs,map_new_mem,NULL);
 
     error+=sysarch(CHERI_GET_SEALCAP,&root_seal_cap);
     seal_cap=cheri_maketype(root_seal_cap,UKERN_OTYPE);

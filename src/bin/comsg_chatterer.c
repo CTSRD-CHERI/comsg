@@ -133,15 +133,14 @@ void send_data(void)
 
 	
 	FILE * f;
-	may_start++;
+
 	error=pthread_mutex_lock(&start_lock);
 	if(error)
 		err(error,"send_data: lock start_lock failed");
 	while(waiting_threads!=acked_threads)
 	{
-		pthread_mutex_unlock(&start_lock);
-		if(!multicore)
-			sched_yield();
+		pthread_mutex_unlock(&start_lock);	
+		sched_yield();
 		pthread_mutex_lock(&start_lock);
 	}
 	waiting_threads++;
@@ -149,13 +148,15 @@ void send_data(void)
 	pthread_cond_wait(&may_continue,&start_lock);
 	pthread_mutex_unlock(&start_lock);
 	
-	
+	if(coport_type!=COCARRIER)
+		sched_yield();
 	for(unsigned long i = 0; i<runs; i++){
-		f = fopen(name,"a+");
-		sleepytime.tv_sec=0;
-		sleepytime.tv_nsec=10000;
+		
+		
 
-		if(coport_type!=COCARRIER && !multicore){
+		if(coport_type!=COCARRIER){
+			sleepytime.tv_sec=0;
+			sleepytime.tv_nsec=10000;
 			nanosleep(&sleepytime,&sleepytime);
 			sched_yield();
 		}
@@ -265,7 +266,8 @@ void send_data(void)
 		//printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
 		printf("Sent %lu bytes\n", total_size);
 
-		
+			
+		f = fopen(name,"a+");
 		//statcounters_dump_with_args calls fclose
 		if(i==0)
 			statcounters_dump_with_args(&result,"COSEND","","malta",f,CSV_HEADER);
@@ -332,8 +334,7 @@ void receive_data(void)
 	while(waiting_threads!=acked_threads)
 	{
 		pthread_mutex_unlock(&start_lock);
-		if(!multicore)
-			sched_yield();
+		sched_yield();
 		pthread_mutex_lock(&start_lock);
 	}
 	waiting_threads++;
@@ -345,7 +346,7 @@ void receive_data(void)
 	
 	for(unsigned long i = 0; i<runs; i++)
 	{
-		f= fopen(name,"a+");
+		
 		status=coopen(port_name,coport_type,&port);
 		
 		statcounters_zero(&bank1);
@@ -356,9 +357,8 @@ void receive_data(void)
 		if(coport_type==COCARRIER)
 		{
 			while(pthread_mutex_trylock(&async_lock))
-			{
-				if(!multicore)
-					sched_yield();
+			{		
+				sched_yield();
 			}
 			//if(error)
 			//	err(error,"recv_data: lock async_lock failed");
@@ -366,7 +366,6 @@ void receive_data(void)
 			if(error)
 				err(error,"recv_data: lock output_lock failed");
 		}
-
 
 		if (coport_type!=COCHANNEL)
 		{
@@ -448,7 +447,7 @@ void receive_data(void)
 
 		//printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
 
-
+		f= fopen(name,"a+");
 		if(i==0)
 			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_HEADER);
 		else
@@ -524,6 +523,7 @@ void prepare_message(void)
 		
 	}
 	message_str[message_len-1]='\0';
+	mlock(message_str,message_len);
 }
 
 static int done = 0;
@@ -537,12 +537,12 @@ void *do_send(void* args)
 
 	pthread_mutex_lock(&async_lock);
 
-	prepare_message();
-	port_name=malloc(strlen(port_names[1])+1);
-	
 	coport_type=COPIPE;
+	may_start++;
+	port_name=malloc(strlen(port_names[1])+1);
 	strcpy(port_name,port_names[0]);
-	
+
+	//prepare_message();
 	
 	send_data();
 	switching_types++;
@@ -686,6 +686,7 @@ int main(int argc, char * const argv[])
 
 	if(pthread_attr_setschedparam(&send_attr,&sched_params))
 		err(errno,"error setting sched params for send");
+	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 	if(pthread_attr_setschedparam(&recv_attr,&sched_params))
 		err(errno,"error setting sched params for recv");
 
@@ -709,17 +710,18 @@ int main(int argc, char * const argv[])
 
 	if(pthread_mutex_lock(&start_lock))
 		err(errno,"error locking startlock");
-	pthread_setschedparam(pthread_self(),SCHED_FIFO,&sched_params);
+	//pthread_setschedparam(pthread_self(),SCHED_FIFO,&sched_params);
+	prepare_message();
 	if(pthread_create(&sender,&send_attr,do_send,NULL))
 		err(errno,"error starting send");
 	else
 		perror("started send");
-	if(!multicore)
-		sched_yield();
 	if(pthread_create(&receiver,&recv_attr,do_recv,NULL))
 		err(errno,"error starting recv");
 	else
 		perror("started recv");
+	if(!multicore)
+		sched_yield();
 	while (done<2)
 	{
 		pthread_cond_wait(&waiting,&start_lock);

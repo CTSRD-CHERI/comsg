@@ -77,7 +77,7 @@ endif
 
 ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
 	ukern_mman.o ukern_commap.o libcomsg.so ukern_tables.o ukern_requests.o \
-	ukern_utils.o
+	ukern_utils.o ukern_msg_malloc.o
 	$(CC) $(CFLAGS) $(LLDFLAGS) $(LIB_PARAMS) -lcomsg $(INC_PARAMS)  \
 	-o $(OUTDIR)/comesg_ukernel $(BUILDDIR)/comesg_kern.o \
 	$(BUILDDIR)/coport_utils.o $(BUILDDIR)/sys_comutex.o \
@@ -107,6 +107,7 @@ comesg_kern.o : src/ukernel/comesg_kern.c \
 	include/comutex.h include/sys_comsg.h \
 	$(UKRN_INCDIR)/coport_utils.h $(UKRN_INCDIR)/ukern_commap.h \
 	include/coproc.h include/comsg.h $(UKRN_INCDIR)/ukern_utils.h \
+	$(UKRN_INCDIR)/ukern_msg_malloc.h  \
 	$(UKRN_INCDIR)/ukern_tables.h 	$(UKRN_INCDIR)/ukern_requests.h
 
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/ukernel/comesg_kern.c \
@@ -181,6 +182,13 @@ ukern_tables.o : $(UKRN_SRCDIR)/ukern_tables.c \
 	$(UKRN_INCDIR)/comesg_kern.h
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c $(UKRN_SRCDIR)/ukern_tables.c \
 	-o $(BUILDDIR)/ukern_tables.o
+ifdef CHERIBSD_DIR
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
+endif
+
+ukern_msg_malloc.o: $(UKRN_SRCDIR)/ukern_msg_malloc.c $(UKRN_INCDIR)/ukern_msg_malloc.h 
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c $(UKRN_SRCDIR)/ukern_msg_malloc.c \
+	-o $(BUILDDIR)/ukern_msg_malloc.o
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/comesg_ukernel;)
 endif

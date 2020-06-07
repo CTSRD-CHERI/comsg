@@ -28,6 +28,7 @@
 
 #include "sys_comsg.h"
 #include "ukern_mman.h"
+#include "ukern_msg_malloc.h"
 #include "comesg_kern.h"
 #include "coport.h"
 #include "ukern_tables.h"
@@ -89,14 +90,14 @@ int init_port(coport_type_t type, sys_coport_t* p)
 	{
 		p->length=0;
 		p->end=-1;
-		p->buffer=ukern_malloc(COPORT_BUF_LEN);
+		p->buffer=get_mem(COPORT_BUF_LEN);
 		LIST_INIT(&p->listeners);
 	}
 	else
 	{
 		p->end=0;
 		p->length=COPORT_BUF_LEN;
-		p->buffer=ukern_malloc(COPORT_BUF_LEN);
+		p->buffer=get_mem(COPORT_BUF_LEN);
 	}
 	
 	//memset(p->buffer,0,p->length);

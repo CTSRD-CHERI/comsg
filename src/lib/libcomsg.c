@@ -149,7 +149,7 @@ int cosend(const coport_t prt, const void * buf, size_t len)
     struct timespec wait;
     wait.tv_sec=0;
     wait.tv_nsec=100;
-    int i = 1;
+    int i = 0;
     
     //assert(cheri_getperm(port) & COPORT_PERM_SEND); //doesn't work properly
     //assert(cheri_getsealed(port)!=0);
@@ -274,7 +274,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
     cocall_cocarrier_send_t call;
     coport_status_t status_val;
     coport_type_t type;
-    uint i=1;
+    uint i=0;
     int retval = len;
     
     //assert(cheri_getperm(port)&COPORT_PERM_RECV); //doesn't work

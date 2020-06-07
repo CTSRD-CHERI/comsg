@@ -1,14 +1,28 @@
 
+#include "ukern_msg_malloc.h"
+#include "ukern_mman.h"
+
+#include <stddef.h>
+#include <pthread.h>
+#include <sys/mman.h>
+#include <cheri/cheric.h>
+#include <cheri/cherireg.h>
+#include <sys/sched.h>
+#include <string.h>
+#include <err.h>
+#include <errno.h>
+#include <stdatomic.h>
+
 const size_t max_len = 1024*1024;
 
 struct {
 	_Atomic(void * __capability) current_message_pool;
 	pthread_cond_t need_new_mem;
 } mem_tbl;
-#define MSG_POOL_TOP (cheri_getbase(current_message_pool)+cheri_getlen(current_message_pool))
+#define MSG_POOL_TOP (cheri_getbase(mem_tbl.current_message_pool)+cheri_getlen(mem_tbl.current_message_pool))
 
 static
-void map_region(void)
+void map_msg_region(void)
 {
 	void * __capability new_page;
 	new_page=MAP_UKERN(NULL,UKERN_MAP_LEN);
@@ -19,7 +33,6 @@ void map_region(void)
 		err(errno,"mapping region failed\n");
 	}
 	mem_tbl.current_message_pool=new_page;
-	pthread_mutex_unlock(&region_table.lock);
 	return;
 }
 
@@ -29,7 +42,7 @@ void get_new_mem(void)
 {
 	int i = 1;
 	pthread_cond_signal(&mem_tbl.need_new_mem);
-	while(cheri_getlen(atomic_load(current_message_pool))<max_len)
+	while(cheri_getlen(atomic_load(&mem_tbl.current_message_pool))<max_len)
 	{
 		if(i%10==0)
 			sched_yield();
@@ -44,24 +57,28 @@ void *map_new_mem(void*args)
 	pthread_mutex_lock(&memlock);
 	for(;;)
 	{
-		map_region();
+		map_msg_region();
 		pthread_cond_wait(&mem_tbl.need_new_mem,&memlock);
 	}
+	return args;
 }
 
 void * __capability
-get_memory(size_t len)
+get_mem(size_t len)
 {
-	void * __capability result, reduced_pool, orig_pool;
+	void * __capability result;
+	void * __capability reduced_pool;
+	void * __capability orig_pool;
 	size_t base, new_offset;
 	size_t j, new_top;
 	if (len>max_len)
 		err(EINVAL,"may not allocate more than %lu", max_len);
-	if (len<cheri_getlen(mem_tbl.current_message_pool))
-		get_new_mem();
+	
 	orig_pool = mem_tbl.current_message_pool;
+	len=CHERI_REPRESENTABLE_LENGTH(len);
 	do {
-		len=CHERI_REPRESENTABLE_LENGTH(len);
+		if (len>cheri_getlen(orig_pool))
+			get_new_mem();
 		base=CHERI_REPRESENTABLE_BASE(MSG_POOL_TOP-len,len);
 		result=cheri_setaddress(orig_pool,base);
 		result=cheri_setboundsexact(result,len);
@@ -74,7 +91,7 @@ get_memory(size_t len)
 			new_top=CHERI_REPRESENTABLE_LENGTH(new_offset-j);
 			reduced_pool=cheri_setboundsexact(reduced_pool,new_top);
 		}	
-	} while(!atomic_compare_exhange_weak_explicit(&mem_tbl.current_message_pool,&orig_pool,reduced_pool,memory_order_acq_rel,memory_order_acquire))
+	} while(!atomic_compare_exchange_weak_explicit(&mem_tbl.current_message_pool,&orig_pool,reduced_pool,memory_order_acq_rel,memory_order_acquire));
 
 	return result;
 }
