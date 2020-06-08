@@ -12,7 +12,7 @@ DEBUG=-v -g
 CFLAGS=$(DEBUG) -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
 	-mabi=purecap -fPIE -mstack-alignment=16 -fPIC
 
-LLDFLAGS=-fuse-ld=lld -Wl,-znow -static-pie
+LLDFLAGS=-fuse-ld=lld -Wl,-znow
 ifndef FORCE
 FORCE=--force --clean
 endif

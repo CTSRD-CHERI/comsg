@@ -124,7 +124,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 }
 
 inline
-coport_t coport_clearperm(coport_t p, int perms)
+coport_t coport_clearperm(coport_t p,int perms)
 {
     perms&=CHERI_PERMS_SWALL; //prevent trashing the rest of the perms word, which is unrelated to coport access control
     return cheri_andperm(p,perms);
@@ -236,7 +236,7 @@ int cosend(const coport_t prt, const void * buf, size_t len)
                 }
                 else
                 {
-                    if(i%10 == 0)
+                    if(!(i%10) && !multicore)
                     {
                         //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
                         //this context switch will eventually happen, so we skip some needless spinning this way
@@ -258,7 +258,6 @@ int cosend(const coport_t prt, const void * buf, size_t len)
             errno=EINVAL;
             return -1;
     }
-    i=0;
     if(retval==-1)
         return retval;
     return len;
@@ -275,7 +274,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
     cocall_cocarrier_send_t call;
     coport_status_t status_val;
     coport_type_t type;
-    uint i = 1;
+    uint i=0;
     int retval = len;
     
     //assert(cheri_getperm(port)&COPORT_PERM_RECV); //doesn't work
@@ -357,7 +356,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
             for(;;)
             {
                 status_val=COPORT_OPEN;
-                if(atomic_compare_exchange_weak_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+                if(atomic_compare_exchange_strong_explicit(&port->status,&status_val,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
                 {
                     if(atomic_load_explicit(&port->buffer,memory_order_acquire) != NULL)
                         continue;
@@ -366,7 +365,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
                 }
                 else
                 {
-                    if(i % 10 == 0)
+                    if(!(i%10) && !multicore)
                     {
                         //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
                         //this context switch will eventually happen, so we skip some needless spinning this way
@@ -387,7 +386,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
                 }
                 else
                 {
-                    if(i%10 == 0)
+                    if(!(i%10) && !multicore)
                     {
                         //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
                         //this context switch will eventually happen, so we skip some needless spinning this way
@@ -402,7 +401,6 @@ int corecv(const coport_t prt, void ** buf, size_t len)
             err(1,"corecv: invalid coport type");
             break;
     }
-    i=0;
     if(retval==-1)
         return retval;
     return len;
@@ -558,7 +556,5 @@ void libcomsg_init(void)
     sysctl(mib, 2, &cores, &len, NULL, 0);
     if (cores>1)
         multicore=1;
-    #if 1
-    multicore=0;
-    #endif
+    
 }
