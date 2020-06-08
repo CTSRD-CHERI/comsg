@@ -149,7 +149,7 @@ int cosend(const coport_t prt, const void * buf, size_t len)
     struct timespec wait;
     wait.tv_sec=0;
     wait.tv_nsec=100;
-    int i = 0;
+    int i = 1;
     
     //assert(cheri_getperm(port) & COPORT_PERM_SEND); //doesn't work properly
     //assert(cheri_getsealed(port)!=0);
@@ -236,7 +236,7 @@ int cosend(const coport_t prt, const void * buf, size_t len)
                 }
                 else
                 {
-                    if(!(i%10) && !multicore)
+                    if(i%10 == 0)
                     {
                         //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
                         //this context switch will eventually happen, so we skip some needless spinning this way
@@ -258,6 +258,7 @@ int cosend(const coport_t prt, const void * buf, size_t len)
             errno=EINVAL;
             return -1;
     }
+    i=0;
     if(retval==-1)
         return retval;
     return len;
@@ -274,7 +275,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
     cocall_cocarrier_send_t call;
     coport_status_t status_val;
     coport_type_t type;
-    uint i=0;
+    uint i = 1;
     int retval = len;
     
     //assert(cheri_getperm(port)&COPORT_PERM_RECV); //doesn't work
@@ -365,7 +366,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
                 }
                 else
                 {
-                    if(!(i%10) && !multicore)
+                    if(i % 10 == 0)
                     {
                         //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
                         //this context switch will eventually happen, so we skip some needless spinning this way
@@ -386,7 +387,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
                 }
                 else
                 {
-                    if(!(i%10) && !multicore)
+                    if(i%10 == 0)
                     {
                         //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
                         //this context switch will eventually happen, so we skip some needless spinning this way
@@ -401,6 +402,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
             err(1,"corecv: invalid coport type");
             break;
     }
+    i=0;
     if(retval==-1)
         return retval;
     return len;

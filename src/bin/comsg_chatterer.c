@@ -60,9 +60,10 @@ static unsigned long int total_size = 0;
 static const char * port_names[] = { "benchmark_portA", "benchmark_portB", "benchmark_portC" };
 static char * port_name;
 
-static int may_start=0;
-static int waiting_threads = 0;
-static int acked_threads = 0;
+static uint may_start=0;
+static uint may_start2=0;
+//static int waiting_threads = 0;
+//static int acked_threads = 0;
 static int trace = 0;
 static int switching_types = 0;
 static int multicore = 0;
@@ -70,7 +71,8 @@ static pthread_mutex_t start_lock;
 static pthread_mutex_t async_lock; //to ensure async_lockhronous operations don't get mixed up
 static pthread_mutex_t output_lock; //to prevent output_lock interleaving	
 static pthread_cond_t may_continue, waiting;
-
+static pthread_attr_t send_attr,recv_attr;
+static pthread_t sender, receiver;
 //static coport_op_t chatter_operation = COSEND;
 static coport_type_t coport_type = COPIPE;
 //static const char * ts_port_name = "timestamp_port";
@@ -88,6 +90,7 @@ void send_data(void);
 void receive_data(void);
 int main(int argc, char * const argv[]);
 
+static struct sched_param sched_params;
 
 static statcounters_bank_t send_start, recv_end;
 
@@ -101,6 +104,18 @@ static void send_timestamp(struct timespec * timestamp)
 	
 }
 */
+static
+void set_sched(void)
+{
+	pthread_setschedparam(pthread_self(),SCHED_FIFO,&sched_params);
+}
+
+static
+void unset_sched(void)
+{
+	pthread_setschedparam(pthread_self(),SCHED_OTHER,&sched_params);
+}
+
 void send_data(void)
 {
 	int intval = 1;
@@ -114,8 +129,18 @@ void send_data(void)
 	sleepytime.tv_nsec=100;
 	//double ipc_time;
 	int status;
+	static uint init_val;
 	
 	char * name = malloc(sizeof(char)*255);
+	
+	init_val=may_start++;
+	if(init_val % 2 == 1)
+		init_val=init_val-1;
+	do{
+		sched_yield();
+	}  while(may_start-init_val!=2);
+	init_val++;
+	init_val++;
 	switch(coport_type)
 	{
 		case COCARRIER:
@@ -130,42 +155,42 @@ void send_data(void)
 		default:
 			break;
 	}
-
 	
 	FILE * f;
+	status=coopen(port_name,coport_type,&port);
 
-	error=pthread_mutex_lock(&start_lock);
-	if(error)
-		err(error,"send_data: lock start_lock failed");
-	while(waiting_threads!=acked_threads)
-	{
-		pthread_mutex_unlock(&start_lock);	
-		sched_yield();
-		pthread_mutex_lock(&start_lock);
-	}
-	waiting_threads++;
-	pthread_cond_signal(&waiting);
-	pthread_cond_wait(&may_continue,&start_lock);
-	pthread_mutex_unlock(&start_lock);
-	
 	if(coport_type!=COCARRIER)
-		sched_yield();
+	{
+		set_sched();
+		if(pthread_mutex_trylock(&start_lock))
+		{
+			pthread_cond_signal(&may_continue);
+		}
+		else
+		{
+			if(may_start2!=1)
+			{
+				may_start2=1;
+				pthread_cond_wait(&may_continue,&start_lock);
+				may_start2=0;
+			}
+			else
+			{
+				pthread_cond_signal(&may_continue);		
+			}
+		}
+		pthread_mutex_unlock(&start_lock);
+	}
 	for(unsigned long i = 0; i<runs; i++){
 		
-		
-
 		if(coport_type!=COCARRIER){
-			sleepytime.tv_sec=0;
-			sleepytime.tv_nsec=10000;
-			nanosleep(&sleepytime,&sleepytime);
 			sched_yield();
 		}
 		if(coport_type==COCARRIER)
 		{
 			while(pthread_mutex_trylock(&async_lock))
 			{
-				if(!multicore)
-					sched_yield();
+				sched_yield();
 			}
 			error=pthread_mutex_lock(&output_lock); //keep it quiet during
 			if(error)
@@ -175,9 +200,9 @@ void send_data(void)
 		{
 			intval=1;
 			sysarch(QEMU_SET_QTRACE, &intval);
-			//CHERI_START_TRACE;
+			CHERI_START_TRACE;
 		}
-		status=coopen(port_name,coport_type,&port);
+		
 		statcounters_zero(&send_start);
 		statcounters_zero(&bank2);
 		statcounters_zero(&result);
@@ -216,24 +241,9 @@ void send_data(void)
 		{
 			intval=0;
 			sysarch(QEMU_SET_QTRACE, &intval);
-			//CHERI_START_TRACE;
+			CHERI_START_TRACE;
 		}
 		//clock_gettime(CLOCK_REALTIME,&end_timestamp);
-		
-		if (coport_type!=COCHANNEL)
-		{
-			for(unsigned int j = 0; j<(total_size/message_len); j++)
-			{
-				//status=cosend(port,message_str,message_len);
-			}
-		}
-		else
-		{
-			for(unsigned int j = 0; j<(total_size/4096); j++)
-			{
-				//status=cosend(port,message_str,4096);
-			}
-		}
 
 		if(coport_type==COCARRIER)
 		{
@@ -277,6 +287,7 @@ void send_data(void)
 		
 		while(pthread_mutex_unlock(&output_lock));
 	}
+	unset_sched();
 	intval=0;
 	if (trace)
 		sysarch(QEMU_SET_QTRACE, &intval);
@@ -286,7 +297,7 @@ void send_data(void)
 	
 }
 
-
+static char * buffer = NULL;
 void receive_data(void)
 {
 	int intval = 1;
@@ -294,25 +305,32 @@ void receive_data(void)
 	coport_t port = (void * __capability)-1;
 	
 	statcounters_bank_t bank1,result;
-	char * buffer = NULL;
+	
 	//struct timespec start, end;
 	//float ipc_time;
 	int status;
+	static uint init_val;
 
 	char * name = malloc(sizeof(char)*255);
+	init_val=may_start++;
+		if(init_val % 2 == 1)
+			init_val=init_val-1;
+	do{
+		sched_yield();
+	}  while(may_start-init_val!=2);
+	init_val++;
+	init_val++;
 	switch(coport_type)
 	{
 		case COCHANNEL:
 			sprintf(name,"/root/COCHANNEL_corecv_b%lu_t%lu.dat",message_len,total_size);
-			buffer=calloc(4096,sizeof(char));
+			
 			break;
 		case COPIPE:
 			sprintf(name,"/root/COPIPE_corecv_b%lu_t%lu.dat",message_len,total_size);
-			buffer=calloc(message_len,sizeof(char));
 			break;
 		case COCARRIER:
 			sprintf(name,"/root/COCARRIER_corecv_b%lu_t%lu.dat",message_len,total_size);
-			buffer=calloc(message_len,sizeof(char));
 			break;
 		default:
 			break;
@@ -324,34 +342,41 @@ void receive_data(void)
 	{
 		err(1,"port closed before receiving");
 	}*/
-	while(!may_start)
-	{
-		sched_yield();
-	}
-	error=pthread_mutex_lock(&start_lock);
-	if(error)
-		err(error,"rsend_data: lock start_lock failed");
-	while(waiting_threads!=acked_threads)
-	{
-		pthread_mutex_unlock(&start_lock);
-		sched_yield();
-		pthread_mutex_lock(&start_lock);
-	}
-	waiting_threads++;
-	pthread_cond_signal(&waiting);
-	pthread_cond_wait(&may_continue,&start_lock);
-	pthread_mutex_unlock(&start_lock);
-	if(coport_type==COCARRIER && trace)
-		sysarch(QEMU_SET_QTRACE, &intval);
+	status=coopen(port_name,coport_type,&port);
 	
+	if(coport_type!=COCARRIER)
+	{
+		set_sched();
+		if(pthread_mutex_trylock(&start_lock))
+		{
+			pthread_cond_signal(&may_continue);
+			sched_yield();
+		}
+		else
+		{
+			if(may_start2!=1)
+			{
+				may_start2=1;
+				pthread_cond_wait(&may_continue,&start_lock);
+				may_start2=0;
+			}
+			else
+			{
+				pthread_cond_signal(&may_continue);	
+			}
+		}
+		pthread_mutex_unlock(&start_lock);
+	}
+
 	for(unsigned long i = 0; i<runs; i++)
 	{
-		
-		status=coopen(port_name,coport_type,&port);
-		
+		if(coport_type==COCARRIER && trace)
+		{
+			intval=1;
+			sysarch(QEMU_SET_QTRACE, &intval);
+		}
 		statcounters_zero(&bank1);
 		statcounters_zero(&recv_end);
-
 		statcounters_zero(&result);
 
 		if(coport_type==COCARRIER)
@@ -415,7 +440,12 @@ void receive_data(void)
 			}*/
 			
 		}
-
+		if (trace)
+		{	
+			intval=0;
+			sysarch(QEMU_SET_QTRACE, &intval);
+			CHERI_STOP_TRACE;
+		}
 		if(coport_type==COCARRIER)
 		{
 			while(pthread_mutex_unlock(&async_lock));
@@ -480,16 +510,12 @@ void receive_data(void)
 		while(pthread_mutex_unlock(&output_lock));
 		coclose(port);
 	}
-	intval=0;
-	if(coport_type==COCARRIER)
-	{
-		if (trace)
-		{	
-			sysarch(QEMU_SET_QTRACE, &intval);
-			//CHERI_STOP_TRACE;
-		}
-	}
 	
+	if(coport_type!=COCARRIER)
+	{
+		unset_sched();
+	}
+	may_start=0;
 	port=NULL;
 	//free(buffer);
 	//free(name);
@@ -524,62 +550,82 @@ void prepare_message(void)
 	}
 	message_str[message_len-1]='\0';
 	mlock(message_str,message_len);
+	buffer=calloc(message_len,sizeof(char));
+	mlock(buffer,message_len);
+
 }
 
 static int done = 0;
 
 
 static
+void *do_recv(void* args)
+{
+	//int error = 0;
+	statcounters_reset();
+	receive_data();
+
+	receive_data();
+	done++;
+	exit(0);
+	return args;
+}
+
+
+
+static
 void *do_send(void* args)
 {	
-	int error = 0;
+	//int error = 0;
 
-
-	pthread_mutex_lock(&async_lock);
-
+	statcounters_reset();
 	coport_type=COPIPE;
-	may_start++;
 	port_name=malloc(strlen(port_names[1])+1);
 	strcpy(port_name,port_names[0]);
+
+	pthread_mutex_lock(&async_lock);
+	
+	//if(!multicore)
+	sched_yield();
+	
 
 	//prepare_message();
 	
 	send_data();
 	switching_types++;
-	while(pthread_mutex_unlock(&async_lock));
-
-	error=pthread_mutex_lock(&start_lock);
-	pthread_cond_signal(&waiting);
-	pthread_cond_wait(&may_continue,&start_lock);
-	pthread_mutex_unlock(&start_lock);
 
 	strcpy(port_name,port_names[1]);
 	coport_type=COCARRIER;
 
-	may_start++;
-	send_data();
-
-	done++;	
-	return args;
-}
-
-static
-void *do_recv(void* args)
-{
-	int error = 0;
 	
-	receive_data();
-	switching_types++;
-	error=pthread_mutex_lock(&start_lock);
-	pthread_cond_signal(&waiting);
-	pthread_cond_wait(&may_continue,&start_lock);
-	pthread_mutex_unlock(&start_lock);
 
-	receive_data();
+	send_data();
 	done++;
+	for(;;)
+		sched_yield();
 	return args;
 }
 
+/*
+static
+void *manage_locks(void *args)
+{
+	while (done<2)
+	{
+		pthread_cond_wait(&waiting,&start_lock);
+		acked_threads++;
+		pthread_cond_wait(&waiting,&start_lock);
+		acked_threads++;
+		
+		pthread_cond_broadcast(&may_continue);
+		acked_threads=0;
+		waiting_threads=0;
+
+	}
+	pthread_mutex_unlock(&start_lock);
+	return args;	
+}
+*/
 static cpuset_t send_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);
 static cpuset_t recv_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);;
 
@@ -589,7 +635,7 @@ int main(int argc, char * const argv[])
 	char * strptr;
 	
 	int receive = 0;
-	pthread_t sender, receiver;
+	
 	
 	while((opt=getopt(argc,argv,"ot:r:b:pqc:"))!=-1)
 	{
@@ -639,7 +685,7 @@ int main(int argc, char * const argv[])
 	{
 		total_size=message_len;
 	}
-	pthread_attr_t send_attr,recv_attr;
+	
 	pthread_attr_init(&send_attr);
 	pthread_attr_init(&recv_attr);
 
@@ -651,7 +697,6 @@ int main(int argc, char * const argv[])
     int mib[4];
     int cores;
     size_t len = sizeof(cores); 
-    struct sched_param sched_params;
     pthread_mutexattr_t type;
     /* set the mib for hw.ncpu */
     mib[0] = CTL_HW;
@@ -675,22 +720,27 @@ int main(int argc, char * const argv[])
 		if(pthread_attr_setaffinity_np(&recv_attr, sizeof(cpuset_t), &recv_cpu_set))
 			err(errno,"error setting affinity for recv thread");
 	}
-
+	
 	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 	if(sched_params.sched_priority == -1)
 		perror("could not get sched priority max SCHED_FIFO");
-	if(pthread_attr_setschedpolicy(&send_attr,SCHED_FIFO))
+	/*
+	if(pthread_attr_setschedpolicy(&send_attr,SCHED_RR))
 		err(errno,"error setting sched policy for send");
-	if(pthread_attr_setschedpolicy(&recv_attr,SCHED_FIFO))
+	if(pthread_attr_setschedpolicy(&recv_attr,SCHED_RR))
 		err(errno,"error setting sched policy for recv");
 
 	if(pthread_attr_setschedparam(&send_attr,&sched_params))
 		err(errno,"error setting sched params for send");
-	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 	if(pthread_attr_setschedparam(&recv_attr,&sched_params))
 		err(errno,"error setting sched params for recv");
-
-	
+	if(pthread_attr_setinheritsched(&send_attr,PTHREAD_EXPLICIT_SCHED))
+		err(errno,"error setting sched inherit explicit");
+	if(pthread_attr_setinheritsched(&recv_attr,PTHREAD_EXPLICIT_SCHED))
+		err(errno,"error setting sched inherit explicit");
+	*/
+	//sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	//pthread_setschedparam(pthread_self(),SCHED_FIFO,&sched_params);
 	if(pthread_mutexattr_init(&type))
 		err(errno,"could not init type");
 
@@ -706,11 +756,14 @@ int main(int argc, char * const argv[])
 	if(pthread_cond_init(&waiting,NULL))
 		err(errno,"error initing waiting");
 	
-	statcounters_reset();
-
-	if(pthread_mutex_lock(&start_lock))
-		err(errno,"error locking startlock");
+	
 	//pthread_setschedparam(pthread_self(),SCHED_FIFO,&sched_params);
+	//if(pthread_mutex_lock(&start_lock))
+	//	err(errno,"error locking startlock");
+	//if(pthread_create(&lock_mgr,&send_attr,manage_locks,NULL))
+	//	err(errno,"error starting lock manager");
+	//pthread_mutex_unlock(&start_lock);
+	pthread_mutex_lock(&start_lock);
 	prepare_message();
 	if(pthread_create(&sender,&send_attr,do_send,NULL))
 		err(errno,"error starting send");
@@ -720,23 +773,8 @@ int main(int argc, char * const argv[])
 		err(errno,"error starting recv");
 	else
 		perror("started recv");
-	if(!multicore)
-		sched_yield();
-	while (done<2)
-	{
-		pthread_cond_wait(&waiting,&start_lock);
-		acked_threads++;
-		pthread_cond_wait(&waiting,&start_lock);
-		acked_threads++;
-		/*if(switching_types==2)
-		{
-			
-		}*/
-		pthread_cond_broadcast(&may_continue);
-		acked_threads=0;
-		waiting_threads=0;
 
-	}
-	pthread_mutex_unlock(&start_lock);
+	pthread_cond_wait(&waiting,&start_lock);
+	pthread_join(receiver,NULL);
 	return 0;
 }

@@ -536,8 +536,13 @@ int main(int argc, const char *argv[])
     /* set up tables */
     printf("Starting comesg microkernel...\n");
     printf("Starting memory manager...\n");
+
     pthread_attr_init(&thread_attrs);
-   
+    /*pthread_attr_setschedpolicy(&thread_attrs,SCHED_RR);
+    struct sched_param sched_params;
+    sched_params.sched_priority = sched_get_priority_max(SCHED_RR);
+    pthread_attr_setschedparam(&thread_attrs,&sched_params);
+    pthread_attr_setinheritsched(&thread_attrs,PTHREAD_EXPLICIT_SCHED);*/
     pthread_create(&memory_manager,&thread_attrs,ukern_mman,NULL);
     pthread_create(&msg_mman,&thread_attrs,map_new_mem,NULL);
 

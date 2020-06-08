@@ -44,8 +44,13 @@ const int COPORT_TBL_LEN = (MAX_COPORTS*sizeof(coport_tbl_entry_t));
 
 int lookup_port(char * port_name,sys_coport_t ** port_buf)
 {
+    int s = 0;
     while(coport_table.add_in_progress)
-        sched_yield();
+    {
+        if (s%10 == 0)
+            sched_yield();
+        s++;
+    }
     atomic_fetch_add(&coport_table.lookup_in_progress,1);
     if(strlen(port_name)>=COPORT_NAME_LEN)
     	err(1,"port name length too long");
@@ -77,10 +82,13 @@ int add_port(coport_tbl_entry_t entry)
 {
     int entry_index;
     int intval = 0;
+    int s=0;
     while(!atomic_compare_exchange_strong_explicit(&coport_table.add_in_progress,&intval,1,memory_order_acq_rel,memory_order_acquire))
     {
         intval=0;
-        sched_yield();
+        if(s%10 == 0)
+            sched_yield();
+        s++;
     }
     if(coport_table.index==MAX_COPORTS)
     {
