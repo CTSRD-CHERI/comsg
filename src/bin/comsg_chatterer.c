@@ -86,9 +86,10 @@ void send_data(void);
 void receive_data(void);
 int main(int argc, char * const argv[]);
 
+static char arch_name[5] = "MALTA";
 
 static statcounters_bank_t send_start, recv_end;
-
+static int multicore;
 /*
 static void send_timestamp(struct timespec * timestamp)
 {
@@ -113,7 +114,11 @@ void send_data(void)
 	//double ipc_time;
 	int status;
 	
-	char * name = malloc(sizeof(char)*255);
+	static char * name = NULL;
+	if(name == NULL)
+	{
+		name = malloc(sizeof(char)*255);
+	}
 	switch(coport_type)
 	{
 		case COCARRIER:
@@ -130,7 +135,7 @@ void send_data(void)
 	}
 
 	
-	FILE * f;
+	FILE *f;
 
 	error=pthread_mutex_lock(&start_lock);
 	if(error)
@@ -146,9 +151,9 @@ void send_data(void)
 	pthread_cond_wait(&may_continue,&start_lock);
 	pthread_mutex_unlock(&start_lock);
 	
-	
+	f = fopen(name,"a+");
 	for(unsigned long i = 0; i<runs; i++){
-		f = fopen(name,"a+");
+		
 		sleepytime.tv_sec=0;
 		sleepytime.tv_nsec=10000;
 		if(coport_type!=COCARRIER){
@@ -258,12 +263,12 @@ void send_data(void)
 	intval=0;
 	if (trace)
 		sysarch(QEMU_SET_QTRACE, &intval);
+	fclose(f);
 	coclose(port);
 	port=NULL;
-	free(name);
+	//free(name);
 	
 }
-
 
 void receive_data(void)
 {
@@ -272,20 +277,29 @@ void receive_data(void)
 	coport_t port = (void * __capability)-1;
 	
 	statcounters_bank_t bank1,result;
-	char * buffer = NULL;
+	static char * buffer = NULL;
 	//struct timespec start, end;
 	//float ipc_time;
 	int status;
 
-	char * name = malloc(sizeof(char)*255);
+	static char * name = NULL;
+	if(name == NULL)
+	{
+		name=malloc(sizeof(char)*255);
+	}
+	static char * name2 = NULL;
+	if (name2==NULL)
+		name2 = malloc(sizeof(char)*255);
 	switch(coport_type)
 	{
 		case COCHANNEL:
 			sprintf(name,"/root/COCHANNEL_corecv_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(name2,"/root/COCHANNEL_wholeop_b%lu_t%lu.dat",message_len,total_size);
 			buffer=calloc(4096,sizeof(char));
 			break;
 		case COPIPE:
 			sprintf(name,"/root/COPIPE_corecv_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(name,"/root/COPIPE_wholeop_b%lu_t%lu.dat",message_len,total_size);
 			buffer=calloc(message_len,sizeof(char));
 			break;
 		case COCARRIER:
@@ -295,7 +309,7 @@ void receive_data(void)
 		default:
 			break;
 	}
-	FILE * f;
+	FILE *f, *f2;
 
 	
 	/*if(port->status==COPORT_CLOSED)
@@ -318,10 +332,11 @@ void receive_data(void)
 	pthread_mutex_unlock(&start_lock);
 	if(coport_type==COCARRIER && trace)
 		sysarch(QEMU_SET_QTRACE, &intval);
-	
+	f= fopen(name,"a+");
+	f2 = fopen(name,"a+");
 	for(unsigned long i = 0; i<runs; i++)
 	{
-		f= fopen(name,"a+");
+
 		status=coopen(port_name,coport_type,&port);
 		
 		statcounters_zero(&bank1);
@@ -405,33 +420,21 @@ void receive_data(void)
 
 
 		if(i==0)
-			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_HEADER);
+			statcounters_dump_with_args(&result,"CORECV","",arch_name,f,CSV_HEADER);
 		else
-			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_NOHEADER);
+			statcounters_dump_with_args(&result,"CORECV","",arch_name,f,CSV_NOHEADER);
 		statcounters_dump(&result);
-
-		switch(coport_type)
+		if (coport_type==COCARRIER)
 		{
-			case COCARRIER:
-				pthread_mutex_unlock(&output_lock);
-				continue;
-				break;
-			case COCHANNEL:
-				sprintf(name,"/root/COCHANNEL_wholeop_b%lu_t%lu.dat",message_len,total_size);
-				break;
-			case COPIPE:
-				sprintf(name,"/root/COPIPE_wholeop_b%lu_t%lu.dat",message_len,total_size);
-				break;
-			
-			default:
-				break;
+			pthread_mutex_unlock(&output_lock);
+			continue;
 		}
-		f = fopen(name,"a+");
+		
 		statcounters_diff(&result,&recv_end,&send_start);
 		if(i==0)
-			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_HEADER);
+			statcounters_dump_with_args(&result,"CORECV","",arch_name,f2,CSV_HEADER);
 		else
-			statcounters_dump_with_args(&result,"CORECV","","malta",f,CSV_NOHEADER);
+			statcounters_dump_with_args(&result,"CORECV","",arch_name,f2,CSV_NOHEADER);
 	
 		while(pthread_mutex_unlock(&output_lock));
 		coclose(port);
@@ -445,10 +448,10 @@ void receive_data(void)
 			CHERI_STOP_TRACE;
 		}
 	}
-	
+	fclose(f);
+	fclose(f2);
+	coclose(port);
 	port=NULL;
-	free(buffer);
-	free(name);
 }	
 
 static
@@ -542,6 +545,24 @@ static cpuset_t fullset = CPUSET_T_INITIALIZER(CPUSET_FSET);
 static cpuset_t recv_cpu_set = CPUSET_T_INITIALIZER(0x1);
 static cpuset_t send_cpu_set;
 */
+
+void get_arch(void)
+{
+	int mib[4];
+    int cores;
+    size_t len = sizeof(cores); 
+
+    /* set the mib for hw.ncpu */
+    mib[0] = CTL_HW;
+    mib[1] = HW_NCPU;
+
+    /* get the number of CPUs from the system */
+    sysctl(mib, 2, &cores, &len, NULL, 0);
+    if (cores>1)
+        multicore=1;
+    if(multicore)
+    	strcpy(arch_name,"BERI\0");
+}
 int main(int argc, char * const argv[])
 {
 	int opt;
