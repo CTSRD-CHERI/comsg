@@ -27,7 +27,7 @@
 #include "comesg_kern.h"
 
 #include "ukern_mman.h"
-#include "ukern_msg_malloc.c"
+#include "ukern_msg_malloc.h"
 #include "ukern_params.h"
 #include "ukern_commap.h"
 #include "ukern_utils.h"
@@ -237,6 +237,7 @@ void *cocarrier_recv(void *args)
     size_t new_len=0;
     coport_status_t status;
     //uint len;
+    size_t port_len = 0;
 
     worker_args_t * data = args;
     cocall_cocarrier_send_t * cocarrier_send_args;
@@ -247,6 +248,7 @@ void *cocarrier_recv(void *args)
     void * __capability target;
 
     sys_coport_t * cocarrier;
+    coport_eventmask_t event;
     void ** __capability cocarrier_buf;
 
     cocarrier_send_args=ukern_malloc(sizeof(cocall_cocarrier_send_t));
@@ -256,7 +258,6 @@ void *cocarrier_recv(void *args)
     update_worker_args(data,U_COCARRIER_RECV);
     for(;;)
     {
-        debug_noop(index);
     	error=coaccept(sw_code,sw_data,&caller_cookie,cocarrier_send_args,sizeof(cocall_cocarrier_send_t));
         //perform checks
         cocarrier=cocarrier_send_args->cocarrier;
@@ -269,19 +270,20 @@ void *cocarrier_recv(void *args)
         cocarrier=cheri_unseal(cocarrier,root_seal_cap);
         cocarrier_buf=cocarrier->buffer;
         status=COPORT_OPEN;
-        while(!atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+        while(!atomic_compare_exchange_strong_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
         {
             status=COPORT_OPEN;
         }
-        atomic_thread_fence(memory_order_acq_rel);
+        atomic_thread_fence(memory_order_acquire);
+        event=cocarrier->event;
+        port_len=cocarrier->length;
         //atomic_store_explicit(&cocarrier->status,COPORT_BUSY,memory_order_release);
-        if(cocarrier->length==0 || !(cocarrier->event & COPOLL_IN))
+        if(port_len==0 || !(event & COPOLL_IN))
         {
-            printf("cocarrier_length=%lu\n",cocarrier->length);
-            printf("cocarrier_events=%x\n",cocarrier->event);
-            cocarrier->event|=COPOLL_RERR;
-            atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
-            atomic_thread_fence(memory_order_release);
+            //printf("cocarrier_length=%lu\n",cocarrier->length);
+            //printf("cocarrier_events=%x\n",cocarrier->event);
+            cocarrier->event=(event|COPOLL_RERR);
+            cocarrier->status=COPORT_OPEN;
 
             //buffer is empty - return error
             cocarrier_send_args->status=-1;
@@ -289,19 +291,19 @@ void *cocarrier_recv(void *args)
             continue;
         }
         index=cocarrier->start++;
-        new_len=--cocarrier->length;
-        cocarrier_send_args->message=cocarrier_buf[index];
+        new_len=++cocarrier->length;
         if (new_len==0)
         {
-        	cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~(COPOLL_RERR | COPOLL_IN));
+        	cocarrier->event=((COPOLL_OUT | event) & ~(COPOLL_RERR | COPOLL_IN));
         }
         else
         {
-            cocarrier->event=((COPOLL_OUT | cocarrier->event) & ~COPOLL_RERR);
+            cocarrier->event=((COPOLL_OUT | event) & ~COPOLL_RERR);
         }
+        atomic_thread_fence(memory_order_release);
+        cocarrier_send_args->message=cocarrier_buf[index];
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
 
-        atomic_thread_fence(memory_order_acq_rel);
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
             pthread_cond_signal(&global_cosend_cond);
@@ -319,6 +321,7 @@ void *cocarrier_send(void *args)
     int error;
     size_t index = 0;
     size_t new_len = 0;
+    size_t port_len = 0;
     coport_status_t status;
 
     worker_args_t * data = args;
@@ -334,6 +337,7 @@ void *cocarrier_send(void *args)
     void * __capability msg_buf;
     void * __capability call_buf;
     void ** __capability cocarrier_buf;
+    coport_eventmask_t event;
 
     cocarrier_send_args=ukern_malloc(sizeof(cocall_cocarrier_send_t));
 
@@ -342,14 +346,7 @@ void *cocarrier_send(void *args)
     update_worker_args(data,U_COCARRIER_SEND);
     for(;;)
     {
-        debug_noop(index);
-
         error=coaccept(sw_code,sw_data,&caller_cookie,cocarrier_send_args,sizeof(cocall_cocarrier_send_t));
-        call_buf=cocarrier_send_args->message;
-        //allocate ukernel owned buffer
-        msg_buf=get_mem(cheri_getlen(cocarrier_send_args->message));
-        //copy data into buffer
-        memcpy(msg_buf,call_buf,cheri_getlen(cocarrier_send_args->message));
         //perform checks
         cocarrier=cocarrier_send_args->cocarrier;
         if(!(valid_cocarrier(cocarrier)))
@@ -361,6 +358,12 @@ void *cocarrier_send(void *args)
 
             continue;
         }
+        call_buf=cocarrier_send_args->message;
+        //allocate ukernel owned buffer
+        msg_buf=get_mem(cheri_getlen(cocarrier_send_args->message));
+        //copy data into buffer
+        memcpy(msg_buf,call_buf,cheri_getlen(cocarrier_send_args->message));
+        
         //reduce cap permissions on buffer
         msg_buf=cheri_andperm(msg_buf,COCARRIER_PERMS);
         //toggle state to busy
@@ -368,20 +371,21 @@ void *cocarrier_send(void *args)
         cocarrier_buf=cocarrier->buffer;
         //
         status=COPORT_OPEN;
-        while(!atomic_compare_exchange_weak_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
+        while(!atomic_compare_exchange_strong_explicit(&cocarrier->status,&status,COPORT_BUSY,memory_order_acq_rel,memory_order_acquire))
         {
             status=COPORT_OPEN;
             //pthread_yield();
         }
+        atomic_thread_fence(memory_order_acquire);
         //add buffer to cocarrrier
-        atomic_thread_fence(memory_order_acq_rel);
-        if(cocarrier->length>=COCARRIER_SIZE || !(cocarrier->event & COPOLL_OUT))
+        event=cocarrier->event;
+        port_len=cocarrier->length;
+        if(port_len>=COCARRIER_SIZE || !(event & COPOLL_OUT))
         {
-            cocarrier->event|=COPOLL_WERR;
+            cocarrier->event=(event | COPOLL_WERR);
             cocarrier->status=COPORT_OPEN;
-            atomic_thread_fence(memory_order_acq_rel);
-            ukern_free(msg_buf);
-            printf("cocarrier_send: buffer full\n");
+            atomic_thread_fence(memory_order_release);
+            //warn("cocarrier_send: buffer full\n");
             //buffer is full - return error
             cocarrier_send_args->status=-1;
             cocarrier_send_args->error=EAGAIN;
@@ -394,17 +398,19 @@ void *cocarrier_send(void *args)
         	//auto overwrite old messages once we've wrapped around
         	//ukern_free(cocarrier_buf[index]);
             cocarrier_buf[index]=NULL;
+            //this check is here so we can free these in future
         }
         cocarrier_buf[index]=msg_buf;
 
-        if(cocarrier->length==COCARRIER_SIZE)
-        	cocarrier->event=((COPOLL_IN | cocarrier->event) & ~(COPOLL_WERR | COPOLL_OUT));
+        if(new_len==COCARRIER_SIZE)
+        	cocarrier->event=((COPOLL_IN | event) & ~(COPOLL_WERR | COPOLL_OUT));
         else
-            cocarrier->event=(COPOLL_IN | cocarrier->event) & ~COPOLL_WERR;
+            cocarrier->event=(COPOLL_IN | event) & ~COPOLL_WERR;
+        atomic_thread_fence(memory_order_release);
+
         atomic_store_explicit(&cocarrier->status,COPORT_OPEN,memory_order_release);
 
-        atomic_thread_fence(memory_order_acq_rel);
-
+        
         //check if anyone is waiting on messages to arrive
         if(!LIST_EMPTY(&cocarrier->listeners))
         {
@@ -456,7 +462,7 @@ void *coport_open(void *args)
         /* check if port exists */
         /* if it doesn't, we need to be sure we don't get into a race to create it */
 
-        lookup=lookup_port(port_name,&prt);
+        lookup=lookup_port(port_name,&prt,coport_args->args.type);
         if(lookup==-1)
         {
             
@@ -472,7 +478,7 @@ void *coport_open(void *args)
             init_coport_table_entry(&table_entry,port,port_name);
             table_entry.port=port;
             table_entry.id=generate_id();
-            strcpy(table_entry.name,coport_args->args.name);
+           // strcpy(table_entry.name,coport_args->args.name);
             index=add_port(table_entry);
             //printf("coport %s added to table\n",coport_args->args.name);
             prt=cheri_setbounds(&coport_table.table[index].port,sizeof(sys_coport_t));
@@ -577,8 +583,8 @@ int main(int argc, const char *argv[])
     printf("Initial setup complete.\n");
 
     /* perform setup */
-    printf("Press enter to proceed\n");
-    while( getchar() != '\n');
+    //printf("Press enter to proceed\n");
+    //while( getchar() != '\n');
     pthread_create(&commap_manager,&thread_attrs,ukern_mmap,NULL);
     printf("Spawning co-open listeners...\n");
     error+=spawn_workers(&coport_open,coopen_threads,U_COOPEN);

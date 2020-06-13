@@ -1,4 +1,4 @@
-LIB=pthread statcounters
+LIB=pthread
 INC=include/ src/ukernel/include 
 
 BUILDDIR=build
@@ -18,6 +18,7 @@ FORCE=--force --clean
 endif
 ifdef CHERI_ROOT
 CHERI_FSDIR=$(CHERI_ROOT)/extra-files
+CHERI_MIN_FSDIR=$(CHERI_ROOT)/extra-files-minimal
 CHERIBSD_DIR=$(CHERI_ROOT)/cheribsd
 CHERIBUILD_DIR=$(CHERI_ROOT)/cheribuild/
 endif
@@ -36,6 +37,10 @@ default : ukernel cochatter libcomsg.so
 trace-min : libcomsg.so ukernel cochatter
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
 	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_FSDIR)/root/lib
+	cp $(OUTDIR)/cochatter $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/comesg_ukernel $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_MIN_FSDIR)/root/lib
 ifdef dev
 	git commit -a --message="$(BUILD_TIME)"
 endif
@@ -47,6 +52,10 @@ endif
 trace : libcomsg.so ukernel cochatter
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
 	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_FSDIR)/root/lib
+	cp $(OUTDIR)/cochatter $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/comesg_ukernel $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_MIN_FSDIR)/root/lib
 ifdef dev
 	git commit -a --message="$(BUILD_TIME)"
 endif
@@ -58,6 +67,10 @@ endif
 run-min : libcomsg.so ukernel cochatter
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
 	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_FSDIR)/root/lib
+	cp $(OUTDIR)/cochatter $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/comesg_ukernel $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_MIN_FSDIR)/root/lib
 ifdef dev
 	git commit -a --message="$(BUILD_TIME)"
 endif
@@ -68,6 +81,10 @@ endif
 run : libcomsg.so ukernel cochatter
 	cp $(OUTDIR)/comesg_ukernel $(CHERI_FSDIR)/root/bin
 	cp $(OUTDIR)/cochatter $(CHERI_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_FSDIR)/root/lib
+	cp $(OUTDIR)/cochatter $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/comesg_ukernel $(CHERI_MIN_FSDIR)/root/bin
+	cp $(OUTDIR)/libcomsg* $(CHERI_MIN_FSDIR)/root/lib
 ifdef dev
 	git commit -a --message="$(BUILD_TIME)"
 endif
@@ -82,24 +99,34 @@ ukernel : comesg_kern.o coport_utils.o sys_comutex.o comutex.o \
 	-o $(OUTDIR)/comesg_ukernel $(BUILDDIR)/comesg_kern.o \
 	$(BUILDDIR)/coport_utils.o $(BUILDDIR)/sys_comutex.o \
 	$(BUILDDIR)/comutex.o $(BUILDDIR)/ukern_mman.o $(BUILDDIR)/ukern_commap.o \
-	$(BUILDDIR)/ukern_utils.o $(BUILDDIR)/ukern_tables.o $(BUILDDIR)/ukern_requests.o
+	$(BUILDDIR)/ukern_utils.o $(BUILDDIR)/ukern_tables.o $(BUILDDIR)/ukern_requests.o \
+	$(BUILDDIR)/ukern_msg_malloc.o
 	$(CHERIBUILD_DIR)/cheribuild.py -v --skip-update $(FORCE) \
 	--cheribsd-mips-purecap/subdir="'usr.bin/comesg_ukernel'" \
 	cheribsd-mips-purecap disk-image-mips-purecap
 
-cochatter : comsg_chatterer.o libcomsg.so
+cochatter : comsg_chatterer.o libcomsg.so statcounters.o
 	$(CC) $(CFLAGS)  $(LLDFLAGS) $(LIB_PARAMS) -lcomsg $(INC_PARAMS) \
-	-o $(OUTDIR)/cochatter $(BUILDDIR)/comsg_chatterer.o
+	-o $(OUTDIR)/cochatter $(BUILDDIR)/comsg_chatterer.o $(BUILDDIR)/statcounters.o
 	$(CHERIBUILD_DIR)/cheribuild.py -v --skip-update $(FORCE) \
 	--cheribsd-mips-purecap/subdir="'usr.bin/cochatter'" \
 	cheribsd-mips-purecap disk-image-mips-purecap
 
 comsg_chatterer.o : src/bin/comsg_chatterer.c include/comsg.h \
 	include/sys_comsg.h include/coport.h \
-	include/comutex.h include/coproc.h include/commap.h
+	include/coproc.h include/commap.h include/statcounters.h \
+	include/statcounters_mips.h include/statcounters_mips.inc
 	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/bin/comsg_chatterer.c \
 	-o $(BUILDDIR)/comsg_chatterer.o
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/cochatter;)
+
+statcounters.o : src/lib/statcounters.c  include/statcounters.h \
+	include/statcounters_mips.h include/statcounters_mips.inc
+	$(CC) $(CFLAGS) $(INC_PARAMS) -c src/lib/statcounters.c \
+	-o $(BUILDDIR)/statcounters.o
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/usr.bin/cochatter;)
+	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)
+
 
 comesg_kern.o : src/ukernel/comesg_kern.c \
 	$(UKRN_INCDIR)/ukern_params.h $(UKRN_INCDIR)/ukern_mman.h \
@@ -144,7 +171,8 @@ endif
 libcomsg.so: src/lib/libcomsg.c src/lib/statcounters.c src/lib/coproc.c \
 	include/coproc.h include/coport.h  include/comutex.h\
 	include/sys_comsg.h include/comsg.h \
-	include/commap.h src/lib/commap.c 
+	include/commap.h src/lib/commap.c src/lib/statcounters.c  include/statcounters.h \
+	include/statcounters_mips.h include/statcounters_mips.inc
 	$(CC) $(CFLAGS) $(INC_PARAMS) -shared -o $(OUTDIR)/libcomsg.so src/lib/libcomsg.c src/lib/commap.c src/lib/coproc.c  src/lib/statcounters.c
 ifdef CHERIBSD_DIR
 	$(foreach c, $^, cp $c $(CHERIBSD_DIR)/lib/libcomsg;)

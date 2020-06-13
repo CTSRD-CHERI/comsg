@@ -57,7 +57,7 @@ typedef struct _coport_tbl_t
 
 void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
 int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf);
+int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
 int add_port(coport_tbl_entry_t entry);
 bool in_coport_table(void * __capability addr);
 

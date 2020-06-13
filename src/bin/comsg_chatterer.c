@@ -27,10 +27,14 @@
 #include "comsg.h"
 #include "coport.h"
 
+#include <sys/thr.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
+#include <stdbool.h>
+#include <sys/rtprio.h>
 #include <inttypes.h>
 #include <time.h>
 #include <sys/types.h>
@@ -38,15 +42,17 @@
 #include <stdlib.h>
 #include <err.h>
 #include <pthread.h>
+#include <pthread_np.h>
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
-#include <statcounters.h>
+#include "statcounters.h"
 #include <stdatomic.h>
 #include <sys/cpuset.h>
 #include <sys/param.h>
 #include <machine/sysarch.h>
 #include <machine/cheri.h>
+#include <sys/sysctl.h>
 
 extern char **environ;
 
@@ -70,7 +76,7 @@ static pthread_mutex_t output_lock; //to prevent output_lock interleaving
 static pthread_cond_t may_continue, waiting;
 
 //static coport_op_t chatter_operation = COSEND;
-static coport_type_t coport_type = COCARRIER;
+static coport_type_t coport_type = COPIPE;
 //static const char * ts_port_name = "timestamp_port";
 #undef timespecsub
 #define	timespecsub(vvp, uvp)						\
@@ -86,10 +92,12 @@ void send_data(void);
 void receive_data(void);
 int main(int argc, char * const argv[]);
 
-static char arch_name[5] = "MALTA";
+static long receiver_id, sender_id;
+static char arch_name[6] = "BERI";
 
 static statcounters_bank_t send_start, recv_end;
 static int multicore;
+static pthread_t sender, receiver;
 /*
 static void send_timestamp(struct timespec * timestamp)
 {
@@ -100,6 +108,281 @@ static void send_timestamp(struct timespec * timestamp)
 	
 }
 */
+
+static void
+timevalfix(struct timeval *t1)
+{
+
+	if (t1->tv_usec < 0) {
+		t1->tv_sec--;
+		t1->tv_usec += 1000000;
+	}
+	if (t1->tv_usec >= 1000000) {
+		t1->tv_sec++;
+		t1->tv_usec -= 1000000;
+	}
+}
+
+static 
+void
+timevalsub(struct timeval *t1, const struct timeval *t2)
+{
+
+	t1->tv_sec -= t2->tv_sec;
+	t1->tv_usec -= t2->tv_usec;
+	timevalfix(t1);
+}
+static _Atomic int sched_set = 0;
+static
+void set_sched(void)
+{
+	if(atomic_fetch_add(&sched_set,1)!=0)
+	{
+		return;
+	}
+	struct rtprio rt_params;
+	rt_params.type=RTP_PRIO_REALTIME;
+	rt_params.prio=RTP_PRIO_MIN;
+	rtprio_thread(RTP_SET,0,&rt_params);
+	rtprio_thread(RTP_SET,receiver_id,&rt_params);
+	rtprio_thread(RTP_SET,sender_id,&rt_params);
+	return;
+	/*
+	struct sched_param sched_params;
+	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	sched_setscheduler(0,SCHED_FIFO,&sched_params);
+	return;*/
+	/*if(pthread_setschedparam(pthread_self(),SCHED_FIFO,&sched_params))
+		err(errno,"could not set pthread_self prio SCHED_FIFO");
+	if(pthread_setschedparam(receiver,SCHED_FIFO,&sched_params))
+		err(errno,"could not set receiver prio SCHED_FIFO");
+	if(pthread_setschedparam(sender,SCHED_FIFO,&sched_params))
+		err(errno,"could not set sender prio SCHED_FIFO");*/
+
+}
+
+static
+void set_sched_async(void)
+{
+	struct rtprio rt_params;
+	rt_params.type=RTP_PRIO_REALTIME;
+	rt_params.prio=RTP_PRIO_MIN;
+	rtprio_thread(RTP_SET,0,&rt_params);
+	return;
+	/*
+	struct sched_param sched_params;
+	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	sched_setscheduler(0,SCHED_FIFO,&sched_params);
+
+	return;	*/
+}
+
+static
+void unset_sched_async(void)
+{
+	struct rtprio rt_params;
+	rt_params.type=RTP_PRIO_NORMAL;
+	rt_params.prio=RTP_PRIO_MIN;
+	rtprio_thread(RTP_SET,0,&rt_params);
+
+	return;
+/*
+	struct sched_param sched_params;
+	sched_params.sched_priority = sched_get_priority_max(SCHED_OTHER);
+	sched_setscheduler(0,SCHED_OTHER,&sched_params);
+	return;*/
+}
+
+static
+void unset_sched(void)
+{
+	if(atomic_fetch_add(&sched_set,1)==0)
+	{
+		sched_set=0;
+		return;
+	}
+	struct rtprio rt_params;
+	rt_params.type=RTP_PRIO_NORMAL;
+	rt_params.prio=RTP_PRIO_MIN;
+	rtprio_thread(RTP_SET,0,&rt_params);
+	rtprio_thread(RTP_SET,receiver_id,&rt_params);
+	rtprio_thread(RTP_SET,sender_id,&rt_params);
+	return;
+/*
+	sched_yield();
+	struct sched_param sched_params;
+	sched_params.sched_priority = sched_get_priority_max(SCHED_OTHER);
+	sched_setscheduler(0,SCHED_OTHER,&sched_params);*/
+}
+
+static 
+void rusage_diff(struct rusage *dest,struct rusage *end,struct rusage *start)
+{
+	dest->ru_utime=end->ru_utime;
+	timevalsub(&dest->ru_utime,&start->ru_utime);	/* user time used */
+	dest->ru_stime=end->ru_stime;
+	timevalsub(&dest->ru_stime,&start->ru_stime);	/* system time used */
+
+	dest->ru_maxrss=end->ru_maxrss-start->ru_maxrss;		/* max resident set size */
+	dest->ru_ixrss=end->ru_ixrss-start->ru_ixrss;		/* integral shared memory size */
+	dest->ru_idrss=end->ru_idrss-start->ru_idrss;		/* integral unshared data " */
+	dest->ru_isrss=end->ru_isrss-start->ru_isrss;		/* integral unshared stack " */
+	dest->ru_minflt=end->ru_minflt-start->ru_minflt;		/* page reclaims */
+	dest->ru_majflt=end->ru_majflt-start->ru_majflt;		/* page faults */
+	dest->ru_nswap=end->ru_nswap-start->ru_nswap;		/* swaps */
+	dest->ru_inblock=end->ru_inblock-start->ru_inblock;		/* block input operations */
+	dest->ru_oublock=end->ru_oublock-start->ru_oublock;		/* block output operations */
+	dest->ru_msgsnd=end->ru_msgsnd-start->ru_msgsnd;		/* messages sent */
+	dest->ru_msgrcv=end->ru_msgrcv-start->ru_msgrcv;		/* messages received */
+	dest->ru_nsignals=end->ru_nsignals-start->ru_nsignals;		/* signals received */
+	dest->ru_nvcsw=end->ru_nvcsw-start->ru_nvcsw;		/* voluntary context switches */
+	dest->ru_nivcsw=end->ru_nivcsw-start->ru_nivcsw;		/* involuntary " */
+}
+
+static
+int rusage_dump_with_args (
+    const struct rusage * const b,
+    const char * progname,
+    const char * phase,
+    const char * archname,
+    FILE * const fileptr,
+    const statcounters_fmt_flag_t format_flag)
+{
+    // preparing default values for NULL arguments
+    // displayed progname
+#define MAX_NAME_SIZE 512
+    if (!progname) {
+        progname = getenv("STATCOUNTERS_PROGNAME");
+        if (!progname || progname[0] == '\0')
+	    progname = getprogname();
+    }
+    size_t pname_s = strnlen(progname,MAX_NAME_SIZE);
+    size_t phase_s = 0;
+    if (phase) {
+        phase_s = strnlen(phase,MAX_NAME_SIZE);
+    }
+    char * pname = malloc((sizeof(char) * (pname_s + phase_s)) + 1);
+    strncpy(pname, progname, pname_s + 1);
+    if (phase) {
+        strncat(pname, phase, phase_s);
+    }
+    // displayed archname
+    const char * aname;
+    if (!archname) {
+        aname = getenv("STATCOUNTERS_ARCHNAME");
+        if (!aname || aname[0] == '\0')
+            aname = "\0";
+    } else {
+        aname = archname;
+    }
+    // dump file pointer
+    bool display_header = true;
+    bool use_stdout = false;
+    FILE * fp = fileptr;
+    if (!fp) {
+        const char * const fname = getenv("STATCOUNTERS_OUTPUT");
+        if (!fname || fname[0] == '\0') {
+            use_stdout = true;
+        } else {
+            if (access(fname, F_OK) != -1) {
+                display_header = false;
+            }
+            fp = fopen(fname, "a");
+        }
+        if (!fp && !use_stdout) {
+            warn("Failed to open statcounters output %s", fname);
+            use_stdout = true;
+        }
+    } else {
+        use_stdout = false;
+    }
+    if (use_stdout)
+        fp = stdout;
+    // output format
+    const char * const fmt = getenv("STATCOUNTERS_FORMAT");
+    statcounters_fmt_flag_t fmt_flg = format_flag;
+    if (fmt && (strcmp(fmt,"csv") == 0)) {
+       if (display_header)
+           fmt_flg = CSV_HEADER;
+       else
+           fmt_flg = CSV_NOHEADER;
+    }
+
+    if (b == NULL || fp == NULL)
+        return -1;
+    switch (fmt_flg)
+    {
+        case CSV_HEADER:
+            fprintf(fp, "progname,");
+            fprintf(fp, "archname,");
+            fprintf(fp, "user_time,");
+            fprintf(fp, "sys_time,");
+            fprintf(fp, "max_resident_set_size,");
+            fprintf(fp, "integral_shared_memory_size,");
+            fprintf(fp, "integral_unshared_data,");
+            fprintf(fp, "integral_unshared_stack,");
+            fprintf(fp, "page_reclaims,");
+            fprintf(fp, "page_faults,");
+            fprintf(fp, "swaps,");
+            fprintf(fp, "block_input,");
+            fprintf(fp, "block_output,");
+            fprintf(fp, "messages_sent,");
+            fprintf(fp, "messages_received,");
+            fprintf(fp, "signals_received,");
+            fprintf(fp, "voluntary_context_switches,");
+            fprintf(fp, "involuntary_context_switches,");
+            fprintf(fp, "\n");
+            // fallthrough
+        case CSV_NOHEADER:
+            fprintf(fp, "%s,",pname);
+            fprintf(fp, "%s,",aname);
+            fprintf(fp, "%ld.%ld,",b->ru_utime.tv_sec,b->ru_utime.tv_usec);
+            fprintf(fp, "%ld.%ld,",b->ru_stime.tv_sec,b->ru_stime.tv_usec);
+            fprintf(fp, "%lu,",b->ru_maxrss);
+            fprintf(fp, "%lu,",b->ru_ixrss);
+            fprintf(fp, "%lu,",b->ru_idrss);
+            fprintf(fp, "%lu,",b->ru_isrss);
+            fprintf(fp, "%lu,",b->ru_minflt);
+            fprintf(fp, "%lu",b->ru_majflt);
+            fprintf(fp, "%lu,",b->ru_nswap);
+            fprintf(fp, "%lu,",b->ru_inblock);
+            fprintf(fp, "%lu,",b->ru_oublock);
+            fprintf(fp, "%lu,",b->ru_msgsnd);
+            fprintf(fp, "%lu,",b->ru_msgrcv);
+            fprintf(fp, "%lu",b->ru_nsignals);
+            fprintf(fp, "%lu,",b->ru_nvcsw);
+            fprintf(fp, "%lu",b->ru_nivcsw);
+            fprintf(fp, "\n");
+            break;
+        case HUMAN_READABLE:
+        default:
+            fprintf(fp, "===== %s -- %s =====\n",pname, aname);
+            fprintf(fp, "user_time:                       \t%ld.%ld\n",b->ru_utime.tv_sec,b->ru_utime.tv_usec);
+            fprintf(fp, "sys_time:                        \t%ld.%ld\n",b->ru_stime.tv_sec,b->ru_stime.tv_usec);
+            fprintf(fp, "max_resident_set_size:           \t%lu\n",b->ru_maxrss);
+            fprintf(fp, "integral_shared_memory_size:     \t%lu\n",b->ru_ixrss);
+            fprintf(fp, "integral_unshared_data:          \t%lu\n",b->ru_idrss);
+            fprintf(fp, "integral_unshared_stack:         \t%lu\n",b->ru_isrss);
+            fprintf(fp, "page_reclaims:                   \t%lu\n",b->ru_minflt);
+            fprintf(fp, "page_faults:                     \t%lu\n",b->ru_majflt);
+            fprintf(fp, "swaps:                           \t%lu\n",b->ru_nswap);
+            fprintf(fp, "block_input:                     \t%lu\n",b->ru_inblock);
+            fprintf(fp, "block_output:                    \t%lu\n",b->ru_oublock);
+            fprintf(fp, "messages_sent:                   \t%lu\n",b->ru_msgsnd);
+            fprintf(fp, "messages_received:               \t%lu\n",b->ru_msgrcv);
+            fprintf(fp, "signals_received:                \t%lu\n",b->ru_nsignals);
+            fprintf(fp, "voluntary_context_switches:      \t%lu\n",b->ru_nvcsw);
+            fprintf(fp, "involuntary_context_switches:    \t%lu\n",b->ru_nivcsw);
+            fprintf(fp, "\n");
+            break;
+    }
+    free(pname);
+    //if (!use_stdout)
+    //    fclose(fp);
+    return 0;
+}
+
+
 void send_data(void)
 {
 	int intval = 1;
@@ -107,35 +390,28 @@ void send_data(void)
 
 	coport_t port = (void * __capability)-1;
 	statcounters_bank_t bank2,result;
-	//struct timespec start_timestamp,end_timestamp;
+	struct timespec start_timestamp,end_timestamp;
 	struct timespec sleepytime;
 	sleepytime.tv_sec=0;
 	sleepytime.tv_nsec=100;
-	//double ipc_time;
+	float ipc_time;
 	int status;
-	
-	static char * name = NULL;
+	size_t remaining_len = total_size;
+	struct rusage start_rusage, end_rusage, result_rusage;
+	char * name = NULL;
 	if(name == NULL)
 	{
 		name = malloc(sizeof(char)*255);
 	}
-	switch(coport_type)
+	char * rusage_name = NULL;
+	if(rusage_name == NULL)
 	{
-		case COCARRIER:
-			sprintf(name,"/root/COCARRIER_cosend_b%lu_t%lu.dat",message_len,total_size);
-			break;
-		case COPIPE:
-			sprintf(name,"/root/COPIPE_cosend_b%lu_t%lu.dat",message_len,total_size);
-			break;
-		case COCHANNEL:
-			sprintf(name,"/root/COCHANNEL_cosend_b%lu_t%lu.dat",message_len,total_size);
-			break;
-		default:
-			break;
+		rusage_name = malloc(sizeof(char)*255);
 	}
+	
 
 	
-	FILE *f;
+	FILE *fp, *rusage_fp;
 
 	error=pthread_mutex_lock(&start_lock);
 	if(error)
@@ -151,36 +427,68 @@ void send_data(void)
 	pthread_cond_wait(&may_continue,&start_lock);
 	pthread_mutex_unlock(&start_lock);
 	
-	f = fopen(name,"a+");
+	switch(coport_type)
+	{
+		case COCARRIER:
+			sprintf(name,"/tmp/COCARRIER_cosend_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(rusage_name,"/tmp/COCARRIER_cosend_b%lu_t%lu_rusage.dat",message_len,total_size);
+			break;
+		case COPIPE:
+			sprintf(name,"/tmp/COPIPE_cosend_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(rusage_name,"/tmp/COPIPE_cosend_b%lu_t%lu_rusage.dat",message_len,total_size);
+			break;
+		case COCHANNEL:
+			sprintf(name,"/tmp/COCHANNEL_cosend_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(rusage_name,"/tmp/COCHANNEL_cosend_b%lu_t%lu_rusage.dat",message_len,total_size);
+			break;
+		default:
+			break;
+	}
+	fp = fopen(name,"a+");
+	rusage_fp = fopen(rusage_name,"a+");
+	
+	status=coopen(port_name,coport_type,&port);
+	
 	for(unsigned long i = 0; i<runs; i++){
 		
 		sleepytime.tv_sec=0;
 		sleepytime.tv_nsec=10000;
-		if(coport_type!=COCARRIER){
+		if(coport_type==COPIPE){
 			nanosleep(&sleepytime,&sleepytime);
 			sched_yield();
 			sched_yield();
 		}
-		status=coopen(port_name,coport_type,&port);
+		
 		statcounters_zero(&send_start);
 		statcounters_zero(&bank2);
 		statcounters_zero(&result);
-
-		if(coport_type==COCARRIER)
+		
+		if(coport_type!=COPIPE)
 		{
-			while(pthread_mutex_trylock(&async_lock))
-				sched_yield();
+			pthread_mutex_lock(&async_lock);
 			error=pthread_mutex_lock(&output_lock); //keep it quiet during
 			if(error)
 				err(error,"send_data: lock output_lock failed");
+			
+
 		}
+		if(coport_type==COCARRIER)
+		{
+			set_sched_async();
+		}
+		else
+		{
+			if(coport_type==COPIPE)
+				sched_yield();
+			set_sched();
+		}
+		
 		if (trace)
 		{
 			intval=1;
 			sysarch(QEMU_SET_QTRACE, &intval);
 			CHERI_START_TRACE;
 		}
-		
 		if (coport_type!=COCHANNEL)
 		{
 			for(unsigned int j = 0; j<(total_size/message_len); j++)
@@ -190,11 +498,16 @@ void send_data(void)
 		}
 		else
 		{
-			for(unsigned int j = 0; j<(total_size/4096); j++)
-			{
-				status=cosend(port,message_str,4096);
-			}
+			//status=cosend(port,message_str,MIN(remaining_len,4096));
 		}
+		if(coport_type==COPIPE)
+		{
+			sched_yield();
+			sched_yield();
+		}
+		remaining_len=total_size;
+		getrusage(RUSAGE_THREAD,&start_rusage);
+		clock_gettime(CLOCK_REALTIME,&start_timestamp);
 		statcounters_sample(&send_start);
 		if (coport_type!=COCHANNEL)
 		{
@@ -204,13 +517,12 @@ void send_data(void)
 			}
 		}
 		else
-		{
-			for(unsigned int j = 0; j<(total_size/4096); j++)
-			{
-				status=cosend(port,message_str,4096);
-			}
+		{			
+			status=cosend(port,message_str,MIN(remaining_len,4096));
 		}
-		statcounters_sample(&bank2);
+		statcounters_sample_end(&bank2);
+		clock_gettime(CLOCK_REALTIME,&end_timestamp);
+		getrusage(RUSAGE_THREAD,&end_rusage);
 		if (trace)
 		{
 			intval=0;
@@ -218,15 +530,26 @@ void send_data(void)
 			//CHERI_START_TRACE;
 		}
 		//clock_gettime(CLOCK_REALTIME,&end_timestamp);
-		
-
+	
 		if(coport_type==COCARRIER)
 		{
+			unset_sched_async();
+			/*sleepytime.tv_sec=0;
+			sleepytime.tv_nsec=100000;
+			nanosleep(&sleepytime,&sleepytime);*/
 			pthread_mutex_unlock(&async_lock);
+		}
+		else 
+		{
+			unset_sched();
+			if (coport_type==COCHANNEL)
+			{
+				while(!pthread_mutex_unlock(&async_lock));
+			}
 		}
 		sched_yield();
 		error=pthread_mutex_lock(&output_lock);
-		if(error && coport_type!=COCARRIER)
+		if(error && coport_type==COPIPE)
 			err(error,"send_data: lock failed");
 		if(status==-1)
 		{
@@ -240,32 +563,58 @@ void send_data(void)
 			}
 			err(errno,"error!");
 		}
-		//timespecsub(&end_timestamp,&start_timestamp);
+		timespecsub(&end_timestamp,&start_timestamp);
 		statcounters_diff(&result,&bank2,&send_start);
 
 		
-		//ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
+		ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
 		
-		//printf("Sent %lu bytes in %lf\n", total_size, ipc_time);
-		//printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
-		printf("Sent %lu bytes\n", total_size);
+		printf("Sent %lu bytes in %f\n", total_size, ipc_time);
+		printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+		//printf("Sent %lu bytes\n", total_size);
+		char * bw_str = malloc(100);
+		sprintf(bw_str,"%.2FKB/s",(((total_size)/ipc_time)/1024.0));
+		rusage_diff(&result_rusage,&end_rusage,&start_rusage);
+		//statcounters_dump_with_args calls fclose - not any more
+		if(i==0){
+			statcounters_dump_with_args(&result,"COSEND",arch_name,bw_str,fp,CSV_HEADER);
+			rusage_dump_with_args(&result_rusage,"COSEND",arch_name,bw_str,rusage_fp,CSV_HEADER);
+		}
+		else{
+			statcounters_dump_with_args(&result,"COSEND",arch_name,bw_str,fp,CSV_NOHEADER);		
+			rusage_dump_with_args(&result_rusage,"COSEND",arch_name,bw_str,rusage_fp,CSV_NOHEADER);
 
-		
-		//statcounters_dump_with_args calls fclose
-		if(i==0)
-			statcounters_dump_with_args(&result,"COSEND","","malta",f,CSV_HEADER);
-		else
-			statcounters_dump_with_args(&result,"COSEND","","malta",f,CSV_NOHEADER);		
+		}
 		statcounters_dump(&result);
+		rusage_dump_with_args(&result_rusage,"COSEND",arch_name,bw_str,NULL,HUMAN_READABLE);
 		
-		while(pthread_mutex_unlock(&output_lock));
+
+		while(!pthread_mutex_unlock(&output_lock));
+		sched_yield();
+		if(coport_type!=COCHANNEL)
+		{
+			while(pthread_mutex_trylock(&output_lock))
+				sched_yield();
+			while(!pthread_mutex_unlock(&output_lock));
+		}
+		if(coport_type==COPIPE)
+			sched_yield();
+		
 	}
+	if(coport_type==COPIPE && 0)
+		unset_sched();
+
 	intval=0;
 	if (trace)
 		sysarch(QEMU_SET_QTRACE, &intval);
-	fclose(f);
+	if(coport_type!=COPIPE)
+		while(!pthread_mutex_unlock(&async_lock));
+	fclose(fp);
+	fclose(rusage_fp);
+	memset(name,0,strlen(name));
 	coclose(port);
 	port=NULL;
+
 	//free(name);
 	
 }
@@ -277,124 +626,176 @@ void receive_data(void)
 	coport_t port = (void * __capability)-1;
 	
 	statcounters_bank_t bank1,result;
-	static char * buffer = NULL;
-	//struct timespec start, end;
-	//float ipc_time;
+	char * buffer = NULL;
+	struct timespec start_timestamp,end_timestamp;
+	float ipc_time;
 	int status;
+	size_t remaining_len = message_len;
+	struct rusage start_rusage, end_rusage, result_rusage;
 
-	static char * name = NULL;
+	char * name = NULL;
 	if(name == NULL)
 	{
 		name=malloc(sizeof(char)*255);
 	}
-	static char * name2 = NULL;
+	char * name2 = NULL;
 	if (name2==NULL)
 		name2 = malloc(sizeof(char)*255);
+	char * rusage_name = NULL;
+	if(rusage_name == NULL)
+	{
+		rusage_name = malloc(sizeof(char)*255);
+	}
+	while(may_start==0)
+		sched_yield();
+	may_start=-1;
 	switch(coport_type)
 	{
 		case COCHANNEL:
-			sprintf(name,"/root/COCHANNEL_corecv_b%lu_t%lu.dat",message_len,total_size);
-			sprintf(name2,"/root/COCHANNEL_wholeop_b%lu_t%lu.dat",message_len,total_size);
-			buffer=calloc(4096,sizeof(char));
+			sprintf(name,"/tmp/COCHANNEL_corecv_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(rusage_name,"/tmp/COCHANNEL_corecv_b%lu_t%lu_rusage.dat",message_len,total_size);
+
+			//sprintf(name2,"/tmp/COCHANNEL_wholeop_b%lu_t%lu.dat",message_len,total_size);
+			if (buffer==NULL)
+				buffer=calloc(4096,sizeof(char));
+			else if (cheri_getlen(buffer)<4096 || (cheri_getperm(buffer)&(CHERI_PERM_STORE))==0)
+				buffer=calloc(4096,sizeof(char));
+			else
+				break;
+			mlock(buffer,4096);
 			break;
 		case COPIPE:
-			sprintf(name,"/root/COPIPE_corecv_b%lu_t%lu.dat",message_len,total_size);
-			sprintf(name,"/root/COPIPE_wholeop_b%lu_t%lu.dat",message_len,total_size);
-			buffer=calloc(message_len,sizeof(char));
+			sprintf(name,"/tmp/COPIPE_corecv_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(name2,"/tmp/COPIPE_wholeop_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(rusage_name,"/tmp/COPIPE_wholeop_b%lu_t%lu_rusage.dat",message_len,total_size);
+
+			if (buffer==NULL || (cheri_getperm(buffer)&(CHERI_PERM_STORE))==0)
+				buffer=calloc(message_len,sizeof(char));
+			else if (cheri_getlen(buffer)<message_len || (cheri_getperm(buffer)&(CHERI_PERM_STORE))==0)
+				buffer=calloc(message_len,sizeof(char));
+			else
+				break;
+			mlock(buffer,message_len);
 			break;
 		case COCARRIER:
-			sprintf(name,"/root/COCARRIER_corecv_b%lu_t%lu.dat",message_len,total_size);
-			buffer=calloc(message_len,sizeof(char));
+			sprintf(name,"/tmp/COCARRIER_corecv_b%lu_t%lu.dat",message_len,total_size);
+			sprintf(rusage_name,"/tmp/COCARRIER_corecv_b%lu_t%lu_rusage.dat",message_len,total_size);
+
+			if (buffer==NULL)
+				buffer=calloc(message_len,sizeof(char));
+			else if (cheri_getlen(buffer)<message_len || (cheri_getperm(buffer)&(CHERI_PERM_STORE))==0)
+				buffer=calloc(message_len,sizeof(char));
+			else
+				break;
+			mlock(buffer,message_len);
+
 			break;
 		default:
 			break;
 	}
-	FILE *f, *f2;
+	FILE *fp, *fp2, *rusage_fp;
 
 	
 	/*if(port->status==COPORT_CLOSED)
 	{
 		err(1,"port closed before receiving");
 	}*/
-	while(!may_start)
-		sched_yield();
+	
+	
 	error=pthread_mutex_lock(&start_lock);
 	if(error)
 		err(error,"rsend_data: lock start_lock failed");
 	while(waiting_threads!=acked_threads)
 	{
 		pthread_mutex_unlock(&start_lock);
+		sched_yield();
 		pthread_mutex_lock(&start_lock);
 	}
 	waiting_threads++;
 	pthread_cond_signal(&waiting);
 	pthread_cond_wait(&may_continue,&start_lock);
 	pthread_mutex_unlock(&start_lock);
-	if(coport_type==COCARRIER && trace)
+	if(trace)
 		sysarch(QEMU_SET_QTRACE, &intval);
-	f= fopen(name,"a+");
-	f2 = fopen(name,"a+");
+
+	fp= fopen(name,"a+");
+	if(coport_type==COPIPE)
+		fp2 = fopen(name2,"a+");
+	rusage_fp=fopen(rusage_name,"a+");
+
+
+	if(coport_type==COCARRIER)
+		pthread_mutex_lock(&async_lock);
+	status=coopen(port_name,coport_type,&port);
 	for(unsigned long i = 0; i<runs; i++)
 	{
-
-		status=coopen(port_name,coport_type,&port);
-		
 		statcounters_zero(&bank1);
 		statcounters_zero(&recv_end);
-
 		statcounters_zero(&result);
 
-		if(coport_type==COCARRIER)
+		if(coport_type!=COPIPE)
 		{
-			while(pthread_mutex_trylock(&async_lock))
-				sched_yield();
+			if(coport_type==COCARRIER ||1)
+			{
+				pthread_mutex_lock(&async_lock);
+			}
 			error=pthread_mutex_lock(&output_lock); //keep it quiet during
 			if(error)
 				err(error,"recv_data: lock output_lock failed");
-		}
-	
-		if (coport_type==COCHANNEL)
-		{
-			for(unsigned int j = 0; j<(total_size/4096); j++)
-			{
-				status=corecv(port,(void **)&buffer,4096);
-			}
-		}
-		else
-		{
-			for(unsigned int j = 0; j<(total_size/message_len); j++)
-			{
-				status=corecv(port,(void **)&buffer,message_len);
-			}
-		}
-		//clock_gettime(CLOCK_REALTIME,&start);
-		statcounters_sample(&bank1);
-		if (coport_type==COCHANNEL)
-		{
-			for(unsigned int j = 0; j<(total_size/4096); j++)
-			{
-				status=corecv(port,(void **)&buffer,4096);
-			}
-		}
-		else
-		{
-			for(unsigned int j = 0; j<(total_size/message_len); j++)
-			{
-				status=corecv(port,(void **)&buffer,message_len);
-			}
-		}
-		statcounters_sample(&recv_end);
-		//clock_gettime(CLOCK_REALTIME,&end);
-			
-		
 
+		}
 		if(coport_type==COCARRIER)
 		{
-			while(pthread_mutex_unlock(&async_lock));
+			set_sched_async();
+		}
+		else
+		{
+			if(coport_type==COPIPE)
+				sched_yield();
+			set_sched();
+		}
+		if (coport_type==COCHANNEL)
+		{
+			//status=corecv(port,(void **)&buffer,MIN(remaining_len,4096));
+		}
+		else
+		{
+			status=corecv(port,(void **)&buffer,message_len);
+			
+		}
+		remaining_len=total_size;
+		getrusage(RUSAGE_THREAD,&start_rusage);
+		clock_gettime(CLOCK_REALTIME,&start_timestamp);
+		
+		if (coport_type==COCHANNEL)
+		{
+			statcounters_sample(&bank1);
+			status=corecv(port,(void **)&buffer,MIN(remaining_len,4096));
+			statcounters_sample_end(&recv_end);	
+		}
+		else
+		{
+			statcounters_sample(&bank1);
+			status=corecv(port,(void **)&buffer,message_len);
+			statcounters_sample_end(&recv_end);	
+		}
+		clock_gettime(CLOCK_REALTIME,&end_timestamp);
+		getrusage(RUSAGE_THREAD,&end_rusage);
+		if(coport_type==COPIPE)
+			unset_sched();			
+		else if(coport_type==COCHANNEL)
+		{
+			unset_sched();
+			while(!pthread_mutex_unlock(&async_lock));
+		}
+		else if(coport_type == COCARRIER)
+		{
+			unset_sched_async();
+			pthread_mutex_unlock(&async_lock);
 		}
 		sched_yield();
 		error=pthread_mutex_lock(&output_lock);
-		if(error && coport_type!=COCARRIER)
+		if(error && coport_type==COPIPE)
 			err(error,"recv_data: lock output_lock failed");
 
 		if(status==-1)
@@ -408,39 +809,53 @@ void receive_data(void)
 			err(1,"buffer not written to");
 		}
 		//printf("message received:%s\n",(char *)buffer);
-		//timespecsub(&end,&start);
+		timespecsub(&end_timestamp,&start_timestamp);
 		statcounters_diff(&result,&recv_end,&bank1);
 		
-		//ipc_time=(float)end.tv_sec + (float)end.tv_nsec / 1000000000;
-		//printf("Received %lu bytes in %lf\n", total_size, ipc_time);
-		printf("Received %lu bytes\n", total_size);
+		ipc_time=(float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
+		printf("Received %lu bytes in %fs\n", total_size, ipc_time);
+		//printf("Received %lu bytes\n", total_size);
 
 
-		//printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
-
-
+		printf("%.2FKB/s\n",(((total_size)/ipc_time)/1024.0));
+		char * bw_str = malloc(100);
+		sprintf(bw_str,"%.2FKB/s",(((total_size)/ipc_time)/1024.0));
+		rusage_diff(&result_rusage,&end_rusage,&start_rusage);
 		if(i==0)
-			statcounters_dump_with_args(&result,"CORECV","",arch_name,f,CSV_HEADER);
-		else
-			statcounters_dump_with_args(&result,"CORECV","",arch_name,f,CSV_NOHEADER);
-		statcounters_dump(&result);
-		if (coport_type==COCARRIER)
 		{
-			pthread_mutex_unlock(&output_lock);
+			statcounters_dump_with_args(&result,"CORECV",arch_name,bw_str,fp,CSV_HEADER);
+			rusage_dump_with_args(&result_rusage,"COSEND",arch_name,bw_str,rusage_fp,CSV_HEADER);
+
+		}
+		else
+			statcounters_dump_with_args(&result,"CORECV",arch_name,bw_str,rusage_fp,CSV_NOHEADER);
+		statcounters_dump(&result);
+		rusage_dump_with_args(&result_rusage,"CORECV",arch_name,bw_str,0,HUMAN_READABLE);
+		if (coport_type!=COPIPE)
+		{
+			while(!pthread_mutex_unlock(&output_lock));
+			sched_yield();
 			continue;
 		}
 		
 		statcounters_diff(&result,&recv_end,&send_start);
 		if(i==0)
-			statcounters_dump_with_args(&result,"CORECV","",arch_name,f2,CSV_HEADER);
+			statcounters_dump_with_args(&result,"CORECV",arch_name,bw_str,fp2,CSV_HEADER);
 		else
-			statcounters_dump_with_args(&result,"CORECV","",arch_name,f2,CSV_NOHEADER);
+			statcounters_dump_with_args(&result,"CORECV",arch_name,bw_str,fp2,CSV_NOHEADER);
 	
-		while(pthread_mutex_unlock(&output_lock));
-		coclose(port);
+		while(!pthread_mutex_unlock(&output_lock));
+		sched_yield();
+		while(pthread_mutex_trylock(&output_lock))
+			sched_yield();
+		while(!pthread_mutex_unlock(&output_lock));
+		if(coport_type==COCHANNEL)
+			sched_yield();
 	}
+	if(coport_type==COPIPE && 0)
+		unset_sched();
 	intval=0;
-	if(coport_type==COCARRIER)
+	if(coport_type!=COPIPE)
 	{
 		if (trace)
 		{	
@@ -448,10 +863,16 @@ void receive_data(void)
 			CHERI_STOP_TRACE;
 		}
 	}
-	fclose(f);
-	fclose(f2);
+	else
+		fclose(fp2);
+	fclose(fp);
+	memset(name,0,strlen(name));
+	memset(name2,0,strlen(name2));
 	coclose(port);
+	if(coport_type!=COPIPE)
+		while(!pthread_mutex_unlock(&async_lock));
 	port=NULL;
+	may_start=0;
 }	
 
 static
@@ -484,6 +905,7 @@ void prepare_message(void)
 		
 	}
 	message_str[message_len-1]='\0';
+	mlock(message_str,message_len);
 }
 
 static int done = 0;
@@ -492,60 +914,73 @@ static int done = 0;
 static
 void *do_send(void* args)
 {	
-	int error = 0;
+	//int error = 0;
 
 
 	pthread_mutex_lock(&async_lock);
+	thr_self(&sender_id);
+	statcounters_reset();
 
-	prepare_message();
-	port_name=malloc(strlen(port_names[1])+1);
-	
-	coport_type=COPIPE;
-	strcpy(port_name,port_names[0]);
-	may_start++;
-	
+	may_start=1;
 	send_data();
+
+	while(may_start!=0)
+		sched_yield();
+	if(message_len<=1024*1024)
+	{
 	switching_types++;
-	while(pthread_mutex_unlock(&async_lock));
-
-	error=pthread_mutex_lock(&start_lock);
-	pthread_cond_signal(&waiting);
-	pthread_cond_wait(&may_continue,&start_lock);
-	pthread_mutex_unlock(&start_lock);
-
 	strcpy(port_name,port_names[1]);
 	coport_type=COCARRIER;
 
-	may_start++;
+	may_start=1;
 	send_data();
+	}
+	if(message_len<=4096)
+	{
+		while(!pthread_mutex_unlock(&async_lock));
+		switching_types++;
+		while(may_start!=0)
+			sched_yield();
+		pthread_mutex_lock(&async_lock);
+		strcpy(port_name,port_names[2]);
+		coport_type=COCHANNEL;
 
+		may_start=1;
+		send_data();
+
+	}
 	done++;	
+	pthread_join(receiver,NULL);
 	return args;
 }
 
 static
 void *do_recv(void* args)
 {
-	int error = 0;
-	
+	//int error = 0;
+	thr_self(&receiver_id);
+	statcounters_reset();
 	receive_data();
 	switching_types++;
-	error=pthread_mutex_lock(&start_lock);
-	pthread_cond_signal(&waiting);
-	pthread_cond_wait(&may_continue,&start_lock);
-	pthread_mutex_unlock(&start_lock);
-
+	if(message_len<=1024*1024)
 	receive_data();
+	if(message_len<=4096)
+	{
+		switching_types++;
+		receive_data();
+	}
 	done++;
+	pthread_mutex_lock(&output_lock);
+	exit(0);
 	return args;
 }
 /*
-static cpusetid_t cochatter_setid;
-static cpuset_t fullset = CPUSET_T_INITIALIZER(CPUSET_FSET);
-static cpuset_t recv_cpu_set = CPUSET_T_INITIALIZER(0x1);
-static cpuset_t send_cpu_set;
-*/
+static cpusetid_t cochatter_setid;*/
+//static cpuset_t fullset = CPUSET_T_INITIALIZER(CPUSET_FSET);
+static cpuset_t recv_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);
+static cpuset_t send_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);;
 
+static
 void get_arch(void)
 {
 	int mib[4];
@@ -560,8 +995,8 @@ void get_arch(void)
     sysctl(mib, 2, &cores, &len, NULL, 0);
     if (cores>1)
         multicore=1;
-    if(multicore)
-    	strcpy(arch_name,"BERI\0");
+    if(!multicore)
+    	strcpy(arch_name,"MALTA");
 }
 int main(int argc, char * const argv[])
 {
@@ -569,7 +1004,7 @@ int main(int argc, char * const argv[])
 	char * strptr;
 	
 	int receive = 0;
-	pthread_t sender, receiver;
+	
 	
 	while((opt=getopt(argc,argv,"ot:r:b:pqc:"))!=-1)
 	{
@@ -619,9 +1054,10 @@ int main(int argc, char * const argv[])
 	{
 		total_size=message_len;
 	}
-	//cpuset(&cochatter_setid);
+	CPU_CLR(CPU_FFS(&send_cpu_set)-1,&send_cpu_set);
+	CPU_CLR(CPU_FFS(&send_cpu_set)-1,&recv_cpu_set);
 	//send_cpu_set = CPUSET_NAND(&fullset,&recv_cpu_set);
-
+	get_arch();
 	struct timespec sleepytime;
 	sleepytime.tv_sec=0;
 	sleepytime.tv_nsec=100;
@@ -629,8 +1065,8 @@ int main(int argc, char * const argv[])
 	pthread_attr_init(&send_attr);
 	pthread_attr_init(&recv_attr);
 	
-	//pthread_attr_getaffinity_np(&send_attr, sizeof(cpuset_t), &send_cpu_set);
-	//pthread_attr_getaffinity_np(&recv_attr, sizeof(cpuset_t), &recv_cpu_set);
+	pthread_attr_setaffinity_np(&send_attr, sizeof(cpuset_t), &send_cpu_set);
+	pthread_attr_setaffinity_np(&recv_attr, sizeof(cpuset_t), &recv_cpu_set);
 
 	struct sched_param sched_params;
 	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
@@ -650,13 +1086,17 @@ int main(int argc, char * const argv[])
 	pthread_mutex_init(&async_lock,&type);
 	pthread_cond_init(&may_continue,NULL);
 	pthread_cond_init(&waiting,NULL);
-	
+
 	statcounters_reset();
 
 	pthread_mutex_lock(&start_lock);
+	prepare_message();
+	port_name=malloc(strlen(port_names[1])+1);
 	
+	coport_type=COPIPE;
+	strcpy(port_name,port_names[0]);
+	setpriority(PRIO_PROCESS,0,PRIO_MIN);
 	pthread_create(&sender,&send_attr,do_send,NULL);
-	sched_yield();
 	pthread_create(&receiver,&recv_attr,do_recv,NULL);
 	while (done<2)
 	{
@@ -664,10 +1104,6 @@ int main(int argc, char * const argv[])
 		acked_threads++;
 		pthread_cond_wait(&waiting,&start_lock);
 		acked_threads++;
-		if(switching_types==2)
-		{
-			
-		}
 		pthread_cond_broadcast(&may_continue);
 		acked_threads=0;
 		waiting_threads=0;

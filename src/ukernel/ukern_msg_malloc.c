@@ -12,11 +12,14 @@
 #include <err.h>
 #include <errno.h>
 #include <stdatomic.h>
+#include <time.h>
+#include <stdio.h>
 
 const size_t max_len = 1024*1024;
 
 struct {
 	_Atomic(void * __capability) current_message_pool;
+	_Atomic(void * __capability) next_message_pool;
 	pthread_cond_t need_new_mem;
 } mem_tbl;
 #define MSG_POOL_TOP (cheri_getbase(mem_tbl.current_message_pool)+cheri_getlen(mem_tbl.current_message_pool))
@@ -25,14 +28,14 @@ static
 void map_msg_region(void)
 {
 	void * __capability new_page;
-	new_page=MAP_UKERN(NULL,UKERN_MAP_LEN);
-	memset(new_page,0,UKERN_MAP_LEN);
-	mlock(new_page,UKERN_MAP_LEN);
+	new_page=MAP_UKERN(NULL,UKERN_MAP_LEN*30);
+	memset(new_page,0,UKERN_MAP_LEN*30);
+	mlock(new_page,UKERN_MAP_LEN*30);
 	if(errno!=0)
 	{
 		err(errno,"mapping region failed\n");
 	}
-	mem_tbl.current_message_pool=new_page;
+	atomic_store(&mem_tbl.next_message_pool,new_page);
 	return;
 }
 
@@ -41,24 +44,31 @@ static
 void get_new_mem(void)
 {
 	int i = 1;
-	pthread_cond_signal(&mem_tbl.need_new_mem);
-	while(cheri_getlen(atomic_load(&mem_tbl.current_message_pool))<max_len)
+	while(atomic_load(&mem_tbl.next_message_pool)==NULL)
 	{
-		if(i%10==0)
+		//printf("spinning\n");
+		if(i%100==0)
 			sched_yield();
 		i++;
 	}
+	atomic_store(&mem_tbl.current_message_pool,mem_tbl.next_message_pool);
+	atomic_store(&mem_tbl.next_message_pool,NULL);
 }
-
 
 void *map_new_mem(void*args)
 {
-	pthread_mutex_t memlock;
-	pthread_mutex_lock(&memlock);
+	struct timespec sleepytime;
+	
+	map_msg_region();
+	atomic_store(&mem_tbl.current_message_pool,mem_tbl.next_message_pool);
+	mem_tbl.next_message_pool=NULL;
 	for(;;)
 	{
-		map_msg_region();
-		pthread_cond_wait(&mem_tbl.need_new_mem,&memlock);
+		if(mem_tbl.next_message_pool==NULL)
+			map_msg_region();
+		sleepytime.tv_sec=20;
+		sleepytime.tv_nsec=0;
+		nanosleep(&sleepytime,&sleepytime);
 	}
 	return args;
 }
@@ -78,7 +88,10 @@ get_mem(size_t len)
 	len=CHERI_REPRESENTABLE_LENGTH(len);
 	do {
 		if (len>cheri_getlen(orig_pool))
+		{
 			get_new_mem();
+			orig_pool = mem_tbl.current_message_pool;
+		}
 		base=CHERI_REPRESENTABLE_BASE(MSG_POOL_TOP-len,len);
 		result=cheri_setaddress(orig_pool,base);
 		result=cheri_setboundsexact(result,len);
@@ -92,7 +105,12 @@ get_mem(size_t len)
 			reduced_pool=cheri_setboundsexact(reduced_pool,new_top);
 		}	
 	} while(!atomic_compare_exchange_weak_explicit(&mem_tbl.current_message_pool,&orig_pool,reduced_pool,memory_order_acq_rel,memory_order_acquire));
+	if(cheri_getlen(mem_tbl.current_message_pool)<UKERN_MAP_LEN*4)
+	{
+		atomic_store(&mem_tbl.current_message_pool,atomic_load(&mem_tbl.next_message_pool));
+		atomic_store(&mem_tbl.next_message_pool,NULL);
 
+	}
 	return result;
 }
 

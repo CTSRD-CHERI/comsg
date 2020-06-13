@@ -46,37 +46,6 @@
 #include <stdbool.h>
 
 
-
-bool valid_coport(sys_coport_t * addr)
-{
-    if(cheri_getlen(addr)<sizeof(sys_coport_t))
-    {
-        printf("too small to represent coport\n");
-        return false;
-    }
-    else if(!in_coport_table(addr))
-    {
-        return false;
-    }
-    return true;
-    
-}
-
-bool valid_cocarrier(sys_coport_t * addr)
-{
-    if(cheri_gettype(addr)!=sealed_otype)
-    {
-        printf("wrong type\n");
-        return false;
-    }
-    if(!valid_coport(addr))
-    {
-        return false;
-    }
-
-    return true;
-}
-
 int init_port(coport_type_t type, sys_coport_t* p)
 {
 
@@ -113,8 +82,3 @@ int init_port(coport_type_t type, sys_coport_t* p)
 }
 
 
-inline
-bool event_match(sys_coport_t * cocarrier,coport_eventmask_t e)
-{
-	return ((bool) cocarrier->event & e);
-}
