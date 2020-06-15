@@ -58,7 +58,7 @@ int init_port(coport_type_t type, sys_coport_t* p)
 	else if(type==COCARRIER)
 	{
 		p->length=0;
-		p->end=-1;
+		p->end=0;
 		p->buffer=get_mem(COPORT_BUF_LEN);
 		LIST_INIT(&p->listeners);
 	}

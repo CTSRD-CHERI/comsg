@@ -275,21 +275,15 @@ int cosend(const coport_t prt, const void * buf, size_t len)
             old_end=atomic_load_explicit(&port->end,memory_order_acquire);
             unread=(old_end-port_start)%port_size;
 
-            if((port_size-unread)<len)
+            if((port->event & COPOLL_OUT) == 0)
             {
                 errno=EAGAIN;
                 warn("cosend: message (%luB) too big/buffer (%luB) is full (%luB)",len,port_size,unread);
                 atomic_store_explicit(&port->status,COPORT_OPEN,memory_order_release);
                 return -1;
             }
-            if(old_end==port_size)
-                old_end=0;
-            if(port_start==port_size)
-                atomic_store_explicit(&port->start,0,memory_order_release);
-            if(old_end+len==port_size)
-                atomic_store_explicit(&port->end,port_size,memory_order_release); //special case so we can distinguish full from empty
-            else
-                atomic_store_explicit(&port->end,(old_end+len)%(port_size),memory_order_release);
+            
+            atomic_store_explicit(&port->end,(old_end+len)%(port_size),memory_order_release);
             if(old_end+len>port_size)
             {
                 memcpy((char *)port->buffer+old_end, buf, port_size-old_end);
@@ -300,7 +294,7 @@ int cosend(const coport_t prt, const void * buf, size_t len)
                 memcpy((char *)port->buffer+old_end, buf, len);
             }
             port->event|=COPOLL_IN;
-            if ((old_end+len-port_start)%port_size==(port_size-1))
+            if ((old_end+len)%(port_size)==port_start)
             {
                 port->event&=~COPOLL_OUT;
             }
@@ -320,9 +314,9 @@ int cosend(const coport_t prt, const void * buf, size_t len)
                 perror("cosend: error in cocall");
             if(call.status==-1)
             {
-                warn("cosend: error occurred during cocarrier send\n");
                 errno=call.error;
-                retval=-call.status;
+                //warn("cosend: error occurred during cocarrier send\n");
+                retval=call.status;
             }
             else
             {
@@ -454,7 +448,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
             }
             old_start=atomic_load_explicit(&port->start,memory_order_acquire);
             port_end=atomic_load_explicit(&port->end,memory_order_acquire);
-            if (old_start==port_end)
+            if((port->event & COPOLL_IN) == 0)
             {
                 //warn("corecv: no message to receive");
                 errno=EAGAIN;
@@ -730,7 +724,5 @@ void libcomsg_init(void)
     sysctl(mib, 2, &cores, &len, NULL, 0);
     if (cores>1)
         multicore=1;
-    #if 1
-    multicore=0;
-    #endif
+
 }
