@@ -15,6 +15,8 @@
 #include <stdatomic.h>
 #include <time.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/rtprio.h>
 
 #define MMAP_FLAGS (\
 	MAP_ANON | MAP_SHARED | MAP_ALIGNED(mmap_align) | MAP_PREFAULT_READ )
@@ -72,7 +74,7 @@ void get_new_mem(void)
 
 void *map_new_mem(void*args)
 {
-	mmap_align = CHERI_REPRESENTABLE_ALIGNMENT(16*1024*1024); 
+	mmap_align = CHERI_REPRESENTABLE_ALIGNMENT(1*1024*1024); 
 	mmap_len = CHERI_REPRESENTABLE_LENGTH(map_len);
 	struct timespec sleepytime;
 	align_min = CHERI_REPRESENTABLE_ALIGNMENT(1);
@@ -81,12 +83,27 @@ void *map_new_mem(void*args)
 	atomic_store_explicit(&mem_tbl.current_message_pool,atomic_load_explicit(&mem_tbl.next_message_pool,memory_order_acquire),memory_order_release);
 	atomic_store_explicit(&mem_tbl.next_message_pool,NULL,memory_order_release);
 	map_msg_region();
+
+	struct rtprio rt_params;
+	rt_params.type=RTP_PRIO_NORMAL;
+	rt_params.prio=RTP_PRIO_MAX;
+	rtprio_thread(RTP_SET,0,&rt_params);
+
 	for(;;)
 	{
 		if(atomic_load_explicit(&mem_tbl.next_message_pool,memory_order_acquire)==NULL)
+		{
 			map_msg_region();
-		sleepytime.tv_sec=5;
-		sleepytime.tv_nsec=0;
+			sched_yield(); //both start and end may have been exhausted, so we want to check sooner rather than later 
+			sleepytime.tv_nsec=100000; //arbitrary, but should optimise based on number of workers, consumption of memory, and length of cocarrier cosend+cocall+memcpy
+			sleepytime.tv_sec=0;
+			continue;
+		}
+		else
+		{
+			sleepytime.tv_sec=1;
+			sleepytime.tv_nsec=0;
+		}
 		nanosleep(&sleepytime,&sleepytime);
 	}
 	return args;
@@ -99,6 +116,7 @@ void * __capability get_mem
 	void * __capability reduced_pool;
 	void * __capability orig_pool;
 	size_t raw_new_len;
+	int swapped=0;
 	vaddr_t new_base;
 	if (len>max_len)
 		err(EINVAL,"may not allocate more than %lu", max_len);
@@ -107,29 +125,46 @@ void * __capability get_mem
 	len=CHERI_REPRESENTABLE_LENGTH(len);
 
 	do {
-		if (len>(cheri_getlen(orig_pool)-cheri_getoffset(orig_pool)) || !(cheri_gettag(orig_pool)))
+		if (len>(cheri_getlen(orig_pool)-cheri_getoffset(orig_pool)) || !(cheri_gettag(orig_pool)) || (cheri_getlen(orig_pool)<=cheri_getoffset(orig_pool)) )
 		{
 			get_new_mem();
 			orig_pool = atomic_load_explicit(&mem_tbl.current_message_pool,memory_order_acquire);
 		}
-		if(len>=4096 && (((len & (len-1))==0)))
+		if(len>=4096 && (((len & (len-1))==0))) //i don't think this means what i think it means wrt what alignment we should have.
 			result=__builtin_align_up(orig_pool,len);
 		else
 			result=__builtin_align_up(orig_pool,CHERI_REPRESENTABLE_ALIGNMENT(len));
 		//align on len
+		if(len>=4096 && (((len & (len-1))==0)))
+			result=__builtin_align_up(orig_pool,len);
+		else
+			result=__builtin_align_up(orig_pool,CHERI_REPRESENTABLE_ALIGNMENT(len));
 		
-
 		result=cheri_setboundsexact(result,len);
 		
 		new_base=cheri_gettop(result);
 		raw_new_len=cheri_gettop(orig_pool)-new_base-align_min;
 
 		reduced_pool=cheri_setaddress(orig_pool,new_base);
-		reduced_pool=cheri_setbounds(reduced_pool,raw_new_len); //not exact, but address should be fine
-		assert(cheri_getaddress(reduced_pool)>=new_base);
+		if (cheri_getoffset(reduced_pool)==cheri_getlen(reduced_pool))
+		{
+			reduced_pool=atomic_load(&mem_tbl.next_message_pool);
+			swapped=1;
+		}
+		else
+		{
+			reduced_pool=cheri_setbounds(reduced_pool,raw_new_len); //not exact, but address should be fine
+			assert(cheri_getaddress(reduced_pool)>=new_base);
+		}
+		
 		
 	} while(!atomic_compare_exchange_strong_explicit(&mem_tbl.current_message_pool,&orig_pool,reduced_pool,memory_order_acq_rel,memory_order_acquire));
-	if((cheri_getlen(reduced_pool)-cheri_getoffset(reduced_pool))<len)
+	if(swapped)
+	{
+		atomic_compare_exchange_strong_explicit(&mem_tbl.current_message_pool,&reduced_pool,NULL,memory_order_acq_rel,memory_order_acquire);
+
+	}
+	else if((cheri_getlen(reduced_pool)-cheri_getoffset(reduced_pool))<len)
 	{
 		if(atomic_compare_exchange_strong_explicit(&mem_tbl.current_message_pool,&reduced_pool,atomic_load(&mem_tbl.next_message_pool),memory_order_acq_rel,memory_order_acquire))
 			atomic_store_explicit(&mem_tbl.next_message_pool,NULL,memory_order_release);

@@ -794,7 +794,10 @@ void receive_data(void)
 		clock_gettime(CLOCK_REALTIME,&end_timestamp);
 		getrusage(RUSAGE_THREAD,&end_rusage);
 		if(coport_type==COPIPE)
+		{
+			sched_yield();
 			unset_sched();			
+		}
 		else if(coport_type==COCHANNEL)
 		{
 			unset_sched();
@@ -1040,7 +1043,7 @@ void *do_recv(void* args)
 static cpusetid_t cochatter_setid;*/
 //static cpuset_t fullset = CPUSET_T_INITIALIZER(CPUSET_FSET);
 static cpuset_t recv_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);
-static cpuset_t send_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);;
+static cpuset_t send_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);
 
 static
 void get_arch(void)
