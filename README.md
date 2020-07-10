@@ -30,13 +30,12 @@ There is currently very little security around who can get access to a given COP
 
 COPORTs are all local to a particular instance of the microkernel, and thus, to a single address space. Only one instance of the microkernel can (successfully) receive calls made to the functions it exposes. Inter-address space IPC was outside the scope of this project.
 
+A shared library, libcomsg, is provided for interacting with the microkernel and IPC mechanisms. The library provides the following functions:
 
-The microkernel provides the following functions:
-
-coopen
-coclose
-comutex_init
-colock
-counlock
++coopen
++coclose
++cosend
++corecv
++copoll
 
 Of these, only coopen and coclose have been tested. The versions of these functions included in comsg.h and comutex.h are wrappers around invocations of cocall(2) that perform all necessary setup and lookup. Manpages are coming soon(tm).
