@@ -29,6 +29,8 @@
 
 #include <cheri/cherireg.h>
 
+
+
 #define U_COOPEN "coopen"
 #define U_COCLOSE "coclose"
 #define U_COUNLOCK "counlock"
@@ -45,10 +47,17 @@
 #define U_FUNCTIONS 10 //coclose not yet implemented
 
 #define MAX_COPORTS 10
-#define LOOKUP_STRING_LEN 16
+
 #define COPORT_BUF_LEN 4096
+#ifndef NS_NAME_LEN
+#define LOOKUP_STRING_LEN 255
 #define COPORT_NAME_LEN 255
 #define COMUTEX_NAME_LEN 255
+#else
+#define LOOKUP_STRING_LEN NS_NAME_LEN
+#define COPORT_NAME_LEN NS_NAME_LEN
+#define COMUTEX_NAME_LEN NS_NAME_LEN
+#endif
 #define UKERN_OTYPE 2
 #define COCARRIER_OTYPE ( UKERN_OTYPE )
 #define COCARRIER_SIZE ( COPORT_BUF_LEN / CHERICAP_SIZE )

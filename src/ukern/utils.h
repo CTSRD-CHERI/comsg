@@ -23,46 +23,29 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#ifndef UKERN_UTILS_H
+#define UKERN_UTILS_H
 
-#include "coport.h"
+#define KEYSPACE 62
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+#include <cheri/cheric.h>
+#include <stddef.h>
 
+#ifndef UNUSED
+#define UNUSED(x) (void)(x)
+#endif
 
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+struct object_type
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	otype_t sc;
+	otype_t usc;
+	long otype;
+};
 
-typedef struct _coport_tbl_t
-{
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
-
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
+int generate_id(void);
+int rand_string(char * buf, size_t len);
+int valid_scb(void * scb);
+int make_otypes(void * rootcap, int n_otypes, struct object_type **results);
+int get_maxprocs(void);
 
 #endif

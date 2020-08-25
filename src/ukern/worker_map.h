@@ -23,46 +23,26 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#ifndef _WORKER_MAP_H
+#define _WORKER_MAP_H
 
-#include "coport.h"
+#include "ukern/namespace_object.h"
+#include "ukern/worker.h"
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+#include <cheri/cherireg.h>
 
+#define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
 
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+typedef struct _worker_map_entry
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	nsobject_t *func_name;
+	_Atomic int nworkers;
+	worker_args_t *workers;
+} function_map_t;
 
-typedef struct _coport_tbl_t
-{
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+void spawn_worker(const char *worker_name, void *func, void *valid, function_map_t *func_map);
+void spawn_workers(const char * name, void * func, int nworkers);
+void spawn_worker_thread(worker_args_t *worker, function_map_t *func_map);
+void **get_worker_scbs(function_map_t *func);
 
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+#endif //!defined(_WORKER_MAP_H)

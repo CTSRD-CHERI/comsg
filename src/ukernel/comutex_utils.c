@@ -50,6 +50,24 @@ typedef struct _comutex_tbl_t
 } comutex_tbl_t;
 
 
+typedef struct _comutex_init_args_t
+{
+    char name[COMUTEX_NAME_LEN];
+} cocall_comutex_init_args_t;
+
+typedef struct _cocall_comutex_init_t
+{
+    cocall_comutex_init_args_t args;
+    _Atomic(comutex_t * __capability) mutex; 
+} __attribute__((__aligned__(16))) cocall_comutex_init_t;
+
+typedef struct _colock_args_t
+{
+    _Atomic(comutex_t * __capability) mutex;
+    int result;
+} __attribute__((__aligned__(16))) colock_args_t;
+typedef struct _colock_args_t counlock_args_t;
+
 const int COMTX_TBL_LEN = (MAX_COMUTEXES*sizeof(comutex_tbl_entry_t));
 
 

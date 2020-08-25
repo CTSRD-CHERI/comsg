@@ -46,7 +46,7 @@ _Atomic int next_priv_worker_i = 0;
 worker_map_entry_t worker_map[U_FUNCTIONS];
 worker_map_entry_t private_worker_map[UKERN_PRIV];
 
-int coaccept_init(
+void coaccept_init(
     void * __capability * __capability  code_cap,
     void * __capability * __capability  data_cap, 
     const char * target_name,
@@ -64,7 +64,6 @@ int coaccept_init(
     {
         err(errno,"ERROR: Could not coregister with name %s.\n",target_name);
     }
-    return (error);
 }
 
 
@@ -72,6 +71,7 @@ void update_worker_args(worker_args_t * args, const char * function_name)
 {
     int i,j;
     char lookup_string[LOOKUP_STRING_LEN];
+
     strncpy(lookup_string,args->name,LOOKUP_STRING_LEN);
     for(i = 0; i<=U_FUNCTIONS; i++)
     {
@@ -129,18 +129,17 @@ void *manage_requests(void *args)
     {
         err(1,"Function workers not registered");
     }
-    lookup=ukern_malloc(sizeof(cocall_lookup_t));
+    lookup=malloc(sizeof(cocall_lookup_t));
+    memset(lookup,0,sizeof(cocall_lookup_t));
     for(;;)
     {
         for(int j = 0; j < WORKER_COUNT; j++)
         {
-            //printf("coaccepting for %s\n",data->func_name);
             error=coaccept(sw_code,sw_data,&cookie,lookup,sizeof(cocall_lookup_t));
-            //printf("Lookup of %s is size %lu",workers[j].name,sizeof(cocall_lookup_t));
             lookup->cap=workers[j].cap;
         }
     }
-    ukern_free(lookup);
+    free(lookup);
 }
 
 static void init_worker_map_lock(void)
@@ -178,13 +177,12 @@ int spawn_workers(void * func, pthread_t * threads, const char * name)
     	w_i=atomic_fetch_add(&next_priv_worker_i,1);
     	strcpy(private_worker_map[w_i].func_name,name);
     }
-    //  printf("workers for %s\n",name);
     pthread_attr_init(&thread_attrs);
     /*pthread_attr_setschedpolicy(&thread_attrs,SCHED_RR);
     struct sched_param sched_params;
-    sched_params.sched_priority = sched_get_priority_max(SCHED_RR)-1;
-    pthread_attr_setinheritsched(&thread_attrs,PTHREAD_EXPLICIT_SCHED);
-    pthread_attr_setschedparam(&thread_attrs,&sched_params);*/
+    sched_params.sched_priority = sched_get_priority_max(SCHED_RR);
+    pthread_attr_setinheritsched(&thread_attrs, PTHREAD_EXPLICIT_SCHED);
+    pthread_attr_setschedparam(&thread_attrs, &sched_params);*/
     for (int i = 0; i < WORKER_COUNT; i++)
     {
         args=ukern_malloc(sizeof(worker_args_t));

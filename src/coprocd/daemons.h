@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,46 +28,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
 
-#include "coport.h"
-
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
-
-
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
-{
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
-
-typedef struct _coport_tbl_t
-{
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
-
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+void spawn_daemons(void);
+pid_t get_coserviced_pid(void);
+pid_t get_ipcd_pid(void);
+pid_t get_nsd_pid(void);

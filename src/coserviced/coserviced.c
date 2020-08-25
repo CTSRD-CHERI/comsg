@@ -23,46 +23,59 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#include "coservice_table.h"
 
-#include "coport.h"
+#include "ukern/ukern_calls.h"
+#include "ukern/coservice.h"
+#include "ukern/worker.h"
+#include "ukern/worker_map.h"
 
-#include <stdatomic.h>
-#include <stdbool.h>
 #include <pthread.h>
+#include <stdatomic.h>
+
+static const int nworkers = 16;
+static coservice_t *codiscover, *coprovide;
+static nsobject_t *codiscover_obj, *coprovide_obj;
+static namespace_t *global_ns;
 
 
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
 
-typedef struct _coport_tbl_entry_t
+static 
+void usage(void)
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	//todo
+	//should be called with lookup string
+	return;
+}
 
-typedef struct _coport_tbl_t
+
+int main(int argc, char const *argv[])
 {
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+	void *codiscover_scb, *coprovide_scb;
+	int opt, error;
+	void *init_cap;
+	
+	while((opt == getopt(argc, argv, "")) != -1) {
+		switch (opt) {
+		case '?':
+		default: 
+			usage();
+			break;
+		}
+	}
+	if(argc >= 2) {
+		error = colookup(argv[argc], &init_cap);
+		if(error)
+			err(error, "main: colookup of init %s failed", optarg);
+		set_cocall_target(COCALL_COPROC_INIT, init_cap);
+	}
+	else {
+		printf("Missing lookup string for init\n");
+		usage();
+	}
 
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+	
+	
+	assert(codiscover_obj != NULL);
+	return (0);
+}

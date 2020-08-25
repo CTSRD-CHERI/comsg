@@ -23,46 +23,42 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#ifndef _NSOBJ_H
+#define _NSOBJ_H
 
-#include "coport.h"
+#include "ukern/namespace.h"
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+/*
+ * Types
+ * 	+ RESERVATION:	For objects that are not yet ready to be returned via coselect
+ * 					e.g. services that will be registered later, or whose workers are 
+ * 					not yet ready to process requests.
+ */
 
+#define NSOBJ_PERMS_OWN_MASK ( NS_PERMS_OWN_MASK | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
 
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
+typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobjtype_t;
 
-typedef struct _coport_tbl_entry_t
+typedef struct _nsobject
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	char name[NS_NAME_LEN];
+	nsobjtype_t type;
+	union
+	{
+		void *obj;
+		coservice_t *coservice;
+		coport_t *coport;
+	}
+} nsobject_t;
 
-typedef struct _coport_tbl_t
-{
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+#define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
 
+nobjtype_t get_nsobject_type(nsobject_t *nsobj);
+nsobjtype_t nsobject_otype_to_type(long otype);
+long nsobject_type_to_otype(nsobjtype_t type);
 
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
+int valid_nsobj_name(const char *name);
+int valid_nsobj_otype(long type);
 
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
 
 #endif

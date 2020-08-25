@@ -23,46 +23,21 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#ifndef _COSERVICE_H
+#define _COSERVICE_H
 
-#include "coport.h"
+#include "ukern/namespace.h"
+#include "ukern/worker.h"
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+#include <cheri/cherireg.h>
 
+#define MAX_WORKERS 16 //TODO-PBB: Arbitrary, revise.
 
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+typedef struct _coservice
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	void **worker_scbs;
+	_Atomic int next_worker;
+	int nworkers;
+} coservice_t;
 
-typedef struct _coport_tbl_t
-{
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
-
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+#endif //_COSERVICE_H

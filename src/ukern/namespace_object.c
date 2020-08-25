@@ -23,46 +23,66 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
 
-#include "coport.h"
+#include "ukern/namespace.h"
+#include "ukern/namespace_object.h"
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+static long coport_nsobj_otype, coservice_nsobj_otype, commap_nsobj_otype, reservation_nsobj_otype;
 
-
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+int valid_nsobj_name(const char *name)
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	return (valid_ns_name(name));
+}
 
-typedef struct _coport_tbl_t
+int valid_nsobj_otype(long type)
 {
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+	return (type == reservation_nsobj_otype || type == commap_nsobj_otype || type == coport_nsobj_otype || type == coservice_nsobj_otype);
+}
 
+nsobjtype_t get_nsobject_type(nsobject_t *nsobj)
+{
+	long otype = cheri_gettype(nsobj);
+	return nsobj_otype_to_type(otype);
+	
+}
 
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
+nsobjtype_t nsobj_otype_to_type(long otype)
+{
+	switch(otype)
+	{
+		case coport_nsobj_otype:
+			return COPORT;
+		case coservice_nsobj_otype:
+			return COSERVICE;
+		case commap_nsobj_otype:
+			return COMMAP;
+		case reservation_nsobj_otype:
+			return RESERVATION;
+		default:
+			return INVALID;
+	}
+}
 
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
+long nsobject_type_to_otype(nsobjtype_t type)
+{
+	switch(type)
+	{
+		case COPORT:
+			return coport_nsobj_otype;
+		case COSERVICE:
+			return coservice_nsobj_otype;
+		case COMMAP:
+			return commap_nsobj_otype;
+		case RESERVATION:
+			return reservation_nsobj_otype;
+		default:
+			/* should perhaps error instead */
+			return 0; // 0 AKA unsealed
+	}
+}
 
-#endif
+__attribute__ ((constructor)) static 
+void setup_otypes(void)
+{
+	/* call into namespace daemon and get otypes */
+}

@@ -23,46 +23,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
 
-#include "coport.h"
+//TODO-PBB: Implement.
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+typedef enum {PROMISCUOUS=1, FLEETING=2, NORESIZE=4, NEVERFREE=8} ccmalloc_flags_t;
 
+void ccmalloc_init(size_t*, size_t);
+void *cocall_malloc(size_t len);
+void *cocall_calloc(size_t num, size_t length);
 
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
+void cocall_free(void*);
 
-typedef struct _coport_tbl_entry_t
-{
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
-
-typedef struct _coport_tbl_t
-{
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
-
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+void *cocall_alloc(size_t, ccmalloc_flags_t, size_t hint);
