@@ -577,15 +577,10 @@ int main(int argc, const char *argv[])
 
     while(jobs_queue.max_len!=(WORKER_COUNT*U_FUNCTIONS)+2)
     {
-        //this really shouldn't take long.
-        //nevertheless this is a horrible way to wait
-        //i apologise
-        __asm("nop");
+        sched_yield();
     }
     pthread_mutexattr_t lock_attr;
     pthread_condattr_t cond_attr;
-
-
 
     pthread_mutexattr_init(&lock_attr);
     pthread_mutexattr_setpshared(&lock_attr,PTHREAD_PROCESS_PRIVATE);
@@ -602,8 +597,6 @@ int main(int argc, const char *argv[])
     printf("Initial setup complete.\n");
 
     /* perform setup */
-    //printf("Press enter to proceed\n");
-    //while( getchar() != '\n');
     pthread_create(&commap_manager,&thread_attrs,ukern_mmap,NULL);
     printf("Spawning co-open listeners...\n");
     error+=spawn_workers(&coport_open,coopen_threads,U_COOPEN);

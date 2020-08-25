@@ -23,46 +23,73 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
 
-#include "coport.h"
+#include "ukern/namespace.h"
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+static long global_ns_otype, proc_ns_otype, thread_ns_otype, explicit_ns_otype, library_ns_otype;
 
-
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+int valid_ns_name(const char * name)
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	if(name[0]=='\0')
+		return 0;
 
-typedef struct _coport_tbl_t
+	for(int i = 0; i < strnlen(name, NS_NAME_LEN))
+	{
+		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
+			return 0;
+	}
+	return 1;
+}
+
+int valid_ns_otype(long otype)
 {
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+	return ((otype == global_ns_otype) || (otype == proc_ns_otype) || (otype == thread_ns_otype) || (otype == explicit_ns_otype) || (otype == library_ns_otype));
+}
 
+nstype_t get_ns_type(namespace_t *ns)
+{
+	long otype = cheri_gettype(ns);
+	return ns_otype_to_type(otype);
+	
+}
 
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
+nstype_t ns_otype_to_type(long otype)
+{
+	switch(otype)
+	{
+		case global_ns_otype:
+			return GLOBAL;
+		case proc_ns_otype:
+			return PROCESS;
+		case thread_ns_otype:
+			return THREAD;
+		case explicit_ns_otype:
+			return EXPLICIT;
+		default:
+			return INVALID;
+	}
+}
 
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
+long ns_type_to_otype(nstype_t type)
+{
+	switch(type)
+	{
+		case GLOBAL:
+			return global_ns_otype;
+		case PROCESS:
+			return proc_ns_otype;
+		case THREAD:
+			return thread_ns_otype;
+		case EXPLICIT:
+			return explicit_ns_otype;
+		default:
+			/* should perhaps error instead */
+			return 0; // 0 AKA unsealed
+	}
+}
 
-#endif
+__attribute__ ((constructor)) static 
+void setup_otypes(void)
+{
+	/* call into namespace daemon and get otypes */
+}

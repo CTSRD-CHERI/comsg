@@ -23,46 +23,41 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
 
-#include "coport.h"
+/*
+ * Functions provided:
+ * create child namespace - requires ownership of the parent namespace
+ * create object within specified namespace - requires write permission to the namespace 
+ * list objects within specified namespace - requires read permission to the namespace 
+ * retrieve handle to named object from specified namespace - requires read permission to the namespace
+ * delete object from namespace - requires ownership of the object and write permission to the namespace; or ownership of the namespace
+ * delete namespace - requires ownership; certain types are deleted by the system.
+ * 
+ */
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+/* 
+ * Responsibilities:
+ * track lifetime of coprocess-aware processes and threads inside them
+ * 	+ creates and deletes namespaces for them 
+ * 	+ manages the global namespace
+ * 	+ performs cleanup on thread/program exit
+ * 		+ deletes coservices provided by dead threads
+ */
+
+#include "nsd_daemons.h"
+
+#include <err.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+static namespace_t *global_ns;
 
 
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+int main(int argc, char const *argv[])
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
-
-typedef struct _coport_tbl_t
-{
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
-
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+	//we can dance if we want to
+	global_ns = create_namespace("coproc", GLOBAL, NULL);
+	
+	return (0);
+}

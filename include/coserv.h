@@ -23,46 +23,30 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#ifndef _COSERV_H
+#define _COSERV_H
 
-#include "coport.h"
-
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
-
-
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+typedef struct _coserv_lookup_t
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	char target[LOOKUP_STRING_LEN];
+	void * cap;
+	namespace_t * ns;
+} __attribute__((__aligned__(16))) cocall_lookup_t;
 
-typedef struct _coport_tbl_t
+typedef struct _coserv_register_t
 {
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+	char target[LOOKUP_STRING_LEN];
+	void ** cap;
+	namespace_t * ns;
+} __attribute__((__aligned__(16))) coserv_register_t;
 
 
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
+int coserv_register(char * service_name, 
+	void ** worker_caps, int nworkers, int sched_policy);
 
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
+int coserv_lookup(void ** code, 
+	void ** data, const char * target_name, 
+	void ** target_cap);
+
 
 #endif

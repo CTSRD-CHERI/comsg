@@ -43,6 +43,7 @@
 #include <stdbool.h>
 
 #include "coproc.h"
+#include "coserv.h"
 #include "sys_comsg.h"
 
 #define TCB_ALIGN (CHERICAP_SIZE)
@@ -87,7 +88,6 @@ typedef struct _coproc_thread cpthr_t;
 typedef struct lookup_table
 {
 	LIST_HEAD(,_coproc_thread) entries;
-	int count;
 } coproc_lookup_tbl_t;
 
 static coproc_lookup_tbl_t coproc_cache;
@@ -190,7 +190,8 @@ void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
 			err(ESRCH,"cocall failed\n");
 		}
 	}
-
+	
+	
 	strcpy(known_worker->target_name, target_name);
 	known_worker->target_cap = lookup_data->cap;
 	
@@ -199,9 +200,12 @@ void * __capability fast_colookup(const char * target_name, cpthr_t *thread)
 	return known_worker->target_cap;
 }
 
-int ukern_lookup(void * __capability * __capability code, 
-	void * __capability * __capability data, const char * target_name, 
-	void * __capability * __capability target_cap)
+int coserv_register(char * service_name, 
+	void ** worker_caps, int nworkers, int sched_policy);
+
+int coserv_lookup(void *  __capability * __capability code, 
+	void * __capability  * __capability data, const char * target_name, 
+	void * __capability * __capability target_cap);
 {
 	cpthr_t *this_thread = NULL;
 
@@ -213,9 +217,8 @@ int ukern_lookup(void * __capability * __capability code,
 	return 0;
 }
 
-
 static void 
-clear_table_after_fork(void)
+after_fork(void)
 {
 	cpthr_t *thrd, *thrd_temp;
 	cplk_t *lkp, *lkp_temp;
@@ -232,14 +235,15 @@ clear_table_after_fork(void)
 		free(thrd);
 		thrd=thrd_temp;
 	}
+
 }
 
 
 __attribute__ ((constructor)) static 
-void coproc_init(void)
+void coserv_init(void)
 {
     LIST_INIT(&coproc_cache.entries);
     LIST_INIT(&request_handler_cache.entries);
-	pthread_atfork(NULL,NULL,clear_table_after_fork);
+	pthread_atfork(NULL,NULL,after_fork);
 
 }

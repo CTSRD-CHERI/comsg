@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,46 +28,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#include "ukern/cocall.h"
 
-#include "coport.h"
+#include <err.h>
+#include <errno.h>
+#include <threads.h>
+#include <unistd.h>
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
+static _Thread_local void *code_cap = NULL;
+static _Thread_local void *data_cap = NULL;
 
-
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+static 
+void cocall_init(void)
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	int error = cosetup(COSETUP_COCALL, &code_cap, &data_cap);
+	if(error)
+		err(errno, "cocall_init: error in cosetup(2)");
+	return;
+}
 
-typedef struct _coport_tbl_t
+int cocall_tls(void *target, void *buffer, size_t len)
 {
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+	if (code_cap == NULL || data_cap == NULL)
+		cocall_init();
+	return (cocall(code_cap, data_cap, target, buffer, len));
+}
 
-
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
-
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+int slocall_tls(void *target, void *buffer, size_t len)
+{
+	if (code_cap == NULL || data_cap == NULL)
+		cocall_init();
+	return (cocall_slow(code_cap, data_cap, target, buffer, len));
+}

@@ -23,46 +23,62 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_TABLES_H
-#define UKERN_TABLES_H
+#include "nsd_cap.h"
+#include "nsd_crud.h"
+#include "nsd_lookup.h"
+#include "ukern/cocall_args.h"
+#include "ukern/namespace_object.h"
 
-#include "coport.h"
+#define CLEAR_STORE_PERM(c) cheri_andperm(c, ~(CHERI_PERM_STORE | CHERI_PERM_STORE_CAP))
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <pthread.h>
-
-
-#define TBL_FLAGS (\
-	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
-	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
-#define TBL_PERMS ( PROT_READ | PROT_WRITE )
-
-typedef struct _coport_tbl_entry_t
+int validate_coinsert_args(coinsert_args_t*)
 {
-	unsigned int id;
-	sys_coport_t port;
-	sys_coport_t * port_cap;
-	char name[COPORT_NAME_LEN];
-	long ref_count;
-} coport_tbl_entry_t;
+	return (1);
+}
 
-typedef struct _coport_tbl_t
+void insert_namespace_object(coinsert_args_t *cocall_args)
 {
-	_Atomic int index;
-	_Atomic int lookup_in_progress;
-	_Atomic int add_in_progress;
-	coport_tbl_entry_t * table;
-} coport_tbl_t;
+	nsobject_t *obj;
 
+	obj = in_namespace(cocall_args->name, cocall_args->ns_cap);
+	if(obj != NULL)
+	{
+		cocall_args->status = -1;
+		cocall_args->error = EEXIST;
+		cocall_args->nsobj = NULL;
+		return;
+	}
+	//TODO-PBB: more validation needed here
 
-void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
-int coport_tbl_setup(void);
-int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
-int add_port(coport_tbl_entry_t entry);
-bool in_coport_table(void * __capability addr);
+	/* create object */
+	obj = create_nsobject(cocall_args->name, cocall_args->type, cocall_args->ns_cap);
+	switch(cocall_args->type) {
+		case COMMAP:
+			obj->obj = cocall_args->obj;
+			obj = CLEAR_STORE_PERM(obj);
+			break;
+		case COSERVICE:
+			obj->coservice = cocall_args->coservice;
+			obj = CLEAR_STORE_PERM(obj);
+			break;
+		case COPORT:
+			obj->coport = cocall_args->coport;
+			obj = CLEAR_STORE_PERM(obj);
+			break;
+		case RESERVATION:
+			obj->obj = NULL;
+			break;
+		default:
+			break;
+	}
+	
+	if(!is_privileged(token))
+		cocall_args->nsobj = seal_nsobj(obj);
+	else 
+		cocall_args->nsobj = obj;
+	
+	cocall_args->status = 0;
+	cocall_args->error = 0;
 
-//extern comutex_tbl_t comutex_table;
-extern coport_tbl_t coport_table;
-
-#endif
+	return;
+}

@@ -119,10 +119,9 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
     {
         cocarrier_otype=cheri_gettype(call.port);
         *prt=call.port;
-        //pre-fetch cocarrier operations to speed up later
+        //pre-fetch cocarrier operations to speed up usage
         ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_SEND,&func);
         ukern_lookup(&switcher_code,&switcher_data,U_COCARRIER_RECV,&func);
-
     }
     
     return 1;
@@ -131,6 +130,7 @@ int coopen(const char * coport_name, coport_type_t type, coport_t *prt)
 inline
 coport_t coport_clearperm(coport_t p,int perms)
 {
+    perms=CHERI_PERMS_HWALL;
     perms&=CHERI_PERMS_SWALL; //prevent trashing the rest of the perms word, which is unrelated to coport access control
     return cheri_andperm(p,perms);
 }
@@ -314,15 +314,10 @@ int cosend(const coport_t prt, const void * buf, size_t len)
                 perror("cosend: error in cocall");
             if(call.status==-1)
             {
-                errno=call.error;
+                errno = call.error;
                 //warn("cosend: error occurred during cocarrier send\n");
-                retval=call.status;
             }
-            else
-            {
-                retval=call.status;
-            }
-
+            retval = call.status;
             break;
         case COPIPE:
             

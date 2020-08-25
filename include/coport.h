@@ -34,11 +34,16 @@
 #include <stdatomic.h>
 #include <pthread.h>
 
+#include "ukern/namespace.h"
 #include "sys_comsg.h"
 
 #ifndef COPORT_NAME_LEN
+#ifdef NS_NAME_LEN
+#define COPORT_NAME_LEN NS_NAME_LEN
+#else // NS_NAME_LEN
 #define COPORT_NAME_LEN 255
 #endif
+#endif 
 
 #define COPORT_PERM_RECV CHERI_PERM_SW2
 #define COPORT_PERM_SEND CHERI_PERM_SW3
@@ -110,12 +115,17 @@ struct _coport
         {
             _Atomic coport_eventmask_t event;
             LIST_HEAD(,_coport_listener) listeners;
-        };
+        }; //cocarriers (eventmask also used for cochannels)
     };
 };
 
 typedef struct _coport sys_coport_t;
-typedef struct _coport *coport_t;
+/* 
+ * coport_t is a handle to a coport. User code should see this as opaque,
+ * as a dereferenceable capability should never be exposed to it. It is
+ * only dereferenced in the ipc daemon or in the shared library.
+ */
+typedef struct _coport *coport_t; 
 
 typedef struct _named_coport {
     char name[COPORT_NAME_LEN];
