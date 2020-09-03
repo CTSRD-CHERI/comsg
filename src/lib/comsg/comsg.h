@@ -23,12 +23,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef COMSG_H
+#define COMSG_H
 
-coservice_t *allocate_coservice(void);
+/*
+ * Interface to libcomsg
+ */
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+#include "sys_comsg.h"
+#include "coport.h"
+#include "coproc.h"
+#include "commap.h"
+#include "coport_ipc.h"
+
 
 #endif

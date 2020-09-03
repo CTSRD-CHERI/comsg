@@ -23,12 +23,30 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+/*system-wide colocation constants*/
+#ifndef _SYS_COMSG_H
+#define _SYS_COMSG_H
 
-coservice_t *allocate_coservice(void);
+#include <cheri/cherireg.h>
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+#define U_COOPEN "coopen"
+#define U_COCLOSE "coclose"
+#define U_COCARRIER_SEND "cocarrier_send"
+#define U_COCARRIER_RECV "cocarrier_recv"
+#define U_COPOLL "copoll"
+#define U_SOCKADDR "getukernsockaddr" //Currently doesn't use requests interface
+
+#define U_COMMAP "commap"
+#define U_COMUNMAP "comunmap"
+
+#define U_COPROVIDE
+#define U_CODISCOVER
+
+#define U_COCREATE
+#define U_CODROP
+#define U_COINSERT
+#define U_COSELECT
+#define U_COUPDATE
+#define U_CODELETE
 
 #endif

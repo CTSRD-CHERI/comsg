@@ -23,12 +23,36 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef _WORKER_MAP_H
+#define _WORKER_MAP_H
 
-coservice_t *allocate_coservice(void);
+#include "ukern/namespace_object.h"
+#include "ukern/worker.h"
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+#include <cheri/cherireg.h>
 
-#endif
+#define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+
+typedef struct _worker_map_entry
+{
+	nsobject_t *func_name;
+	_Atomic int nworkers;
+	worker_args_t *workers;
+} function_map_t;
+
+#ifdef COPROC_UKERN
+
+typedef struct coservice_prov {
+	coservice_t *service;
+	function_map_t *function_map;
+} coservice_provision_t;
+
+#endif 
+
+function_map_t *new_function_map(void);
+void spawn_worker(const char *worker_name, void *func, void *valid, function_map_t *func_map);
+void spawn_workers(const char *name, void *func, int nworkers);
+void spawn_worker_thread(worker_args_t *worker, function_map_t *func_map);
+void **get_worker_scbs(function_map_t *func);
+
+#endif //!defined(_WORKER_MAP_H)

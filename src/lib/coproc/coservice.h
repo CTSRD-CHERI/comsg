@@ -23,12 +23,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef _COSERVICE_H
+#define _COSERVICE_H
 
-coservice_t *allocate_coservice(void);
+#include <cheri/cherireg.h>
+#include <stdatomic.h>
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+#define COSERVICE_CODISCOVER_PERMS (1)
+#define COSERVICE_PROVIDE_PERMS (1)
 
-#endif
+typedef struct _coservice
+{
+	void **worker_scbs;
+	_Atomic int next_worker;
+	int nworkers;
+} coservice_t;
+
+#endif //_COSERVICE_H

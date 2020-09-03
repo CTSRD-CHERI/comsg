@@ -23,12 +23,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef _UKERN_PARAMS_H
+#define _UKERN_PARAMS_H
 
-coservice_t *allocate_coservice(void);
+#define WORKER_COUNT 1
+#define THREAD_STRING_LEN 16
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+#define MAX_COMUTEXES 20
+#define MAX_COPOLL 255
+
+#define UKERN_PRIV 1
+
+//TODO-PBB: revise
+const int nworkers = 12;
+
+
+
+#define MAX_COPORTS 10
+
+#define COPORT_BUF_LEN 4096
+#ifndef NS_NAME_LEN
+#define LOOKUP_STRING_LEN 255
+#define COPORT_NAME_LEN 255
+#define COMUTEX_NAME_LEN 255
+#else
+#define LOOKUP_STRING_LEN NS_NAME_LEN
+#define COPORT_NAME_LEN NS_NAME_LEN
+#define COMUTEX_NAME_LEN NS_NAME_LEN
+#endif
+#define UKERN_OTYPE 2
+#define COCARRIER_OTYPE ( UKERN_OTYPE )
+#define COCARRIER_SIZE ( COPORT_BUF_LEN / CHERICAP_SIZE )
+#define COCARRIER_MAX_MSGLEN (  )
 
 #endif

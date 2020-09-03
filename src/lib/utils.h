@@ -23,75 +23,67 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coservice_cap.h"
-#include "coservice_table.h"
+#ifndef UKERN_UTILS_H
+#define UKERN_UTILS_H
 
+#define KEYSPACE 62
 
-#include "ukern/cocall_args.h"
-#include "ukern/coservice.h"
-#include "ukern/utils.h"
+#include <cheri/cheric.h>
+#include <sys/mman.h>
+#include <stddef.h>
 
-#include <errno.h>
+#ifndef UNUSED
+#define UNUSED(x) (void)(x)
+#endif
 
-#define TOKEN_CACHE_LEN 64
-
-static void *recent_tokens[TOKEN_CACHE_LEN];
-
-static void 
-add_token(void *token)
+struct object_type
 {
-	static int next_token = 0;
-	recent_tokens[next_token] = token;
-	next_token++;
+	otype_t sc;
+	otype_t usc;
+	long otype;
+};
+
+int generate_id(void);
+int rand_string(char * buf, size_t len);
+int valid_scb(void * scb);
+void *make_otypes(void * rootcap, int n_otypes, struct object_type **results);
+int get_maxprocs(void);
+
+//Handy for working with mmap(2) prot values vs CHERI permissions
+inline
+int perms_to_prot(int perms)
+{
+	int prot = 0;
+
+	if (perms & (CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP))
+		prot |=  PROT_READ;
+	if (perms & (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_STORE_LOCAL_CAP))
+		prot |= PROT_WRITE;
+	if (perms & CHERI_PERM_EXECUTE )
+		prot |= PROT_EXEC;
+
+	return (prot);
 }
 
-static 
-int check_token(void *token)
+inline
+int prot_to_perms(int prot)
 {
-	for(int i = 0; i < TOKEN_CACHE_LEN; i++)
-	{
-		if (token == recent_tokens[i])
-			return (1)
-		else if (recent_tokens[i] == 0)
-			break;
-	}
-	return (0);
+	int perms = 0;
+
+	if (prot & PROT_READ)
+		perms |= (CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP);
+	if (prot & PROT_WRITE)
+		perms |= (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP |
+		CHERI_PERM_STORE_LOCAL_CAP);
+	if (prot & PROT_EXEC)
+		perms |= (CHERI_PERM_EXECUTE);
+
+	return (perms);
 }
 
-__attribute__ ((constructor)) static 
-void init_recent_tokens(void)
-{
-	memset(&recent_tokens, 0, sizeof(recent_tokens)); //?
-}
+#define GET_PROT(c) perms_to_prot(cheri_getperm(c))
+#define SET_PROT(c, p) cheri_andperm(c, prot_to_perms(p))
+#define HAS_PROT(a, b) ( a <= ( a & b ) )
+#define HAS_PROT_PERMS(c, p) ( p <= ( GET_PROT(c) & p ) )
 
-
-int validate_codiscover_args(codiscover_args_t *args)
-{
-	nsobject_t *obj = cocall_args->nsobj;
-	if(obj == NULL)
-		return (0);
-	else if (!cheri_getsealed(obj))
-		return (0);
-	else if ((cheri_getperm(obj) & (COSERVICE_CODISCOVER_PERMS)) == 0)
-		return (0);
-	else if (cheri_getlen(obj) < sizeof(coservice_t))
-		return (0);
-	else if (!in_table(obj))
-		return (0);
-	else
-		return (1);
-}
-
-void discover_coservice(codiscover_args_t *cocall_args, void *token)
-{
-	UNUSED(token);
-
-	nsobject_t *service_obj = cocall_args->nsobj;
-	coservice_t *service = unseal_coservice(service_obj->coservice);
-
-	cocall_args->scb_cap = get_coservice_scb(service);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
-	return;
-}
+#endif

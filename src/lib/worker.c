@@ -23,75 +23,58 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coservice_cap.h"
-#include "coservice_table.h"
+//ECATS-BSD
+#include "cocall_args.h"
+#include "ukern/ukern_params.h"
+#include "ukern/ukern_utils.h"
+#include "worker.h"
 
-
-#include "ukern/cocall_args.h"
-#include "ukern/coservice.h"
-#include "ukern/utils.h"
-
+#include <err.h>
 #include <errno.h>
+#include <pthread.h>
+#include <unistd.h>
 
-#define TOKEN_CACHE_LEN 64
-
-static void *recent_tokens[TOKEN_CACHE_LEN];
-
-static void 
-add_token(void *token)
+static
+void coaccept_init(
+    void **code_cap,
+    void **data_cap, 
+    const char *target_name,
+    void **target_cap)
 {
-	static int next_token = 0;
-	recent_tokens[next_token] = token;
-	next_token++;
+    if(cosetup(COSETUP_COACCEPT, code_cap, data_cap) < 0)
+        err(errno, "coaccept_init: could not cosetup");
+
+    if (target_name[0] != '\0') {
+        if(coregister(target_name, target_cap) < 0) 
+            err(errno, "coaccept_init: could not coregister with name %s", target_name);
+    }
+    else
+        *target_cap = data_cap;
+    
+    return;
 }
 
-static 
-int check_token(void *token)
+void *coaccept_worker(void *worker_argp)
 {
-	for(int i = 0; i < TOKEN_CACHE_LEN; i++)
+	void *sw, *scb, *cookie;
+	struct cocall_args cocall_args;
+
+	worker_args_t * worker_args = worker_argp;
+	coaccept_init(&sw, &scb, worker_args->name, &worker_args->scb_cap);
+	for(;;)
 	{
-		if (token == recent_tokens[i])
-			return (1)
-		else if (recent_tokens[i] == 0)
-			break;
+		if(coaccept(sw, scb, &cookie, &cocall_args, sizeof(struct cocall_args)) == 0) {
+            if(worker_args->validation_function != NULL) 
+                if(!worker_args->validation_function(&cocall_args, cookie)) {
+                    cocall_args->status = -1;
+                    cocall_args->error = EINVAL;
+                    continue;
+                }
+            worker_args->worker_func(&cocall_args);
+        }
+		else
+			err(errno, "coaccept_worker: worker failed to coaccept");
 	}
-	return (0);
+    return (worker_args);
 }
 
-__attribute__ ((constructor)) static 
-void init_recent_tokens(void)
-{
-	memset(&recent_tokens, 0, sizeof(recent_tokens)); //?
-}
-
-
-int validate_codiscover_args(codiscover_args_t *args)
-{
-	nsobject_t *obj = cocall_args->nsobj;
-	if(obj == NULL)
-		return (0);
-	else if (!cheri_getsealed(obj))
-		return (0);
-	else if ((cheri_getperm(obj) & (COSERVICE_CODISCOVER_PERMS)) == 0)
-		return (0);
-	else if (cheri_getlen(obj) < sizeof(coservice_t))
-		return (0);
-	else if (!in_table(obj))
-		return (0);
-	else
-		return (1);
-}
-
-void discover_coservice(codiscover_args_t *cocall_args, void *token)
-{
-	UNUSED(token);
-
-	nsobject_t *service_obj = cocall_args->nsobj;
-	coservice_t *service = unseal_coservice(service_obj->coservice);
-
-	cocall_args->scb_cap = get_coservice_scb(service);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
-	return;
-}

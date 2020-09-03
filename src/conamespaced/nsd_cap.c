@@ -23,11 +23,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
 #include "nsd_cap.h"
 #include "ukern/namespace.h"
-#include "ukern/nsobject_t.h"
+#include "ukern/namespace_object.h"
 #include "ukern/utils.h"
+
+#include <err.h>
+#include <errno.h>
+#include <cheri/cheric.h>
+#include <machine/sysarch.h>
+#include <unistd.h>
 
 static struct object_type global_ns, proc_ns, thread_ns, explicit_ns, library_ns;
 static struct object_type coservice_nsobj, coport_nsobj, commap_nsobj, reservation_nsobj;
@@ -39,12 +44,10 @@ __attribute__ ((constructor)) static
 void setup_otypes(void)
 {
     void *sealroot;
-    if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0)
-    {
+    if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0) {
         err(errno, "setup_otypes: error in sysarch - could not get sealroot");
     }
     sealroot = make_otypes(sealroot, required_otypes, global_object_types);
-
 }
 
 static 

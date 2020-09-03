@@ -26,6 +26,10 @@
 
 #include "ukern/coservice.h"
 
+#include <stdatomic.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <unistd.h>
@@ -75,4 +79,10 @@ void *get_coservice_scb(coservice_t *service)
 		atomic_compare_exchange_weak(&service->next_worker, &index, new_index);
 	}
 	return (service->worker_scbs[new_index]);
+}
+
+int in_table(coservice_t *ptr)
+{
+	vaddr_t addr = cheri_getaddress(ptr);
+	return (cheri_is_address_inbounds(coservice_table.services, addr));
 }

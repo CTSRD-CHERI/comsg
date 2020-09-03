@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,12 +28,33 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef _UKERN_CALLS_H
+#define _UKERN_CALLS_H
 
-coservice_t *allocate_coservice(void);
+#include "ukern/cocalls.h"
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+#define COCALL_INVALID (0) //not used
+#define COCALL_CODISCOVER (1)
+#define COCALL_COPROVIDE (2)
+#define COCALL_COINSERT (3)
+#define COCALL_COSELECT (4)
+#define COCALL_COUPDATE (5)
+#define COCALL_CODELETE (6)
+#define COCALL_COOPEN (7)
+#define COCALL_COCLOSE (8)
+#define COCALL_COSEND (9) 
+#define COCALL_CORECV (10)
+#define COCALL_COPOLL (11)
+#define COCALL_COPROC_INIT (12)
 
-#endif
+const int n_ukern_calls = 13;
+
+extern pthread_key_t ukern_call_set;
+
+namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *codiscover_scb);
+
+coservice_t *coprovide(const char *name, void **worker_scbs, int nworkers, nsobject_t *nsobj, namespace_t *ns);
+
+coport_t *coopen(const char *coport_name, coport_type_t type, coport_t **prt);
+
+#endif //!defined(_UKERN_CALLS_H)
