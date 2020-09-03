@@ -23,36 +23,34 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _WORKER_MAP_H
-#define _WORKER_MAP_H
+#ifndef _NSD_H
+#define _NSD_H
 
-#include "ukern/namespace_object.h"
-#include "ukern/worker.h"
+#ifndef COPROC_UKERN
+#define COPROC_UKERN 1
+#endif
 
-#include <cheri/cherireg.h>
+#include "ukern/coservice.h"
+#include "ukern/worker_map.h"
 
-#define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+extern coservice_provision_t coinsert_serv, coselect_serv, coupdate_serv, codelete_serv, cocreate_serv, codrop_serv;
 
-typedef struct _worker_map_entry
-{
-	nsobject_t *func_name;
-	_Atomic int nworkers;
-	worker_args_t *workers;
-} function_map_t;
 
-#ifdef COPROC_UKERN
+void update_namespace_object(coupdate_args_t *cocall_args, void *token);
+void delete_namespace_object(codelete_args_t *cocall_args, void *token);
+void create_namespace(cocreate_args_t *cocall_args, void *token);
+void drop_namespace(codrop_args_t *cocall_args, void *token);
+void insert_namespace_object(coinsert_args_t *cocall_args, void *token);
+void select_namespace_object(coselect_args_t * cocall_args, void *token);
 
-typedef struct coservice_prov {
-	coservice_t *service;
-	function_map_t *function_map;
-} coservice_provision_t;
+int validate_coselect_args(coselect_args_t*);
+int validate_coupdate_args(coupdate_args_t *cocall_args);
+int validate_codelete_args(codelete_args_t *cocall_args);
+int validate_cocreate_args(cocreate_args_t *cocall_args);
+int validate_codrop_args(codrop_args_t *cocall_args);
 
-#endif 
 
-function_map_t *new_function_map(void);
-void spawn_worker(const char *worker_name, void *func, void *valid, function_map_t *func_map);
-void spawn_workers(const char *name, void *func, int nworkers);
-void spawn_worker_thread(worker_args_t *worker, function_map_t *func_map);
-void **get_worker_scbs(function_map_t *func);
+//TODO-PBB: revisit
+extern const int nworkers = 12;
 
-#endif //!defined(_WORKER_MAP_H)
+#endif //!defined(_NSD_H)

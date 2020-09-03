@@ -29,7 +29,6 @@
  * SUCH DAMAGE.
  */
 #include "ukern/ukern_calls.h"
-
 #include "ukern/cocalls.h"
 
 #include "ukern/coport.h"
@@ -54,8 +53,40 @@ void init_tss(void)
 
 nsobject_t *coinsert(const char *name, nsobject_type_t type, union coinsert_subject subject, namespace_t *ns)
 {
+	int error;
 	coinsert_args_t cocall_args;
-	return (NULL);
+	
+	strcncpy(cocall_args.name, name, NS_NAME_LEN);
+	cocall_args.namespace = ns;
+	cocall_args.type = type;
+	switch(type)
+	{
+		case RESERVATION:
+		case COMMAP:
+			cocall_args.obj = subject;
+			break;
+		case COPORT:
+			cocall_args.coport = subject;
+			break;
+		case COSERVICE:
+			cocall_args.coservice = subject;
+			break;
+		case INVALID:
+		default:
+			err(EINVAL, "coinsert: invalid object type %d for coinsert");
+			break;
+	}
+	error = targeted_cocall(ukern_call_set, COCALL_COINSERT, cocall_args, sizeof(coinsert_args_t));
+	if (error != 0) {
+		//TODO-PBB: handle errors better
+		err(errno, "coinsert: error performing cocall");
+	}
+	else if (cocall_args.status == -1) {
+		//TODO-PBB: handle errors better? or leave it to consumers?
+		errno = cocall_args.error;
+		return (NULL);
+	}
+	return (cocall_args.nsobj);
 }
 
 nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns)
@@ -66,19 +97,31 @@ nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns)
 	return (NULL);
 }
 
-coserivce_t *codiscover(const char *name, namespace_t *ns)
-{
-	codiscover_args_t cocall_args;
-
-	return (NULL);
-}
-
-coserivce_t *coprovide(const char *name, void **worker_scbs, int nworkers, nsobject_t *nsobj, namespace_t *ns)
+coservice_t *codiscover(const char *name, namespace_t *ns, void **scb)
 {
 	int error;
-	int i;
-	size_t min_scb_array_len = nworkers * sizeof(void *);
+	codiscover_args_t cocall_args;
+
+	strncpy(cocall_args.name, name, LOOKUP_STRING_LEN);
+	cocall_args.namespace = ns;
+
+	error = targeted_cocall(ukern_call_set, COCALL_CODISCOVER, &cocall_args, sizeof(codiscover_args_t));
+	if (cocall_args.status == -1) {
+		errno = cocall_args.error;
+		return (NULL);
+	}
+	else {
+		*scb = cocall_args.scb_cap;
+		return (cocall_args.service);
+	}
+}
+
+coservice_t *coprovide(const char *name, void **worker_scbs, int nworkers, nsobject_t *nsobj, namespace_t *ns)
+{
+	int error;
 	coprovide_args_t cocall_args;
+
+	size_t min_scb_array_len = nworkers * sizeof(void *);
 	
 	if(nsobj == NULL) 
 		strncpy(cocall_args.name, name, LOOKUP_STRING_LEN);
@@ -91,9 +134,9 @@ coserivce_t *coprovide(const char *name, void **worker_scbs, int nworkers, nsobj
 	else {
 		cocall_args.worker_scbs = calloc(nworkers, sizeof(void *));
 		//TODO-PBB: check scb validity here.
-		for(i = 0; i < nworkers; i++)
+		for(int i = 0; i < nworkers; i++)
 			cocall_args.worker_scbs[i] = worker_scbs[i];
-		cocall_args.nworkers = i;
+		cocall_args.nworkers = nworkers;
 	}
 
 	error = targeted_cocall(ukern_call_set, COCALL_COPROVIDE, &cocall_args, sizeof(coprovide_args_t));
@@ -109,4 +152,29 @@ coserivce_t *coprovide(const char *name, void **worker_scbs, int nworkers, nsobj
 			return (cocall_args.nsobj);
 	}
 	
+}
+
+namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *codiscover_scb)
+{
+	int error;
+	
+	coproc_init_args_t *cocall_args = calloc(1, sizeof(coproc_init_args_t));
+
+	cocall_args->namespace =  global_ns;
+	cocall_args->coinsert = coinsert_scb;
+	cocall_args->coinsert = codiscover_scb;
+
+	error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT, cocall_args, sizeof(coproc_init_args_t));
+
+	if(error)
+		err(error, "coproc_init: cocall failed");
+	else if (cocall_args->status == -1) {
+		errno = cocall_args->error;
+		return (NULL);
+	}
+	
+	set_cocall_target(ukern_call_set, COCALL_COINSERT, cocall_args->coinsert);
+	set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args->codiscover);
+	
+	return (cocall_args->namespace);
 }

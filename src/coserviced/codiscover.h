@@ -30,7 +30,6 @@
 
 int validate_codiscover_args(codiscover_args_t *args);
 
-void discover_codiscover(codiscover_args_t *cocall_args, void *token);
 void discover_coservice(codiscover_args_t *cocall_args, void *token);
 
 #endif //!defined(_CODISCOVER_H)

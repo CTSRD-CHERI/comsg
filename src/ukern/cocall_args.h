@@ -31,7 +31,6 @@ struct coproc_init {
 	void *coinsert;
 };
 
-
 struct coinsert
 {
 	char name[NS_NAME_LEN];

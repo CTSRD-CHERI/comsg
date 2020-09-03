@@ -32,6 +32,7 @@
 
 #include "ukern/coservice.h"
 #include "ukern/namespace.h"
+#include "ukern/worker_map.h"
 #include "ukern/ukern_calls.h"
 
 #include <err.h>
@@ -40,42 +41,30 @@ static namespace_t *global;
 
 
 static 
-coservice_t *init_service(void *func, void *valid, const char *name)
+void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
 {
-	worker_args_t args;
 	coservice_t *service = allocate_coservice();
-	function_map_t *service_map = spawn_workers(func, valid, nworkers-1);
+	function_map_t *service_map = spawn_workers(func, valid, nworkers);
 	
 	service->worker_scbs = get_worker_scbs(service_map);
-	return (service);
-}
-
-static
-void coproc_init_coserviced(void *switchercb)
-{
-	int error;
-	coproc_init_args_t *cocall_args = calloc(1, sizeof(coproc_init_args_t));
-
-	cocall_args->codiscover = switchercb;
-	error = ukern_cocall(COCALL_COPROC_INIT, cocall_args, sizeof(coproc_init_args_t));
-	if(error)
-		err(error, "coproc_init_coserviced: cocall failed")
-	else if (cocall_args->status == -1) 
-		err(cocall_args->error, "coproc_init_coserviced: error in cocall");
-	global = cocall_args->namespace;
-	set_cocall_target(COCALL_COINSERT, cocall_args->coinsert);
+	
+	serv->service = service;
+	serv->function_map = service_map;
 	return;
 }
 
-void safety_dance(void)
+void coserviced_startup(void)
 {
 	//init own services
-	codiscover = init_service(discover_coservice, validate_codiscover_args, CODISCOVER);
-	coprovide = init_service(provide_coservice, valid_coprovide_args, COPROVIDE);
+	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args, CODISCOVER);
+	init_service(&coprovide_serv, provide_coservice, valid_coprovide_args, COPROVIDE);
 	
-	codiscover_scb = get_coservice_scb(codiscover);
+	codiscover_scb = get_coservice_scb(codiscover_serv.service);
 	//connect to process daemon and do the startup dance (we can dance if we want to)
-	coproc_init_coserviced(codiscover_scb);
+	global = coproc_init(NULL, NULL, codiscover_scb);
+	if (global == NULL)
+		err(error, "coproc_init: cocall failed");
 
-	codiscover_obj = coinsert(CODISCOVER, COSERVICE, codiscover, global_ns);
+	codiscover_obj = coinsert(CODISCOVER, COSERVICE, codiscover_serv.service, global);
+	coprovide_obj = coinsert(COPROVIDE, COSERVICE, coprovide_serv.service, global);
 }

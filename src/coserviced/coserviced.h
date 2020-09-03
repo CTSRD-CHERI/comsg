@@ -23,5 +23,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COSERVICED_H
+#define _COSERVICED_H
 
-extern coservice_t *codiscover;
+#ifndef COPROC_UKERN
+#define COPROC_UKERN 1
+#endif
+
+#include "ukern/worker_map.h"
+
+coservice_provision_t codiscover_serv, coprovide_serv;
+
+//TODO-PBB: Revisit
+const int nworkers = 12;
+
+#endif

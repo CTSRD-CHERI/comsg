@@ -26,13 +26,16 @@
 #include "nsd_cap.h"
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
+
 #include "ukern/cocall_args.h"
 #include "ukern/namespace_object.h"
+#include "ukern/utils.h"
 
 #define CLEAR_STORE_PERM(c) cheri_andperm(c, ~(CHERI_PERM_STORE | CHERI_PERM_STORE_CAP))
 
-int validate_coinsert_args(coinsert_args_t*)
+int validate_coinsert_args(coinsert_args_t *cocall_args)
 {
+	UNUSED(cocall_args);
 	return (1);
 }
 

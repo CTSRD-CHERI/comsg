@@ -86,7 +86,7 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
 		return;
-	/* I give you: a global namespace capability, a scb capability for create nsobj */
+	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) */
 	atomic_store(&coinsert_scb, cocall_args->coinsert);
 	atomic_store(&global_namespace, cocall_args->namespace);
 	/* clear old codiscover; whether valid or not it refers to the old universe */

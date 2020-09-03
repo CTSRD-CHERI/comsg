@@ -23,36 +23,21 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _WORKER_MAP_H
-#define _WORKER_MAP_H
+#include "nsd.h"
 
-#include "ukern/namespace_object.h"
-#include "ukern/worker.h"
+#include "ukern/cocall_args.h"
+#include "ukern/utils.h"
 
-#include <cheri/cherireg.h>
-
-#define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
-
-typedef struct _worker_map_entry
+int validate_coupdate_args(coupdate_args_t *cocall_args)
 {
-	nsobject_t *func_name;
-	_Atomic int nworkers;
-	worker_args_t *workers;
-} function_map_t;
+	UNUSED(cocall_args);
+	return (1);
+}
 
-#ifdef COPROC_UKERN
-
-typedef struct coservice_prov {
-	coservice_t *service;
-	function_map_t *function_map;
-} coservice_provision_t;
-
-#endif 
-
-function_map_t *new_function_map(void);
-void spawn_worker(const char *worker_name, void *func, void *valid, function_map_t *func_map);
-void spawn_workers(const char *name, void *func, int nworkers);
-void spawn_worker_thread(worker_args_t *worker, function_map_t *func_map);
-void **get_worker_scbs(function_map_t *func);
-
-#endif //!defined(_WORKER_MAP_H)
+void update_namespace_object(coupdate_args_t *cocall_args, void *token)
+{
+	UNUSED(cocall_args);
+	UNUSED(token);
+	//TODO-PBB: implement
+	return;
+}
