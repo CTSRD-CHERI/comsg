@@ -45,7 +45,7 @@ struct object_type
 int generate_id(void);
 int rand_string(char * buf, size_t len);
 int valid_scb(void * scb);
-int make_otypes(void * rootcap, int n_otypes, struct object_type **results);
+void *make_otypes(void * rootcap, int n_otypes, struct object_type **results);
 int get_maxprocs(void);
 
 #endif

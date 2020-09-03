@@ -23,75 +23,73 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coservice_cap.h"
-#include "coservice_table.h"
 
+#include "ukern/namespace.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/coservice.h"
-#include "ukern/utils.h"
+static long global_ns_otype, proc_ns_otype, thread_ns_otype, explicit_ns_otype, library_ns_otype;
 
-#include <errno.h>
-
-#define TOKEN_CACHE_LEN 64
-
-static void *recent_tokens[TOKEN_CACHE_LEN];
-
-static void 
-add_token(void *token)
+int valid_ns_name(const char * name)
 {
-	static int next_token = 0;
-	recent_tokens[next_token] = token;
-	next_token++;
+	if(name[0]=='\0')
+		return 0;
+
+	for(int i = 0; i < strnlen(name, NS_NAME_LEN))
+	{
+		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
+			return 0;
+	}
+	return 1;
 }
 
-static 
-int check_token(void *token)
+int valid_ns_otype(long otype)
 {
-	for(int i = 0; i < TOKEN_CACHE_LEN; i++)
+	return ((otype == global_ns_otype) || (otype == proc_ns_otype) || (otype == thread_ns_otype) || (otype == explicit_ns_otype) || (otype == library_ns_otype));
+}
+
+nstype_t get_ns_type(namespace_t *ns)
+{
+	long otype = cheri_gettype(ns);
+	return ns_otype_to_type(otype);
+	
+}
+
+nstype_t ns_otype_to_type(long otype)
+{
+	switch(otype)
 	{
-		if (token == recent_tokens[i])
-			return (1)
-		else if (recent_tokens[i] == 0)
-			break;
+		case global_ns_otype:
+			return GLOBAL;
+		case proc_ns_otype:
+			return PROCESS;
+		case thread_ns_otype:
+			return THREAD;
+		case explicit_ns_otype:
+			return EXPLICIT;
+		default:
+			return INVALID;
 	}
-	return (0);
+}
+
+long ns_type_to_otype(nstype_t type)
+{
+	switch(type)
+	{
+		case GLOBAL:
+			return global_ns_otype;
+		case PROCESS:
+			return proc_ns_otype;
+		case THREAD:
+			return thread_ns_otype;
+		case EXPLICIT:
+			return explicit_ns_otype;
+		default:
+			/* should perhaps error instead */
+			return 0; // 0 AKA unsealed
+	}
 }
 
 __attribute__ ((constructor)) static 
-void init_recent_tokens(void)
+void setup_otypes(void)
 {
-	memset(&recent_tokens, 0, sizeof(recent_tokens)); //?
-}
-
-
-int validate_codiscover_args(codiscover_args_t *args)
-{
-	nsobject_t *obj = cocall_args->nsobj;
-	if(obj == NULL)
-		return (0);
-	else if (!cheri_getsealed(obj))
-		return (0);
-	else if ((cheri_getperm(obj) & (COSERVICE_CODISCOVER_PERMS)) == 0)
-		return (0);
-	else if (cheri_getlen(obj) < sizeof(coservice_t))
-		return (0);
-	else if (!in_table(obj))
-		return (0);
-	else
-		return (1);
-}
-
-void discover_coservice(codiscover_args_t *cocall_args, void *token)
-{
-	UNUSED(token);
-
-	nsobject_t *service_obj = cocall_args->nsobj;
-	coservice_t *service = unseal_coservice(service_obj->coservice);
-
-	cocall_args->scb_cap = get_coservice_scb(service);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
-	return;
+	/* call into namespace daemon and get otypes */
 }

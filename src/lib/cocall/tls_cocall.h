@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,12 +28,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef _COCALL_TLS_H
+#define _COCALL_TLS_H
 
-coservice_t *allocate_coservice(void);
+int cocall_tls(void *target, void *buffer, size_t len);
+int slocall_tls(void *target, void *buffer, size_t len);
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
-
-#endif
+#endif //!defined(_COCALL_TLS_H)

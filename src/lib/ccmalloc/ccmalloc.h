@@ -23,12 +23,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
 
-coservice_t *allocate_coservice(void);
+//TODO-PBB: Implement.
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+typedef enum {PROMISCUOUS=1, FLEETING=2, NORESIZE=4, NEVERFREE=8} ccmalloc_flags_t;
 
-#endif
+void ccmalloc_init(size_t*, size_t);
+void *cocall_malloc(size_t len);
+void *cocall_calloc(size_t num, size_t length);
+
+void cocall_free(void*);
+
+void *cocall_alloc(size_t, ccmalloc_flags_t, size_t hint);

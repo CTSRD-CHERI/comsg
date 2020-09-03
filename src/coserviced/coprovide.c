@@ -57,11 +57,9 @@ int validate_coprovide_args(coprovide_args_t *args)
 	else if(cheri_getlen(args->worker_scbs) < (CHERICAP_SIZE * args->nworkers))
 		return 0;
 	else {
-		for(int i = 0; i < args->nworkers; i++)
-		{
+		for(int i = 0; i < args->nworkers; i++) 
 			if(!valid_scb(args->worker_scbs[i]))
 				return (0);
-		}
 	}
 
 	return 1;
@@ -70,41 +68,14 @@ int validate_coprovide_args(coprovide_args_t *args)
 void provide_coservice(coprovide_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	static coservice_t *coservice_ptr = NULL;
-	nsobject_t *ns_object;
-
-	if(coservice_ptr == NULL)
-		coservice_ptr = allocate_coservice();
-
-	if(cocall_args->nsobj == NULL){
-		ns_object = coinsert(cocall_args->ns_cap, cocall_args->name, coservice_ptr, COSERVICE); //TODO-PBB: Implement
-		if(ns_object == NULL) {
-			cocall_args->status = -1;
-			cocall_args->error = EEXISTS;
-			cocall_args->nsobj = NULL;
-			return;
-		}
-	}
-	else if (get_nsobject_type(cocall_args->nsobj) == RESERVATION) {
-		ns_object = coupdate(cocall_args->nsobj, COSERVICE, coservice_ptr, cocall_args->ns_cap);
-		if (ns_object == NULL) {
-			cocall_args->status = -1;
-			/* EBADF is the closest match in terms of how we use capabilities as handles here. */
-			cocall_args->error = EBADF;
-			return;
-		}
-	}
-	else {
-		cocall_args->status = -1;
-		return;
-	}
+	coservice_t *coservice_ptr = allocate_coservice();
 
 	coservice_ptr->next_worker = 0;
 	coservice_ptr->nworkers = cocall_args->nworkers;
 	coservice_ptr->workers = cocall_calloc(cocall_args->nworkers, sizeof(worker_args_t));
 	memcpy(coservice_ptr->workers, cocall_args->workers, cheri_getlen(cocall_args->workers));
 
-	cocall_args->nsobj = ns_object;
+	cocall_args->service = seal_coservice(coservice_ptr);
 	cocall_args->status = 0;
 	cocall_args->error = 0;
 

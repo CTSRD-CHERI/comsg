@@ -23,12 +23,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef _COPORT_IPC_H
+#define _COPORT_IPC_H
 
-coservice_t *allocate_coservice(void);
+#include <sys/types.h>
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+coport_t coport_clearperm(coport_t p,int perms);
+int cosend(const coport_t p, const void * buf, size_t len);
+int corecv(const coport_t p, void ** buf, size_t len);
+int coclose(coport_t port);
+
+int copoll(pollcoport_t * coports, int ncoports, int timeout);
+pollcoport_t make_pollcoport(coport_t port, int events);
+coport_type_t coport_gettype(coport_t port);
+
+#ifdef COPORT_BENCHMARK
+int benchmark_cosend(coport_t p, const void * buf, size_t len, FILE * fp);
+int benchmark_corecv(coport_t p, void ** buf, size_t len, FILE * fp);
+#endif 
 
 #endif

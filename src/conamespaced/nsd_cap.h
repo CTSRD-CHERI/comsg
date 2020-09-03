@@ -34,8 +34,10 @@
 #define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
 	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
 
+#if 0 //not sure what this was about
 typedef struct _nsobject nsobject_t;
 typedef struct _namespace namespace_t;
+#endif
 
 namespace_t *unseal_ns(namespace_t *ns_cap);
 namespace_t *seal_ns(namespace_t *ns_cap);

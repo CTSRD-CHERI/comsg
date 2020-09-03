@@ -23,75 +23,42 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coservice_cap.h"
-#include "coservice_table.h"
+#ifndef _NSOBJ_H
+#define _NSOBJ_H
 
+#include "ukern/namespace.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/coservice.h"
-#include "ukern/utils.h"
+/*
+ * Types
+ * 	+ RESERVATION:	For objects that are not yet ready to be returned via coselect
+ * 					e.g. services that will be registered later, or whose workers are 
+ * 					not yet ready to process requests.
+ */
 
-#include <errno.h>
+#define NSOBJ_PERMS_OWN_MASK ( NS_PERMS_OWN_MASK | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
 
-#define TOKEN_CACHE_LEN 64
+typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobjtype_t;
 
-static void *recent_tokens[TOKEN_CACHE_LEN];
-
-static void 
-add_token(void *token)
+typedef struct _nsobject
 {
-	static int next_token = 0;
-	recent_tokens[next_token] = token;
-	next_token++;
-}
-
-static 
-int check_token(void *token)
-{
-	for(int i = 0; i < TOKEN_CACHE_LEN; i++)
+	char name[NS_NAME_LEN];
+	nsobjtype_t type;
+	union
 	{
-		if (token == recent_tokens[i])
-			return (1)
-		else if (recent_tokens[i] == 0)
-			break;
+		void *obj;
+		coservice_t *coservice;
+		coport_t *coport;
 	}
-	return (0);
-}
+} nsobject_t;
 
-__attribute__ ((constructor)) static 
-void init_recent_tokens(void)
-{
-	memset(&recent_tokens, 0, sizeof(recent_tokens)); //?
-}
+#define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
+
+nobjtype_t get_nsobject_type(nsobject_t *nsobj);
+nsobjtype_t nsobject_otype_to_type(long otype);
+long nsobject_type_to_otype(nsobjtype_t type);
+
+int valid_nsobj_name(const char *name);
+int valid_nsobj_otype(long type);
 
 
-int validate_codiscover_args(codiscover_args_t *args)
-{
-	nsobject_t *obj = cocall_args->nsobj;
-	if(obj == NULL)
-		return (0);
-	else if (!cheri_getsealed(obj))
-		return (0);
-	else if ((cheri_getperm(obj) & (COSERVICE_CODISCOVER_PERMS)) == 0)
-		return (0);
-	else if (cheri_getlen(obj) < sizeof(coservice_t))
-		return (0);
-	else if (!in_table(obj))
-		return (0);
-	else
-		return (1);
-}
-
-void discover_coservice(codiscover_args_t *cocall_args, void *token)
-{
-	UNUSED(token);
-
-	nsobject_t *service_obj = cocall_args->nsobj;
-	coservice_t *service = unseal_coservice(service_obj->coservice);
-
-	cocall_args->scb_cap = get_coservice_scb(service);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
-	return;
-}
+#endif

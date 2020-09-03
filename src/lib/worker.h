@@ -23,12 +23,39 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_TABLE_H
-#define _COSERVICE_TABLE_H
+#ifndef _UKERN_WORKER_H
+#define _UKERN_WORKER_H
 
-coservice_t *allocate_coservice(void);
+#include <cheri/cherireg.h>
+#include <pthread.h>
+#include <stdatomic.h>
 
-void *get_coservice_scb(coservice_t *service);
-int in_table(coservice_t *ptr);
+typedef struct _worker_args
+{
+	/* the worker thread */
+	pthread_t worker;
+	/* 
+	 * pointer to a function that: 
+	 *  + takes a pointer to struct cocall_args, 
+	 *  + modifies it in place,
+	 *  + sets status and error values before returning.
+	 */
+	void *worker_function;
+	/* 
+	 * pointer to a function that:
+	 * 	+ takes a pointer to struct cocall_args,
+	 * 	+ validates the arguments passed from a cocall
+	 * 	+ returns 0 if they fail, else non-zero
+	 */
+	void *validation_function;
+	/* name to coregister under */
+	char name[LOOKUP_STRING_LEN];
+	/* result of coregister */
+	void *scb_cap;
+} worker_args_t;
+
+typedef struct _worker_args handler_args_t;
+
+void *coaccept_worker(void *worker_argp);
 
 #endif

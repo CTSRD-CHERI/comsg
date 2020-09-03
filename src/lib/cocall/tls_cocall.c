@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,75 +28,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coservice_cap.h"
-#include "coservice_table.h"
+#include "ukern/cocall.h"
 
-
-#include "ukern/cocall_args.h"
-#include "ukern/coservice.h"
-#include "ukern/utils.h"
-
+#include <err.h>
 #include <errno.h>
+#include <threads.h>
+#include <unistd.h>
 
-#define TOKEN_CACHE_LEN 64
-
-static void *recent_tokens[TOKEN_CACHE_LEN];
-
-static void 
-add_token(void *token)
-{
-	static int next_token = 0;
-	recent_tokens[next_token] = token;
-	next_token++;
-}
+static _Thread_local void *code_cap = NULL;
+static _Thread_local void *data_cap = NULL;
 
 static 
-int check_token(void *token)
+void cocall_init(void)
 {
-	for(int i = 0; i < TOKEN_CACHE_LEN; i++)
-	{
-		if (token == recent_tokens[i])
-			return (1)
-		else if (recent_tokens[i] == 0)
-			break;
-	}
-	return (0);
-}
-
-__attribute__ ((constructor)) static 
-void init_recent_tokens(void)
-{
-	memset(&recent_tokens, 0, sizeof(recent_tokens)); //?
-}
-
-
-int validate_codiscover_args(codiscover_args_t *args)
-{
-	nsobject_t *obj = cocall_args->nsobj;
-	if(obj == NULL)
-		return (0);
-	else if (!cheri_getsealed(obj))
-		return (0);
-	else if ((cheri_getperm(obj) & (COSERVICE_CODISCOVER_PERMS)) == 0)
-		return (0);
-	else if (cheri_getlen(obj) < sizeof(coservice_t))
-		return (0);
-	else if (!in_table(obj))
-		return (0);
-	else
-		return (1);
-}
-
-void discover_coservice(codiscover_args_t *cocall_args, void *token)
-{
-	UNUSED(token);
-
-	nsobject_t *service_obj = cocall_args->nsobj;
-	coservice_t *service = unseal_coservice(service_obj->coservice);
-
-	cocall_args->scb_cap = get_coservice_scb(service);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
+	int error = cosetup(COSETUP_COCALL, &code_cap, &data_cap);
+	if(error)
+		err(errno, "cocall_init: error in cosetup(2)");
 	return;
+}
+
+int cocall_tls(void *target, void *buffer, size_t len)
+{
+	if (code_cap == NULL || data_cap == NULL)
+		cocall_init();
+	return (cocall(code_cap, data_cap, target, buffer, len));
+}
+
+int slocall_tls(void *target, void *buffer, size_t len)
+{
+	if (code_cap == NULL || data_cap == NULL)
+		cocall_init();
+	return (cocall_slow(code_cap, data_cap, target, buffer, len));
 }

@@ -44,8 +44,7 @@ void insert_namespace_object(coinsert_args_t *cocall_args)
 	nsobject_t *obj;
 
 	obj = in_namespace(cocall_args->name, cocall_args->ns_cap);
-	if(obj != NULL)
-	{
+	if(obj != NULL) {
 		cocall_args->status = -1;
 		cocall_args->error = EEXIST;
 		cocall_args->nsobj = NULL;
