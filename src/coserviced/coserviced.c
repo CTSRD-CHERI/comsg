@@ -38,20 +38,18 @@ static coservice_t *codiscover, *coprovide;
 static nsobject_t *codiscover_obj, *coprovide_obj;
 static namespace_t *global_ns;
 
-
-
 static 
 void usage(void)
 {
 	//todo
 	//should be called with lookup string
+	//e.g "coserviced lookup_string"
 	return;
 }
 
 
 int main(int argc, char const *argv[])
 {
-	void *codiscover_scb, *coprovide_scb;
 	int opt, error;
 	void *init_cap;
 	
@@ -67,15 +65,22 @@ int main(int argc, char const *argv[])
 		error = colookup(argv[argc], &init_cap);
 		if(error)
 			err(error, "main: colookup of init %s failed", optarg);
-		set_cocall_target(COCALL_COPROC_INIT, init_cap);
+		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
 	}
 	else {
 		printf("Missing lookup string for init\n");
 		usage();
 	}
 
+	coserviced_startup();
 	
-	
-	assert(codiscover_obj != NULL);
+	//TODO-PBB: revise
+	while(1) {
+		for (int i = 0; i < coprovide_serv.function_map->nworkers; i++)
+			pthread_join(coprovide_serv.function_map->workers[i].worker, NULL);
+		for (int i = 0; i < codiscover_serv.function_map->nworkers; i++)
+			pthread_join(codiscover_serv.function_map->workers[i].worker, NULL);
+	}
+
 	return (0);
 }

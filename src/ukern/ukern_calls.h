@@ -51,5 +51,9 @@ const int n_ukern_calls = 13;
 
 extern pthread_key_t ukern_call_set;
 
+namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *codiscover_scb);
+
+coservice_t *coprovide(const char *name, void **worker_scbs, int nworkers, nsobject_t *nsobj, namespace_t *ns);
+
 
 #endif //!defined(_UKERN_CALLS_H)

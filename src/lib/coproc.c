@@ -236,7 +236,7 @@ clear_table_after_fork(void)
 
 
 __attribute__ ((constructor)) static 
-void coproc_init(void)
+void coproc_lib_init(void)
 {
     LIST_INIT(&coproc_cache.entries);
     LIST_INIT(&request_handler_cache.entries);

@@ -23,32 +23,21 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "ukern/worker_map.h"
 #include "ukern/worker.h"
 
-#define INIT_MAP_LEN 2
-
-struct 
-{
-    pthread_mutex_t lock;
-    function_map_t *function_map;
-    _Atomic int nfunctions;
-} worker_map;
-
-__attribute__ ((constructor)) static 
-void setup_worker_map(void)
-{
-    pthread_mutexattr_t lock_attr;
-
-    pthread_mutexattr_init(&lock_attr);
-    pthread_mutex_init(&worker_map.lock, &lock_attr);
-}
+#include <cheri/cheric.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdlib.h>
+#include <string.h>
 
 static
 void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
 {
     pthread_attr_t thread_attrs;
-    worker_args_t * worker_arr;
-    void * thread_args;
+    worker_args_t *worker_arr;
+    void *thread_args;
 
     pthread_attr_init(&thread_attrs);
 
@@ -70,41 +59,14 @@ void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map
         thread_args.worker_function = func;
         
         if(pthread_create(&thread_args.worker, &thread_attrs, coaccept_worker, thread_args))
-            err(errno,"spawn_workers: could not spawn thread %d with name %s", i, worker_arr[i].name);
+            err(errno, "spawn_workers: could not spawn thread %d with name %s", i, worker_arr[i].name);
     }
-}
-
-static
-function_map_t *lookup_function(const char * name)
-{
-    int nfunctions = atomic_load(&worker_map.nfunctions);
-    for(int i = 0; i < nfunctions; i++)
-    {
-        if(strcmp(name, worker_map.function_map[i].func_name)==0)
-            return (&worker_map.function_map[i]);
-    }
-    return (NULL);
 }
 
 function_map_t *new_function_map(void)
 {
-    void *map_ptr;
-
-    int idx = atomic_fetch_add(&worker_map.nfunctions, 1);
-    int nfunctions = idx + 1;
-    size_t required_len = (nfunctions * sizeof(function_map_t));
-
-    if (idx == 0)
-        map_ptr = calloc(INIT_MAP_LEN, sizeof(function_map_t));
-    else if(cheri_getlen(worker_map.function_map) < required_len)
-        map_ptr = realloc(worker_map.function_map, required_len);
-    else 
-        map_ptr = worker_map.function_map;
-
-    map_ptr[idx].workers = NULL; 
-    map_ptr[idx].nworkers = 0;
-
-    return (&map_ptr[idx]);
+    function_map_t *map = calloc(1, sizeof(function_map_t));
+    return (map);
 }
 
 void
@@ -117,7 +79,7 @@ spawn_worker_thread(worker_args_t *worker, function_map_t *func_map)
     pthread_attr_init(&thread_attrs);
 
     int idx = atomic_fetch_add(&func_map->nworkers, 1);
-    if(func_map->workers == NULL) 
+    if(func_map->workers == NULL)
         worker_arr = calloc(nworkers, sizeof(worker_args_t));
     else
         worker_arr = realloc(func_map->workers, (func_map->nworkers * sizeof(worker_args_t)));
@@ -146,19 +108,9 @@ function_map_t *spawn_worker(const char *worker_name, void *func, void *valid)
 
 function_map_t *spawn_workers(void *func, void *arg_func, int nworkers)
 {
-    function_map_t *func_map;
+    function_map_t *func_map = new_function_map(nworkers);
    
-    pthread_mutex_lock(&worker_map.lock);
-    
-    func_map = lookup_function(name);
-    if(func_map == NULL)
-        func_map = new_function_map();
- 
-    func_map = cheri_setboundsexact(func_map, sizeof(function_map_t));
-    
     spawn_worker_threads(func, arg_func, nworkers, func_map);
-
-    pthread_mutex_unlock(&worker_map.lock);
 
     return (func_map);
 }

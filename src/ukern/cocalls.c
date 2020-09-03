@@ -41,7 +41,7 @@ typedef struct call_set {
 
 static int default_ncalls = 13;
 static pthread_key_t last_key = NULL;
-static int last_ncalls;
+static int last_ncalls = 0;
 
 static call_set_t global_set;
 
@@ -49,7 +49,7 @@ __attribute__ ((constructor)) static
 void init_global_set(void)
 {
 	global_set.target_caps = calloc(default_ncalls, sizeof(call_set_t));
-	global_set.
+	global_set.ncalls = default_ncalls;
 }
 
 pthread_key_t allocate_target_set(void)
@@ -97,17 +97,24 @@ void set_cocall_target(pthread_key_t set_key, int target_func, void *target_cap)
 	if (set == NULL)
 		init_target_set(set_key, 0); //defaults to size of largest set
 	set->target_caps[target_func] = target_cap;
+	if (global_set.target_caps[target_func] == NULL)
+		global_set.target_caps[target_func] = target_cap;
 	return;
 }
 
 void *get_cocall_target(pthread_key_t set_key, int target_func)
 {
 	call_set *set = pthread_getspecific(set_key);
-	return (set->target_caps[target_func]);
+	if (set->target_caps[target_func] != NULL)
+		return (set->target_caps[target_func]);
+	else if (global_set.target_caps[target_func] != NULL)
+		return (global_set.target_caps[target_func]);
+	else
+		return (NULL);
 }
 
 int targeted_cocall(pthread_key_t set_key, int target, void *buf, size_t len)
 {
-	void *target_cap = get_cocall_target(target_func);
+	void *target_cap = get_cocall_target(target);
 	return (cocall_tls(target_cap, buf, len));
 }
