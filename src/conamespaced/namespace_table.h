@@ -63,5 +63,7 @@ void set_global_namespace(namespace_t *ns_cap);
 int is_global_namespace(namespace_t *ns_cap);
 void *get_global_namespace(void);
 
+int in_ns_table(namespace_t *ptr);
+int in_nsobject_table(nsobject_t *ptr);
 
 #endif //!defined (_NSD_TABLE_H)

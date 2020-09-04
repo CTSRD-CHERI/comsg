@@ -45,4 +45,6 @@ namespace_t *seal_ns(namespace_t *ns_cap);
 nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
 nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
 
+int valid_namespace_cap(namespace_t *ns_cap);
+
 #endif //_NSD_CAP_H

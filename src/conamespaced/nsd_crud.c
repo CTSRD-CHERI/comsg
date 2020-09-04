@@ -46,10 +46,11 @@ validate_namespace_cap(namespace_t *ns_cap)
 {
 	vaddr_t cap_addr = cheri_getaddress(ns_cap);
 	assert(cheri_gettag(ns_cap));
+	assert(sizeof(namespace_t) <= cheri_getlen(ns_cap));
 
 	assert(cheri_is_address_inbounds(ns_cap, cap_addr));
-	assert(cheri_is_address_inbounds(namespace_table.namespaces, cap_addr));
-	assert(sizeof(namespace_t) <= cheri_getlen(ns_cap));
+	assert(in_namespace_table(ns_cap));
+	
 	assert(valid_ns_otype(ns_cap) || !cheri_getsealed(ns_cap));
 }
 
@@ -156,4 +157,23 @@ nsobject_t *create_nsobject(const char *name, nsobjtype_t type, namespace_t *par
 	obj_ptr = cheri_andperm(obj_ptr, NSOBJ_PERMS_OWN_MASK);
 
 	return (obj_ptr);
+}
+
+int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
+{
+	nsobject_t *result;
+	struct _member *member;
+	ns_cap = unseal_ns(ns_cap);
+	ns_obj = unseal_nsobj(ns_obj);
+	member = LIST_FIRST(&ns_cap->members->objects);
+	while (member != NULL) {
+		result = member->nsobj;
+		if(result != ns_obj) 
+			member = LIST_NEXT(member, entries);
+		else {
+			LIST_REMOVE(member, entries);
+			return (1);
+		}
+	}
+	return (0);
 }

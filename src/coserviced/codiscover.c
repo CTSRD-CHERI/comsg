@@ -26,44 +26,11 @@
 #include "coservice_cap.h"
 #include "coservice_table.h"
 
-
 #include "ukern/cocall_args.h"
 #include "ukern/coservice.h"
 #include "ukern/utils.h"
 
 #include <errno.h>
-
-#define TOKEN_CACHE_LEN 64
-
-static void *recent_tokens[TOKEN_CACHE_LEN];
-
-static void 
-add_token(void *token)
-{
-	static int next_token = 0;
-	recent_tokens[next_token] = token;
-	next_token++;
-}
-
-static 
-int check_token(void *token)
-{
-	for(int i = 0; i < TOKEN_CACHE_LEN; i++)
-	{
-		if (token == recent_tokens[i])
-			return (1)
-		else if (recent_tokens[i] == 0)
-			break;
-	}
-	return (0);
-}
-
-__attribute__ ((constructor)) static 
-void init_recent_tokens(void)
-{
-	memset(&recent_tokens, 0, sizeof(recent_tokens)); //?
-}
-
 
 int validate_codiscover_args(codiscover_args_t *args)
 {

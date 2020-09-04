@@ -45,6 +45,7 @@ typedef struct _worker_map_entry
 typedef struct coservice_prov {
 	coservice_t *service;
 	function_map_t *function_map;
+	nsobject_t *nsobj;
 } coservice_provision_t;
 
 #endif 

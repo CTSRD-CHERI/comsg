@@ -65,12 +65,11 @@ nsobject_t *lookup_nsobject(const char *name, nsotype_t nsobject_type, namespace
 	while (member != NULL) {
 		result = member->nsobj;
 		if(result->type != nsobject_type)
-			continue;
+			member = LIST_NEXT(member, entries);
 		else if(strncmp(result->name, name, NS_NAME_LEN) == 0) {
 			result = cheri_setboundsexact(result, sizeof(nsobject_t));
 			return (result);
 		}
-		member = LIST_NEXT(member, entries);
 	}
 	return (NULL);
 }

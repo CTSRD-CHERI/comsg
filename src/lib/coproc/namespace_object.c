@@ -27,13 +27,14 @@
 #include "ukern/namespace.h"
 #include "ukern/namespace_object.h"
 
-static long coport_nsobj_otype, coservice_nsobj_otype, commap_nsobj_otype, reservation_nsobj_otype;
+//static long coport_nsobj_otype, coservice_nsobj_otype, commap_nsobj_otype, reservation_nsobj_otype;
 
 int valid_nsobj_name(const char *name)
 {
 	return (valid_ns_name(name));
 }
 
+#if 0
 int valid_nsobj_otype(long type)
 {
 	return (type == reservation_nsobj_otype || type == commap_nsobj_otype || type == coport_nsobj_otype || type == coservice_nsobj_otype);
@@ -43,7 +44,6 @@ nsobjtype_t get_nsobject_type(nsobject_t *nsobj)
 {
 	long otype = cheri_gettype(nsobj);
 	return nsobj_otype_to_type(otype);
-	
 }
 
 nsobjtype_t nsobj_otype_to_type(long otype)
@@ -86,3 +86,4 @@ void setup_otypes(void)
 {
 	/* call into namespace daemon and get otypes */
 }
+#endif
