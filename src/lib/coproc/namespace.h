@@ -43,7 +43,7 @@
  * NS_PERM_OBJ:
  * 	+ authorises certain actions on objects inside its namespace that have some implications beyond the object
  * 	+ used where larger permissions might be inappropriate; e.g. querying parentage
- * 	+ Implicit in all, which I'd prefer it wasn't, but we have only 2 bits.
+ * 	+ Implicit in holding a valid namespace capability, which I'd prefer it wasn't, but we have only 2 bits.
  * 	+ The only way to lack this is to lack a capability to the namespace.
  * NS_PERM_RO:
  * 	+ allows querying and listing objects in a namespace
@@ -62,10 +62,10 @@
 #define NS_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
 	CHERI_PERM_LOAD_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
 
+#define NS_PERMS_OBJ ( 0 )
 #define NS_PERM_RO   ( CHERI_PERM_SW2 )
 #define NS_PERM_WR   ( CHERI_PERM_SW3 )
 #define NS_PERMS_OWN ( CHERI_PERM_SW2 | CHERI_PERM_SW3 ) 
-#define NS_PERMS_OBJ ( 0 )
 
 #define NS_PERMS_RO_MASK ( NS_HWPERMS_MASK | NS_PERM_RO )
 #define NS_PERMS_WR_MASK ( NS_HWPERMS_MASK | NS_PERM_WR )
@@ -108,10 +108,9 @@ typedef struct _namespace
 #define VALID_NSOBJ_TYPE(type) ( type == GLOBAL || type == GLOBAL || type == PROCESS || type == THREAD || type == EXPLICIT || type == LIBRARY )
 
 int valid_ns_name(const char * name);
+
 int valid_ns_otype(long otype);
-
 nstype_t get_ns_type(namespace_t *ns);
-
 nstype_t ns_otype_to_type(long otype);
 long ns_type_to_otype(nstype_t type);
 

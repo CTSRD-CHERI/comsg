@@ -194,3 +194,15 @@ void *get_global_namespace(void)
 	assert(global_namespace != NULL);
 	return (global_namespace);
 }
+
+int in_ns_table(namespace_t *ptr)
+{
+	vaddr_t addr = cheri_getaddress(ptr);
+	return (cheri_is_address_inbounds(namespace_table.namespaces, addr));
+}
+
+int in_nsobject_table(nsobject_t *ptr)
+{
+	vaddr_t addr = cheri_getaddress(ptr);
+	return (cheri_is_address_inbounds(nsobject_table.nsobjects, addr));
+}

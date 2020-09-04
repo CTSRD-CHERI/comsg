@@ -41,7 +41,7 @@ static namespace_t *global;
 
 
 static 
-void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
+void init_service(coservice_provision_t *serv, void *func, void *valid)
 {
 	coservice_t *service = allocate_coservice();
 	function_map_t *service_map = spawn_workers(func, valid, nworkers);
@@ -56,15 +56,19 @@ void init_service(coservice_provision_t *serv, void *func, void *valid, const ch
 void coserviced_startup(void)
 {
 	//init own services
-	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args, CODISCOVER);
-	init_service(&coprovide_serv, provide_coservice, valid_coprovide_args, COPROVIDE);
+	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args);
+	init_service(&coprovide_serv, provide_coservice, valid_coprovide_args);
 	
 	codiscover_scb = get_coservice_scb(codiscover_serv.service);
 	//connect to process daemon and do the startup dance (we can dance if we want to)
-	global = coproc_init(NULL, NULL, codiscover_scb);
+	global = coproc_init(NULL, NULL, NULL, codiscover_scb);
 	if (global == NULL)
 		err(error, "coproc_init: cocall failed");
 
-	codiscover_obj = coinsert(CODISCOVER, COSERVICE, codiscover_serv.service, global);
-	coprovide_obj = coinsert(COPROVIDE, COSERVICE, coprovide_serv.service, global);
+	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, codiscover_serv.service, global);
+	if (codiscover_serv.nsobj == NULL)
+		err(errno, "coserviced_startup: error coinserting codiscover into global namespace");
+	coprovide_serv.nsobj = coinsert(U_COPROVIDE, COSERVICE, coprovide_serv.service, global);
+	if (coprovide_serv.nsobj == NULL)
+		err(errno, "coserviced_startup: error coinserting coprovide into global namespace");
 }

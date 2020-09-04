@@ -40,11 +40,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-static _Atomic(void *) codiscover_scb;
-static _Atomic(coservice_t *) codiscover;
+/* Provided by coservice daemon*/
+static _Atomic(void *) codiscover_scb = NULL;
 
+/* Provided by namespace daemon */
 static _Atomic(namespace_t *) global_namespace = NULL;
-static _Atomic(void *) coinsert_scb;
+static _Atomic(void *) coinsert_scb = NULL;
+static _Atomic(void *) coselect_scb = NULL;
 
 #define NSD_SELECTOR 1
 #define COSERVICED_SELECTOR 2
@@ -88,6 +90,7 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 		return;
 	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) */
 	atomic_store(&coinsert_scb, cocall_args->coinsert);
+	atomic_store(&coselect_scb, cocall_args->coselect);
 	atomic_store(&global_namespace, cocall_args->namespace);
 	/* clear old codiscover; whether valid or not it refers to the old universe */
 	atomic_store(&codiscover_scb, NULL);
@@ -123,6 +126,7 @@ void coserviced_init(cocall_args_t * cocall_args, void *token)
 	}
 	cocall_args->namespace = atomic_load(&global_namespace);
 	cocall_args->coinsert = atomic_load(&coinsert_scb);
+	cocall_args->coselect = atomic_load(&coselect_scb);
 	atomic_store(&codiscover_scb, cocall_args->codiscover);
 
 	cocall_args->status = 0;
@@ -145,8 +149,9 @@ void ipcd_init(cocall_args_t * cocall_args, void *token)
 	}
 	cocall_args->namespace = atomic_load(&global_namespace);
 	cocall_args->codiscover = atomic_load(&codiscover_scb);
-	cocall_args->coprovide = atomic_load(&coprovide_scb);
-
+	cocall_args->coinsert = atomic_load(&coinsert_scb);
+	cocall_args->coselect = atomic_load(&coselect_scb);
+	
 	cocall_args->status = 0;
 	cocall_args->error = 0;
 	return;

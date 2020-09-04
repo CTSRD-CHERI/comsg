@@ -32,6 +32,11 @@ struct coproc_init {
 	void *coselect;
 };
 
+struct codelete 
+{
+	nsobject_t *nsobj;
+};
+
 struct coinsert
 {
 	char name[NS_NAME_LEN];
@@ -115,6 +120,7 @@ struct cocall_args
 	namespace_t *ns_cap;
 	union 
 	{
+		struct codelete;
 		struct coselect;
 		struct coinsert;
 		/* copoll */
@@ -131,7 +137,7 @@ struct cocall_args
 		struct comunmap;
 		struct commap;
 
-		// Microkernel only
+
 		struct coproc_init;
 
 	};

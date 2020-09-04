@@ -24,6 +24,8 @@
  * SUCH DAMAGE.
  */
 #include "nsd_cap.h"
+#include "namespace_table.h"
+
 #include "ukern/namespace.h"
 #include "ukern/namespace_object.h"
 #include "ukern/utils.h"
@@ -123,7 +125,32 @@ otype_t get_nsobj_unsealcap(nsobjtype_t type)
 		default:
 			err(EINVAL, "get_nsobj_unsealcap: invalid nsobjtype_t value %d supplied", type);
 	}
-	return NULL;
+	return (NULL);
+}
+
+static
+nsobjtype_t get_nsobject_type(nsobject_t *nsobj)
+{
+	long otype = cheri_gettype(nsobj);
+	return nsobj_otype_to_type(otype);
+}
+
+static
+nsobjtype_t nsobj_otype_to_type(long otype)
+{
+	switch(otype)
+	{
+		case coport_nsobj.otype:
+			return COPORT;
+		case coservice_nsobj.otype:
+			return COSERVICE;
+		case commap_nsobj.otype:
+			return COMMAP;
+		case reservation_nsobj.otype:
+			return RESERVATION;
+		default:
+			return INVALID;
+	}
 }
 
 namespace_t *unseal_ns(namespace_t *ns_cap)
@@ -132,7 +159,7 @@ namespace_t *unseal_ns(namespace_t *ns_cap)
 		return (ns_cap);
 	nstype_t type = get_ns_type(ns_cap);
 	otype_t unseal_cap = get_ns_unsealcap(type);
-	return cheri_unseal(ns_cap, unseal_cap);
+	return (cheri_unseal(ns_cap, unseal_cap));
 }
 
 namespace_t *seal_ns(namespace_t *ns_cap);
@@ -141,7 +168,7 @@ namespace_t *seal_ns(namespace_t *ns_cap);
 		return (ns_cap);
 	nstype_t type = ns_cap->type;
 	otype_t seal_cap = get_ns_sealcap(type);
-	return cheri_seal(ns_cap, seal_cap);
+	return (cheri_seal(ns_cap, seal_cap));
 }
 
 nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap)
@@ -149,8 +176,10 @@ nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap)
 	if (!cheri_getsealed(nsobj_cap))
 		return (nsobj_cap);
 	nsobjtype_t type = get_nsobject_type(nsobj_cap);
+	if (type == INVALID)
+		return (NULL);
 	otype_t unseal_cap = get_nsobj_unsealcap(type);
-	return cheri_unseal(nsobj_cap, unseal_cap);
+	return (cheri_unseal(nsobj_cap, unseal_cap));
 }
 
 nsobject_t *seal_nsobj(nsobject_t *nsobj_cap)
@@ -159,6 +188,39 @@ nsobject_t *seal_nsobj(nsobject_t *nsobj_cap)
 		return (nsobj_cap);
 	nsobjtype_t type = nsobj_cap->type;
 	otype_t seal_cap = get_nsobj_sealcap(type);
-	return cheri_seal(nsobj_cap, seal_cap);
+	return (cheri_seal(nsobj_cap, seal_cap));
 }
 
+int valid_namespace_cap(namespace_t *ns_cap)
+{
+	vaddr_t cap_addr = cheri_getaddress(ns_cap);
+	if (!cheri_gettag(ns_cap))
+		return (0);
+	else if (sizeof(namespace_t) <= cheri_getlen(ns_cap))
+		return (0);
+	else if (!cheri_is_address_inbounds(ns_cap, cap_addr))
+		return (0);
+	else if (!in_namespace_table(ns_cap))
+		return (0);
+	else if (!(valid_ns_otype(ns_cap) || !cheri_getsealed(ns_cap)))
+		return (0);
+	else
+		return (1);
+}
+
+int valid_nsobject_cap(nsobject_t *obj_cap)
+{
+	vaddr_t cap_addr = cheri_getaddress(obj_cap);
+	if (!cheri_gettag(ns_cap))
+		return (0);
+	else if (sizeof(namespace_t) <= cheri_getlen(ns_cap))
+		return (0);
+	else if (!cheri_is_address_inbounds(ns_cap, cap_addr))
+		return (0);
+	else if (!in_nsobject_table(ns_cap))
+		return (0);
+	else if (!((get_nsobject_type(ns_cap) != INVALID) || !cheri_getsealed(ns_cap)))
+		return (0);
+	else
+		return (1);
+}

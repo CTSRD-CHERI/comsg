@@ -35,25 +35,30 @@
 
 int validate_coinsert_args(coinsert_args_t *cocall_args)
 {
-	UNUSED(cocall_args);
+	namespace_t *ns = cocall_args->ns_cap;
+	if ()
 	return (1);
 }
 
 void insert_namespace_object(coinsert_args_t *cocall_args)
 {
 	nsobject_t *obj;
+	namespace_t *ns;
 
-	obj = in_namespace(cocall_args->name, cocall_args->ns_cap);
-	if(obj != NULL) {
+	ns = unseal_ns(cocall_args->ns_cap);
+	if (!NS_PERMITS_WRITE(cocall_args->ns_cap)) {
 		cocall_args->status = -1;
-		cocall_args->error = EEXIST;
-		cocall_args->nsobj = NULL;
+		cocall_args->error = EACCES;
 		return;
 	}
-	//TODO-PBB: more validation needed here
+	else if(in_namespace(cocall_args->name, ns)) {
+		cocall_args->status = -1;
+		cocall_args->error = EEXIST;
+		return;
+	}
 
 	/* create object */
-	obj = create_nsobject(cocall_args->name, cocall_args->type, cocall_args->ns_cap);
+	obj = create_nsobject(cocall_args->name, cocall_args->type, ns);
 	switch(cocall_args->type) {
 		case COMMAP:
 			obj->obj = cocall_args->obj;
@@ -69,16 +74,13 @@ void insert_namespace_object(coinsert_args_t *cocall_args)
 			break;
 		case RESERVATION:
 			obj->obj = NULL;
+			obj = seal_nsobj(obj);
 			break;
 		default:
 			break;
 	}
-	
-	if(!is_privileged(token))
-		cocall_args->nsobj = seal_nsobj(obj);
-	else 
-		cocall_args->nsobj = obj;
-	
+
+	cocall_args->nsobj = seal_nsobj(obj);
 	cocall_args->status = 0;
 	cocall_args->error = 0;
 

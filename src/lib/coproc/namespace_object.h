@@ -35,6 +35,27 @@
  * 					not yet ready to process requests.
  */
 
+/* 
+ * NSOBJ_PERM_R:
+ * 	+ Authorises retrieval of the object handle associated with the namespace object
+ * NSOBJ_PERM_W:
+ *	+ If the namespace object is a reservation, authorises setting a type and object handle
+ *	+ Checks for this should be accompanied by appropriate checks for object type
+ * NSOBJ_PERM_D:
+ *	+ If the namespace object is not a reservation, authorises its deletion when used together with 
+ *	  an appropriate namespace capability.
+ * Note: Hardware store permissions will only be present on reservation objects, which are sealed
+ *       and not dereferenced outside of cocalls to the namespace daemon.
+ */
+
+#define NSOBJ_PERM_R ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+#define NSOBJ_PERM_W ( CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
+#define NSOBJ_PERM_D ( CHERI_PERM_SW3 )
+
+#define NSOBJ_PERMITS_WRITE(c) ( cheri_getperm(c) & NS_PERM_W ) 
+#define NSOBJ_PERMITS_READ(c) ( cheri_getperm(c) & NS_PERM_R )
+#define NSOBJ_PERMITS_DELETE(c) ( cheri_getperm(c) & NS_PERM_D )
+
 #define NSOBJ_PERMS_OWN_MASK ( NS_PERMS_OWN_MASK | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
 
 typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobjtype_t;
@@ -53,12 +74,16 @@ typedef struct _nsobject
 
 #define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
 
+#if 0
+//handled by the namespace manager
+//for user programs, might implement something similar
+//less necessary now that most nsobject capabilities are unsealed
 nobjtype_t get_nsobject_type(nsobject_t *nsobj);
 nsobjtype_t nsobject_otype_to_type(long otype);
 long nsobject_type_to_otype(nsobjtype_t type);
+int valid_nsobj_otype(long type);
+#endif
 
 int valid_nsobj_name(const char *name);
-int valid_nsobj_otype(long type);
-
 
 #endif

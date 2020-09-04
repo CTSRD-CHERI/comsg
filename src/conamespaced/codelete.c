@@ -23,22 +23,68 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include "namespace_table.h"
 #include "nsd.h"
+#include "nsd_cap.h"
+#include "nsd_crud.h"
+#include "nsd_lookup.h"
 
 #include "ukern/cocall_args.h"
 #include "ukern/utils.h"
 
 int validate_codelete_args(codelete_args_t *cocall_args)
 {
-	UNUSED(cocall_args);
-	return (1);
+	nsobject_t *obj = unseal_nsobj(cocall_args->nsobj);
+	namespace_t *ns = unseal_ns(cocall_args->ns_cap);
+	if (!valid_namespace_cap(cocall_args->ns_cap))
+		return (0);
+	else if (!valid_nsobject_cap(cocall_args->nsobj)) 
+		return (0);
+	else
+		return (1);
 }
 
 void delete_namespace_object(codelete_args_t *cocall_args, void *token)
 {
-	UNUSED(cocall_args);
 	UNUSED(token);
-	//TODO-PBB: implement
+	nsobject_t *nsobj, *parent_obj;
+	
+	//
+	if (!NSOBJ_PERMITS_DELETE(cocall_args->nsobj)) {
+		cocall_args->status = -1;
+		cocall_args->error = EACCES;
+		return;
+	}
+	nsobj = unseal_nsobj(cocall_args->nsobj);
+
+	//Check that the supplied namespace authorises actions on this namespace object
+	parent_obj = lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap);
+	if (parent_obj == NULL) {
+		//No object with that name and type.
+		cocall_args->status = -1;
+		cocall_args->error = ENOENT;
+		return;
+	}
+	else if (parent_obj != nsobj) {
+		//There is an object with that name and type, but it's not this object
+		cocall_args->status = -1;
+		cocall_args->error = EPERM;
+		return;
+	}
+
+	if(!delete_nsobject(parent_obj, cocall_args->ns_cap)) {
+		//Someone beat us to it
+		//Or there's a bug
+		assert(lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap) != nsobj) 
+		cocall_args->status = -1;
+		cocall_args->error = ENOENT;
+		return;
+	}
+	parent_obj->obj = NULL;
+	parent_obj->type = INVALID;
+
+	cocall_args->status = 0;
+	cocall_args->error = 0;
+
 	return;
 }

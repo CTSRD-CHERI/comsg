@@ -51,33 +51,48 @@ static
 void safety_dance(void)
 {
 	//init own services
-	void **coinsert_scbs, *coprovide_scb;
+	void **coinsert_scbs, **coselect_scbs, *coprovide_scb;
 	coservice_t *coprovide_service;
-	nsobject_t *coinsert_obj;
-	namespace_t *global_ns = get_global_namespace();
+	nsobject_t *obj;
+	namespace_t *global_ns, *sealed_global_ns;
+	
+	global_ns = get_global_namespace();
+	sealed_global_ns = seal_ns(global_ns);
 	
 	coinsert_scbs = get_worker_scbs(coinsert_serv.function_map);
-	
+	coselect_scbs = get_worker_scbs(coselect_serv.function_map);
 	//connect to process daemon and do the startup dance (we can dance if we want to)
-	if (coproc_init(global_ns, coinsert_scbs[0], NULL) == NULL)
+	if (coproc_init(sealed_global_ns, coinsert_scbs[0], coselect_scbs[0], NULL) == NULL)
 		err(error, "coproc_init: cocall failed");
 
 	/* Once coprovide has been inserted into the global namespace, we can make progress*/
-	while(lookup_coservice(COPROVIDE, global_ns) == NULL)
+	while(lookup_coservice(U_COPROVIDE, global_ns) == NULL)
 		sched_yield();
 
-	coprovide_service = codiscover(COPROVIDE, global_ns, &coprovide_scb);
-	set_cocall_target(ukern_call_set, COPROVIDE, coprovide_scb);
+	coprovide_service = codiscover(U_COPROVIDE, global_ns, &coprovide_scb);
+	set_cocall_target(ukern_call_set, COCALL_COPROVIDE, coprovide_scb);
 	
-	coinsert_serv.service = coprovide(COINSERT, coinsert_scbs, nworkers, NULL, global_ns);
+	coinsert_serv.service = coprovide(coinsert_scbs, nworkers);
+	coinsert_serv.nsobj = create_nsobject(U_COINSERT, COSERVICE, global_ns);
+	coinsert_serv.nsobj->coservice = coinsert_serv.service;
+
+	coselect_serv.service = coprovide(coselect_scbs, nworkers);
+	coselect_serv.nsobj = create_nsobject(U_COSELECT, COSERVICE, global_ns);
+	coselect_serv.nsobj->coservice = coselect_serv.service;
 }
 
 static
-void init_service(const char * name, coservice_provision_t *service_prov)
+void init_global_service(const char * name, coservice_provision_t *service_prov)
 {
 	void **scbs;
+	static namespace_t *global = get_global_namespace();
+	
 	scbs = get_worker_scbs(service_prov->function_map);
-	service_prov->service = coprovide(name, scbs, nworkers, NULL, global_ns);
+	service_prov->service = coprovide(scbs, nworkers);
+
+	nsobject_t *obj = create_nsobject(name, COSERVICE, global);
+	obj->coservice = service_prov->service;
+	service_prov->nsobj = obj;
 	return;
 }
 
@@ -91,12 +106,11 @@ void init_services(void)
 	codrop_serv.function_map = spawn_workers(drop_namespace, validate_codrop_args, nworkers);
 
 	safety_dance();
-	init_service(COINSERT, &coinsert_serv);
-	init_service(COUPDATE, &coupdate_serv);
-	init_service(COPROVIDE, &coprovide_serv);
-	init_service(CODELETE, &codelete_serv);
-	init_service(COCREATE, &cocreate_serv);
-	init_service(CODROP, &codrop_serv);
+	init_global_service(U_COUPDATE, &coupdate_serv);
+	init_global_service(U_COPROVIDE, &coprovide_serv);
+	init_global_service(U_CODELETE, &codelete_serv);
+	init_global_service(U_COCREATE, &cocreate_serv);
+	init_global_service(U_CODROP, &codrop_serv);
 
 	return;
 }
