@@ -59,18 +59,17 @@ void *lookup_commap(char *name, namespace_t *ns_cap)
 nsobject_t *lookup_nsobject(const char *name, nsotype_t nsobject_type, namespace_t *ns_cap)
 {
 	nsobject_t *result;
-	struct _member *member;
+	struct _ns_member *member, *member_temp;
 	ns_cap = unseal_ns(ns_cap);
-	member = LIST_FIRST(&ns_cap->members->objects);
-	while (member != NULL) {
+
+	LIST_FOREACH_SAFE (member, &ns_cap->members->objects, entries, member_temp) {
 		result = member->nsobj;
-		if(result->type != nsobject_type)
-			member = LIST_NEXT(member, entries);
-		else if(strncmp(result->name, name, NS_NAME_LEN) == 0) {
+		if((strncmp(result->name, name, NS_NAME_LEN) == 0) && (result->type != nsobject_type)) {
 			result = cheri_setboundsexact(result, sizeof(nsobject_t));
 			return (result);
 		}
 	}
+	
 	return (NULL);
 }
 
@@ -78,25 +77,35 @@ int in_namespace(const char *name, namespace_t *ns_cap)
 {
 	nsobject_t *obj;
 	namespace_t *ns;
-	struct _member *member;
+	struct _ns_member *member, *member_temp;
 	ns_cap = unseal_ns(ns_cap);
-	member = LIST_FIRST(&ns_cap->members->objects);
-	while (member != NULL) {
+
+	LIST_FOREACH_SAFE (member, &ns_cap->members->objects, entries, member_temp) {
 		obj = member->nsobj;
-		if(strncmp(obj->name, name, NS_NAME_LEN) == 0) {
+		if(strncmp(obj->name, name, NS_NAME_LEN) == 0) 
 			return (1);
-		}
-		member = LIST_NEXT(member, entries);
 	}
-	member = LIST_FIRST(&ns_cap->members->namespaces);
-	while (member != NULL) {
+
+	LIST_FOREACH_SAFE(member, &ns_cap->members->namespaces, entries, member_temp) {
 		ns = member->ns;
-		if(strncmp(ns->name, name, NS_NAME_LEN) == 0) {
+		if(strncmp(ns->name, name, NS_NAME_LEN) == 0) 
 			return (1);
-		}
-		member = LIST_NEXT(member, entries);
+		
+
 	}
 	return (0);
 }
 
+int is_child_namespace(const char *name, namespace_t *ns_cap)
+{
+	namespace_t *ns;
+	struct _ns_member *member, *member_temp;
+	ns_cap = unseal_ns(ns_cap);
 
+	LIST_FOREACH_SAFE(member, &ns_cap->members->namespaces, entries, member_temp) {
+		ns = member->ns;
+		if(strncmp(ns->name, name, NS_NAME_LEN) == 0)
+			return (1);
+	}
+	return (0);
+}

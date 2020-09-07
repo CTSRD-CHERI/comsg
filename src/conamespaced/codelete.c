@@ -32,6 +32,8 @@
 #include "ukern/cocall_args.h"
 #include "ukern/utils.h"
 
+#include <string.h>
+
 int validate_codelete_args(codelete_args_t *cocall_args)
 {
 	nsobject_t *obj = unseal_nsobj(cocall_args->nsobj);
@@ -48,43 +50,25 @@ void delete_namespace_object(codelete_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	nsobject_t *nsobj, *parent_obj;
-	
-	//
-	if (!NSOBJ_PERMITS_DELETE(cocall_args->nsobj)) {
-		cocall_args->status = -1;
-		cocall_args->error = EACCES;
-		return;
-	}
-	nsobj = unseal_nsobj(cocall_args->nsobj);
 
+	if (!NSOBJ_PERMITS_DELETE(cocall_args->nsobj)) 
+		COCLAL_ERR(EACCES)
+	
+	nsobj = unseal_nsobj(cocall_args->nsobj);
 	//Check that the supplied namespace authorises actions on this namespace object
 	parent_obj = lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap);
-	if (parent_obj == NULL) {
-		//No object with that name and type.
-		cocall_args->status = -1;
-		cocall_args->error = ENOENT;
-		return;
-	}
-	else if (parent_obj != nsobj) {
-		//There is an object with that name and type, but it's not this object
-		cocall_args->status = -1;
-		cocall_args->error = EPERM;
-		return;
-	}
-
+	if (parent_obj == NULL) 
+		COCALL_ERR(cocall_args_ENOENT); //No object with that name and type.
+	else if (parent_obj != nsobj) 
+		COCALL_ERR(cocall_args, EPERM); //There is an object with that name and type, but it's not this object
+	//XXX-PBB: The EPERM above may be incorrect and leak information about the namespace contents.
+	
 	if(!delete_nsobject(parent_obj, cocall_args->ns_cap)) {
 		//Someone beat us to it
 		//Or there's a bug
 		assert(lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap) != nsobj) 
-		cocall_args->status = -1;
-		cocall_args->error = ENOENT;
-		return;
+		COCALL_ERR(cocall_args, ENOENT);
 	}
-	parent_obj->obj = NULL;
-	parent_obj->type = INVALID;
-
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
-	return;
+	
+	COCALL_RETURN(cocall_args);
 }

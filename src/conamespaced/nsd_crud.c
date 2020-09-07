@@ -162,18 +162,45 @@ nsobject_t *create_nsobject(const char *name, nsobjtype_t type, namespace_t *par
 int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 {
 	nsobject_t *result;
-	struct _member *member;
+	struct _ns_member *member, *member_temp;
 	ns_cap = unseal_ns(ns_cap);
 	ns_obj = unseal_nsobj(ns_obj);
-	member = LIST_FIRST(&ns_cap->members->objects);
-	while (member != NULL) {
+
+	LIST_FOREACH_SAFE (member, &ns_cap->members->objects, entries, member_temp) {
 		result = member->nsobj;
-		if(result != ns_obj) 
-			member = LIST_NEXT(member, entries);
-		else {
+		if(result == ns_obj) 
 			LIST_REMOVE(member, entries);
+			strnset(result->name, '\0', NS_NAME_LEN);
+			result->obj = NULL;
+			result->type = INVALID;
+			nsobject_deleted();
+			cocall_free(member);
 			return (1);
-		}
 	}
 	return (0);
+}
+
+int delete_namespace(namespace_t *ns_cap)
+{
+	struct _ns_member *member, *member_temp;
+	namespace_t *parent_ns;
+
+	ns_cap = unseal_ns(ns_cap);
+	parent_ns = unseal_ns(ns_cap->parent);
+
+	LIST_FOREACH_SAFE(member, &ns_cap->members->namespaces, entries, member_temp) {
+		ns = member->ns;
+		if (ns_cap == ns) {
+			LIST_REMOVE(member, entries);
+			//TODO-PBB: oh boy we gotta do big work now
+			//Are all child namespaces now invalid?
+			//Are all nsobjects below this invalid?
+			//In the case of the global namespace, the answer to both of these is yes.
+			//Should these simply "merge up?" - this could be problematic, I think
+			//This could represent a substantial amount of work; should we make the cocalling thread do it for us?
+			//There are large concurrency issues around this whole thing.
+			return (1)
+		}
+	}
+
 }

@@ -77,7 +77,6 @@ typedef struct _nsobject
 #if 0
 //handled by the namespace manager
 //for user programs, might implement something similar
-//less necessary now that most nsobject capabilities are unsealed
 nobjtype_t get_nsobject_type(nsobject_t *nsobj);
 nsobjtype_t nsobject_otype_to_type(long otype);
 long nsobject_type_to_otype(nsobjtype_t type);

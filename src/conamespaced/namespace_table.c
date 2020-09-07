@@ -151,10 +151,10 @@ new_nsobject_entry(void)
 
 nsobject_t *allocate_nsobject(namespace_t *parent)
 {
-	struct _member *obj_cap;
+	struct _ns_member *obj_cap;
 	assert(NS_PERMITS_WRITE(parent));
 
-	obj_cap = cocall_malloc(sizeof(struct _member));
+	obj_cap = cocall_malloc(sizeof(struct _ns_member));
 	obj_cap->nsobj = new_nsobject_entry();
 	parent = unseal_ns(parent);
 	LIST_INSERT_HEAD(&parent->members.objects, obj_cap, entries);
@@ -164,7 +164,7 @@ nsobject_t *allocate_nsobject(namespace_t *parent)
 
 namespace_t *allocate_namespace(namespace_t *parent, nstype_t type)
 {
-	struct _member *obj_cap;
+	struct _ns_member *obj_cap;
 	if(type == GLOBAL) {
 		assert(parent == NULL);
 		assert(global_namespace == NULL);
@@ -174,7 +174,7 @@ namespace_t *allocate_namespace(namespace_t *parent, nstype_t type)
 	else {
 		assert(NS_PERMITS_WRITE(parent));
 	}
-	obj_cap = cocall_malloc(sizeof(struct _member));
+	obj_cap = cocall_malloc(sizeof(struct _ns_member));
 	obj_cap->ns = new_namespace_entry();
 	parent = unseal_ns(parent);
 	LIST_INSERT_HEAD(&parent->members.namespaces, obj_cap, entries);
@@ -205,4 +205,16 @@ int in_nsobject_table(nsobject_t *ptr)
 {
 	vaddr_t addr = cheri_getaddress(ptr);
 	return (cheri_is_address_inbounds(nsobject_table.nsobjects, addr));
+}
+
+void nsobject_deleted(void)
+{
+	atomic_fetch_sub(&nsobject_table.nsobject_count, 1);
+	return;
+}
+
+void namespace_deleted(void)
+{
+	atomic_fetch_sub(&namespace_table.namespace_count, 1);
+	return;
 }

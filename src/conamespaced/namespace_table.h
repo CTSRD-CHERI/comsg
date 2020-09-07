@@ -36,9 +36,10 @@
 /* This is in a separate struct to make revoking namespace handles much easier */
 /* It also makes symlinking, copying, and moving namespaces possible */
 
-//TODO-PBB: rework into linked lists now we have ccmalloc
+//XXX-PBB: These data structures are... IMO, not great. I'd like to do something "better" but am 
+//not finding that it's coming to me right now.
 
-struct _member {
+struct _ns_member {
 	LIST_ENTRY(_member) entries;
 	union {
 		namespace_t *ns;
@@ -65,5 +66,9 @@ void *get_global_namespace(void);
 
 int in_ns_table(namespace_t *ptr);
 int in_nsobject_table(nsobject_t *ptr);
+
+void namespace_deleted(void);
+void nsobject_deleted(void);
+
 
 #endif //!defined (_NSD_TABLE_H)

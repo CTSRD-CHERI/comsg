@@ -28,11 +28,11 @@
 
 #define COCALL_ERR(c, n) c->status = (-1);\
 	c->error = (n);\
-	return;
+	return
 
 #define COCALL_RETURN(c) c->status = (0);\
 	c->error = (0);\
-	return;
+	return
 
 struct coproc_init {
 	void *codiscover;
@@ -45,6 +45,12 @@ struct cocreate
 	char name[NS_NAME_LEN];
 	nstype_t type;
 	namespace_t *child_ns_cap;
+};
+
+struct codrop
+{
+	//Effectively empty, contents are ignored
+	char codrop_padding;
 };
 
 struct codelete 

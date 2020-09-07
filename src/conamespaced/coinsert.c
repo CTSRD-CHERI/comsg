@@ -38,28 +38,20 @@ int validate_coinsert_args(coinsert_args_t *cocall_args)
 	namespace_t *ns = unseal_ns(cocall_args->ns_cap);
 	if (!valid_namespace_cap(cocall_args->ns_cap))
 		return (0);
-	else if (ns->type == GLOBAL)
-		return (0)
 	else
 		return (1);
 }
 
-void insert_namespace_object(coinsert_args_t *cocall_args)
+void insert_namespace_object(coinsert_args_t *cocall_args, void *token)
 {
 	nsobject_t *obj;
 	namespace_t *ns;
 
 	ns = unseal_ns(cocall_args->ns_cap);
-	if (!NS_PERMITS_WRITE(cocall_args->ns_cap)) {
-		cocall_args->status = -1;
-		cocall_args->error = EACCES;
-		return;
-	}
-	else if(in_namespace(cocall_args->name, ns)) {
-		cocall_args->status = -1;
-		cocall_args->error = EEXIST;
-		return;
-	}
+	if (!NS_PERMITS_WRITE(cocall_args->ns_cap)) 
+		COCALL_ERR(cocall_args, EACCES);
+	else if(in_namespace(cocall_args->name, ns)) 
+		COCALL_ERR(cocall_args, EEXIST);
 
 	/* create object */
 	obj = create_nsobject(cocall_args->name, cocall_args->type, ns);
@@ -82,10 +74,18 @@ void insert_namespace_object(coinsert_args_t *cocall_args)
 		default:
 			break;
 	}
-
+	/* TODO-PBB: I am flip-flopping on whether this is the right thing to do
+	 * Sealing all nsobjects requires tighter integration of microkernel compartments
+	 * and/or cross-compartment calls. Not sealing them exposes the handles stored
+	 * in nsobjects more than my gut is comfortable with.
+	 * One solution that might bring balance to the force would be to use local/global 
+	 * or similar colours to manage flow. Handles could be local capabilities, while
+	 * nsobjects could be set up as global capabilities with PERMIT_STORE_LOCAL_CAPABILITY
+	 * which is stripped once the handle is stored. Using handles after this point becomes 
+	 * tricky however. Microkernel calls might need to be special to allow this.
+	 * It also requires the cocall_args to be allocated with PERMIT_STORE_LOCAL_CAPABILITY
+	 */
 	cocall_args->nsobj = seal_nsobj(obj);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
 
-	return;
+	COCALL_RETURN(cocall_args);
 }

@@ -102,11 +102,9 @@ void *make_otypes(void * rootcap, int n_otypes, struct object_type **results)
     assert(cheri_getlen(rootcap) <= n_otypes);
     assert(cheri_getperm(rootcap) & ( CHERI_PERM_SEAL | CHERI_PERM_UNSEAL ));
 
-    void * seal_root = cheri_setboundsexact(rootcap, i);
+    void *seal_root = cheri_setboundsexact(rootcap, i);
     for(int i = 0; i < n_otypes; i++)
-    {
         make_otype(seal_root, i, results[i]);
-    }
 
     return (cheri_incoffset(rootcap, i));
 }
