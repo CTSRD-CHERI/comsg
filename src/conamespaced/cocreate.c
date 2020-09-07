@@ -24,20 +24,37 @@
  * SUCH DAMAGE.
  */
 #include "nsd.h"
+#include "nsd_crud.h"
+#include "nsd_lookup.h"
 
 #include "ukern/cocall_args.h"
 #include "ukern/utils.h"
 
+#include <errno.h>
+
 int validate_cocreate_args(cocreate_args_t *cocall_args)
 {
-	UNUSED(cocall_args);
-	return (1);
+	//XXX-PBB: extensive type based checking is neglected here, as types are likely to get a rework
+	if(!valid_namespace_cap(cocall_args->ns_cap))
+		return (0);
+	else if (cocall_args->type == GLOBAL || cocall_args->type == INVALID)
+		return (0);
+	else if (!valid_ns_name(cocall_args->name))
+		return (0);
+	else
+		return (1);
 }
 
 void create_namespace(cocreate_args_t *cocall_args, void *token)
 {
-	UNUSED(cocall_args);
 	UNUSED(token);
-	//TODO-PBB: implement
-	return;
+
+	if(!NS_PERMITS_WRITE(cocall_args->ns_cap))
+		COCALL_ERR(cocall_args, EACCES);
+	else if (in_namespace(cocall_args->name, cocall_args->ns_cap)) 
+		COCALL_ERR(cocall_args, EEXIST);
+
+	cocall_args->child_ns_cap = create_namespace(cocall_args->name, cocall_args->type, cocall_args->ns_cap);
+	
+	COCALL_RETURN(cocall_args);
 }

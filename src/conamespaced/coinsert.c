@@ -35,9 +35,13 @@
 
 int validate_coinsert_args(coinsert_args_t *cocall_args)
 {
-	namespace_t *ns = cocall_args->ns_cap;
-	if ()
-	return (1);
+	namespace_t *ns = unseal_ns(cocall_args->ns_cap);
+	if (!valid_namespace_cap(cocall_args->ns_cap))
+		return (0);
+	else if (ns->type == GLOBAL)
+		return (0)
+	else
+		return (1);
 }
 
 void insert_namespace_object(coinsert_args_t *cocall_args)
@@ -74,7 +78,6 @@ void insert_namespace_object(coinsert_args_t *cocall_args)
 			break;
 		case RESERVATION:
 			obj->obj = NULL;
-			obj = seal_nsobj(obj);
 			break;
 		default:
 			break;
