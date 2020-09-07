@@ -30,14 +30,30 @@
 
 int validate_codrop_args(codrop_args_t *cocall_args)
 {
-	UNUSED(cocall_args);
-	return (1);
+	//XXX-PBB: this does not leak information, as the type of a namespace capability
+	//is denoted also by its otype.
+	namespace_t *ns = unseal_ns(cocall_args->ns_cap);
+	if(!valid_namespace_cap(cocall_args->ns_cap))
+		return (0);
+	else if (cocall_args->type == GLOBAL || cocall_args->type == INVALID)
+		return (0);
+	else
+		return (1);
 }
 
 void drop_namespace(codrop_args_t *cocall_args, void *token)
 {
-	UNUSED(cocall_args);
 	UNUSED(token);
-	//TODO-PBB: implement
-	return;
+	namespace_t *ns, *parent_ns;
+
+	if((cheri_getperm(cocall_args->ns_cap) & NS_PERMS_OWN) == 0)
+		COCALL_ERR(cocall_args, EACCES);
+	ns = unseal_ns(cocall_args->ns_cap);
+	if (!is_child_namespace(ns->name, ns->parent_ns))
+		COCALL_ERR(cocall_args, ENOENT);
+	//TODO-PBB: namespace deletion is a big job, and is not fully implemented yet
+	if(!delete_namespace(cocall_args->ns_cap))
+		COCALL_ERR(cocall_args, ENOENT);
+	
+	COCALL_RETURN(cocall_args);
 }
