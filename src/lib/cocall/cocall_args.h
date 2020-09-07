@@ -23,13 +23,28 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+//TODO-PBB: get params correctly
 #include "sys_comsg.h"
+
+#define COCALL_ERR(c, n) c->status = (-1);\
+	c->error = (n);\
+	return;
+
+#define COCALL_RETURN(c) c->status = (0);\
+	c->error = (0);\
+	return;
 
 struct coproc_init {
 	void *codiscover;
 	void *coinsert;
 	void *coselect;
+};
+
+struct cocreate 
+{
+	char name[NS_NAME_LEN];
+	nstype_t type;
+	namespace_t *child_ns_cap;
 };
 
 struct codelete 
