@@ -30,7 +30,7 @@
 	c->error = (n);\
 	return
 
-#define COCALL_RETURN(c) c->status = (0);\
+#define COCALL_RETURN(c, n) c->status = (n);\
 	c->error = (0);\
 	return
 
@@ -46,6 +46,16 @@ struct cocreate
 	nstype_t type;
 	namespace_t *child_ns_cap;
 };
+
+struct coupdate {
+	nsobject_t *nsobj;
+	nsobject_type_t type;
+	union {
+		void *obj;
+		coservice_t *coservice;
+		coport_t *coport;
+	};
+}
 
 struct codrop
 {
@@ -93,7 +103,6 @@ struct coprovide
 struct coopen
 {
 	coport_type_t type;
-	char name[COPORT_NAME_LEN];
 	coport_t *port; 
 };
 
@@ -123,15 +132,15 @@ struct comunmap
 typedef struct _pollcoport_t
 {
 	coport_t *coport;
-	int events;
-	int revents;
+	coport_eventmask_t events;
+	coport_eventmask_t revents;
 } pollcoport_t;
 
 struct copoll
 {
 	pollcoport_t *coports;
 	uint ncoports;
-	int timeout; 
+	long timeout; 
 };
 
 struct cocall_args

@@ -197,7 +197,6 @@ int cosend(const coport_t prt, const void * buf, size_t len)
             retval = call.status;
             break;
         case COPIPE:
-            
             for(;;)
             {
                 status_val = COPORT_READY;

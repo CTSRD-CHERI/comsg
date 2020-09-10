@@ -66,3 +66,9 @@ coservice_t *unseal_coservice(coservice_t *service_handle)
 		return (service_handle);
 	return (cheri_unseal(service_handle, coservice_obj.usc));
 }
+
+coservice_t *create_coservice_handle(coservice_t *service)
+{
+	service = cheri_clearperm(service, CHERI_PERM_GLOBAL);
+	return (seal_coservice(service));
+}

@@ -23,30 +23,62 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include "coport_utils.h"
 
-#include <cheri/cherireg.h>
+#include "sys_comsg.h"
+#include "ukern_mman.h"
+#include "ukern_msg_malloc.h"
+#include "comesg_kern.h"
+#include "coport.h"
+#include "ukern_tables.h"
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+#include <cheri/cheric.h>
+#include <sys/mman.h>
+#include <stdatomic.h>
+#include <err.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
-#endif
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
 
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
+int init_port(coport_type_t type, sys_coport_t* p)
+{
 
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
+	if(type==COPIPE)
+	{
+		p->length=CHERICAP_SIZE;
+		p->buffer=NULL;
+		p->end=0;
+	}
+	else if(type==COCARRIER)
+	{
+		p->length=0;
+		p->end=0;
+		p->buffer=get_mem(COPORT_BUF_LEN);
+		LIST_INIT(&p->listeners);
+	}
+	else
+	{
+		p->end=0;
+		p->length=COPORT_BUF_LEN;
+		p->buffer=get_mem(COPORT_BUF_LEN);
+	}
+	
+	//memset(p->buffer,0,p->length);
+	//printf("got memory from ukern_mman subsystem\n");
+	p->status=COPORT_OPEN;
+	p->start=0;
+	p->type=type;
+	p->event=COPOLL_INIT_EVENTS;
+	//memset(&p->read_lock,0,sizeof(comutex_t));
+	//memset(&p->write_lock,0,sizeof(comutex_t));
 
-#endif //_NSD_CAP_H
+	return 0;
+}
+
+

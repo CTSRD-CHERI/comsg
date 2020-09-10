@@ -23,30 +23,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
+#ifndef UKERN_UTILS_H
+#define UKERN_UTILS_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#define KEYSPACE 62
 
-#include <cheri/cherireg.h>
+#include <stddef.h>
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
+int generate_id(void);
+int rand_string(char * buf, size_t len);
+//In case of desperation while debugging, break glass.-PBB
+void debug_noop(int i); 
+int is_multicore(void);
+
 #endif
-
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
-
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
-
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H

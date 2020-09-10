@@ -34,4 +34,6 @@
 coservice_t *seal_coservice(coservice_t *);
 coservice_t *unseal_coservice(coservice_t *);
 
+coservice_t *create_coservice_handle(coservice_t *);
+
 #endif

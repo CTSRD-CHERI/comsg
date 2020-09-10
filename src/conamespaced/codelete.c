@@ -58,7 +58,7 @@ void delete_namespace_object(codelete_args_t *cocall_args, void *token)
 	//Check that the supplied namespace authorises actions on this namespace object
 	parent_obj = lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap);
 	if (parent_obj == NULL) 
-		COCALL_ERR(cocall_args_ENOENT); //No object with that name and type.
+		COCALL_ERR(cocall_args, ENOENT); //No object with that name and type.
 	else if (parent_obj != nsobj) 
 		COCALL_ERR(cocall_args, EPERM); //There is an object with that name and type, but it's not this object
 	//XXX-PBB: The EPERM above may be incorrect and leak information about the namespace contents.

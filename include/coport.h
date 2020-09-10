@@ -119,17 +119,6 @@ struct _coport
     };
 };
 
-typedef struct _coport sys_coport_t;
-/* 
- * coport_t is a handle to a coport. User code should see this as opaque,
- * as a dereferenceable capability should never be exposed to it. It is
- * only dereferenced in the ipc daemon or in the shared library.
- */
-typedef struct _coport *coport_t; 
-
-typedef struct _named_coport {
-    char name[COPORT_NAME_LEN];
-    coport_t port;
-} named_coport_t;
+typedef struct _coport coport_t; 
 
 #endif
