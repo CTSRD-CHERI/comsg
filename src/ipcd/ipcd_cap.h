@@ -28,47 +28,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coservice_table.h"
 
-#include "ukern/coservice.h"
-#include "ukern/namespace.h"
-#include "ukern/worker_map.h"
-#include "ukern/ukern_calls.h"
+#ifndef _IPCD_CAP_H
+#define _IPCD_CAP_H
 
-#include <err.h>
+int valid_coport(coport_t*);
+int valid_cocarrier(coport_t*);
 
-static namespace_t *global;
+coport_t *unseal_coport(coport_t*);
+coport_t *seal_coport(coport_t*);
 
-
-static 
-void init_service(coservice_provision_t *serv, void *func, void *valid)
-{
-	coservice_t *service = allocate_coservice();
-	function_map_t *service_map = spawn_workers(func, valid, nworkers);
-	
-	service->worker_scbs = get_worker_scbs(service_map);
-	
-	serv->service = service;
-	serv->function_map = service_map;
-	return;
-}
-
-void coserviced_startup(void)
-{
-	//init own services
-	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args);
-	init_service(&coprovide_serv, provide_coservice, valid_coprovide_args);
-	
-	codiscover_scb = get_coservice_scb(codiscover_serv.service);
-	//connect to process daemon and do the startup dance (we can dance if we want to)
-	global = coproc_init(NULL, NULL, NULL, codiscover_scb);
-	if (global == NULL)
-		err(error, "coproc_init: cocall failed");
-
-	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, codiscover_serv.service, global);
-	if (codiscover_serv.nsobj == NULL)
-		err(errno, "coserviced_startup: error coinserting codiscover into global namespace");
-	coprovide_serv.nsobj = coinsert(U_COPROVIDE, COSERVICE, coprovide_serv.service, global);
-	if (coprovide_serv.nsobj == NULL)
-		err(errno, "coserviced_startup: error coinserting coprovide into global namespace");
-}
+#endif //!defined(_IPCD_CAP_H)

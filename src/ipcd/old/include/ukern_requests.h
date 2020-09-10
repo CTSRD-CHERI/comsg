@@ -23,30 +23,41 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
+#ifndef UKERN_REQUESTS_H
+#define UKERN_REQUESTS_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include "sys_comsg.h"
+#include "ukern_params.h"
 
-#include <cheri/cherireg.h>
+#include <pthread.h>
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+typedef struct _worker_args_t 
+{
+	char name[LOOKUP_STRING_LEN];
+	void * __capability cap;
+} worker_args_t;
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
+typedef struct _worker_map_entry_t
+{
+	char func_name[LOOKUP_STRING_LEN];
+	worker_args_t workers[WORKER_COUNT];
+} worker_map_entry_t;
+
+typedef struct _request_handler_args_t
+{
+	char func_name[LOOKUP_STRING_LEN];
+} request_handler_args_t;
+
+void update_worker_args(worker_args_t * args, const char * function_name);
+void *manage_requests(void *args);
+int spawn_workers(void * func, pthread_t * threads, const char * name);
+int coaccept_init(
+    void * __capability * __capability  code_cap,
+    void * __capability * __capability  data_cap, 
+    const char * target_name,
+    void * __capability * __capability target_cap);
+
+extern worker_map_entry_t worker_map[U_FUNCTIONS];
+extern worker_map_entry_t private_worker_map[UKERN_PRIV];
+
 #endif
-
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
-
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
-
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H

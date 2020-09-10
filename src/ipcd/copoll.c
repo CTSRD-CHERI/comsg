@@ -1,0 +1,150 @@
+/*
+ * Copyright (c) 2020 Peter S. Blandford-Baker
+ * All rights reserved.
+ *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+#include "ukern/ccmalloc.h"
+#include "ukern/cocall_args.h"
+#include "ukern/utils.h"
+
+
+int validate_copoll_args(copoll_args_t *cocall_args)
+{
+	for (size_t i = 0; i < cocall_args->ncoports; i++)
+	{
+		if (!valid_cocarrier(cocall_args->coports[i].coport))
+			return (0);
+	}
+	return (1);
+}
+
+static
+int inspect_events(pollcoport_t *coports, size_t ncoports)
+{
+	int matched_events = 0;
+	coport_t *cocarrier;
+	for (size_t i = 0; i < ncoports; i++)
+	{
+		coports[i].coport = unseal_coport(coports[i].coport);
+		coports[i].revents = (coports[i].events & coports[i].coport->info->event);
+		if (coports[i].revents != NOEVENT)
+			matched_events++;
+	}
+	return (matched_events);
+}
+
+static
+void populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
+{
+	for (uint i = 0; i < ncoports; i++)
+		user[i].revents = ukern[i].revents;
+	return;
+}
+
+/* 
+ * Cocarriers call into the microkernel. Others do not. There are several reasons, among which:
+ * 1. We control cocarrier use more tightly to enable event delivery
+ * 2. We need 1 microkernel thread per user thread to service cocalls, and have to economise somewhere
+ */
+coport_listener_t *init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
+{
+	coport_listener_t *listen_entries = cocall_calloc(ncoports, CHERICAP_SIZE);
+	for (uint i = 0; i < ncoports; i++) 
+	{
+		listen_entries[i] = cocall_malloc(sizeof(coport_listener_t));
+		listen_entries[i]->wakeup = cond;
+		listen_entries[i]->revents = NOEVENT;
+		listen_entries[i]->events = coports[i].events;
+	}
+	return (listen_entries);
+}
+
+
+static
+int wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
+{
+	pthread_cond_t wake;
+	pthread_condattr_t wake_attr;
+	int matched = 0;
+
+	pthread_condattr_init(&wake_attr);
+	pthread_condattr_setclock(&wake_attr, CLOCK_MONOTONIC);
+	pthread_cond_init(&wake, wake_attr);
+
+	coport_listener_t *listen_entries = init_listeners(coports, ncoports, &wake);
+
+	acquire_copoll_mutex();
+	for (uint i = 0; i < ncoports; i++)
+		LIST_INSERT_HEAD(&coports[i].coport->listeners, listen_entries[i], entries);
+
+	copoll_wait(&wake, timeout);
+
+	for (uint i = 0; i < ncoports; i++) 
+		LIST_REMOVE(listen_entries[i], entries);
+
+	release_copoll_mutex();
+
+	for (uint i = 0; i < ncoports; i++){
+		coports[i].revents = listen_entries[i]->revents;
+		if (coports[i].revents != NOEVENT)
+			matched++;
+		cocall_free(listen_entries[i]);
+	}
+	cocall_free(listen_entries);
+
+	assert(matched != 0 || timeout > 0);
+
+	return (matched);
+}
+
+void cocarrier_poll(copoll_args_t *cocall_args, void *token)
+{
+	UNUSED(token);
+
+	uint ncoports = cocall_args->ncoports;
+	size_t target_len = ncoports * sizeof(pollcoport_t);
+
+	pollcoport_t *targets = cocall_malloc(target_len);
+	memcpy(targets, cocall_args->coports, target_len); //copyin
+
+	int matched = inspect_events(targets, ncoports);
+	/* 
+	 * If the caller is willing to wait and we have no matches on the events polled for,
+	 * then wait for the specified amount of time.
+	 */
+	if (cocall_args->timeout != 0 && matched == 0) {
+		/* Here (may) be syscalls; we are henceforth on the slow-path. */
+		matched = wait_for_events(targets, ncoports, cocall_args->timeout);
+	}
+
+
+	populate_revents(cocall_args->coports, targets, ncoports);
+
+	COCALL_RETURN(cocall_args, matched);
+}

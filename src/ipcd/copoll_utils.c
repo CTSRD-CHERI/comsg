@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,30 +28,41 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
+#include "copoll_utils.h"
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include <pthread.h>
 
-#include <cheri/cherireg.h>
+static pthread_mutex_t global_copoll_lock;
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+__attribute__((constructor)) static
+void init_copoll_lock(void)
+{
+	pthread_mutexattr_t global_mtx_attr;
+	pthread_mutexattr_init(&global_mtx_attr);
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
-#endif
+	pthread_mutex_init(&global_copoll_lock, global_mtx_attr);
+}
 
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
+void acquire_copoll_mutex(void)
+{
+	pthread_mutex_lock(&global_copoll_lock);
+}
 
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
+void release_copoll_mutex(void)
+{
+	pthread_mutex_unlock(&global_copoll_lock);
+}
 
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H
+void copoll_wait(pthread_cond_t *wait_cond, long timeout)
+{
+	struct timespec wait_time, curtime;
+	if (timeout > 0) {
+		wait_time.tv_sec = timeout / 1000;
+		wait_time.tv_nsec = (timeout % 1000) * 1000000;
+		clock_gettime(CLOCK_MONOTONIC, &curtime);
+		timespecadd(&wait_time, &curtime, &wait_time);
+		pthread_cond_timedwait(wait_cond, &global_copoll_lock, &wait_time);
+	}
+	else 
+		pthread_cond_wait(wait_cond, &global_copoll_lock);
+}

@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,30 +28,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#ifndef _COPORT_TABLE_H
+#define _COPORT_TABLE_H
 
-#include <cheri/cherireg.h>
+coport_t allocate_coport(void);
+int in_coport_table(coport_t *ptr);
+int can_allocate_coport(void);
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
-#endif
-
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
-
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
-
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H
+#endif //!defined(_COPORT_TABLE_H)

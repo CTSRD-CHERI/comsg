@@ -28,39 +28,47 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _UKERN_WORKER_H
-#define _UKERN_WORKER_H
+#include "coservice_table.h"
 
-#include <cheri/cherireg.h>
-#include <pthread.h>
-#include <stdatomic.h>
+#include "ukern/coservice.h"
+#include "ukern/namespace.h"
+#include "ukern/worker_map.h"
+#include "ukern/ukern_calls.h"
 
-typedef struct _worker_args
+#include <err.h>
+
+static namespace_t *global;
+
+static 
+void init_service(coservice_provision_t *serv, void *func, void *valid)
 {
-	/* the worker thread */
-	pthread_t worker;
-	/* 
-	 * pointer to a function that: 
-	 *  + takes a pointer to struct cocall_args, 
-	 *  + modifies it in place,
-	 *  + sets status and error values before returning.
-	 */
-	void *worker_function;
-	/* 
-	 * pointer to a function that:
-	 * 	+ takes a pointer to struct cocall_args,
-	 * 	+ validates the arguments passed from a cocall
-	 * 	+ returns 0 if they fail, else non-zero
-	 */
-	void *validation_function;
-	/* name to coregister under */
-	char name[LOOKUP_STRING_LEN];
-	/* result of coregister */
-	void *scb_cap;
-} worker_args_t;
+	coservice_t *service = allocate_coservice();
+	function_map_t *service_map = spawn_workers(func, valid, nworkers);
+	
+	service->worker_scbs = get_worker_scbs(service_map);
+	
+	serv->service = service;
+	serv->function_map = service_map;
+	return;
+}
 
-typedef struct _worker_args handler_args_t;
+void coserviced_startup(void)
+{
+	coservice_t *coservice_cap;
+	//init own services
+	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args);
+	init_service(&coprovide_serv, provide_coservice, valid_coprovide_args);
+	
+	codiscover_scb = get_coservice_scb(codiscover_serv.service);
+	//connect to process daemon and do the startup dance (we can dance if we want to)
+	global = coproc_init(NULL, NULL, NULL, codiscover_scb);
+	if (global == NULL)
+		err(error, "coproc_init: cocall failed");
 
-void *coaccept_worker(void *worker_argp);
-
-#endif
+	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, create_coservice_handle(codiscover_serv.service), global);
+	if (codiscover_serv.nsobj == NULL)
+		err(errno, "coserviced_startup: error coinserting codiscover into global namespace");
+	coprovide_serv.nsobj = coinsert(U_COPROVIDE, COSERVICE, create_coservice_handle(coprovide_serv.service), global);
+	if (coprovide_serv.nsobj == NULL)
+		err(errno, "coserviced_startup: error coinserting coprovide into global namespace");
+}

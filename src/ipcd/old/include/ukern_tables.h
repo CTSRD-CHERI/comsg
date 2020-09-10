@@ -23,30 +23,46 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
+#ifndef UKERN_TABLES_H
+#define UKERN_TABLES_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include "coport.h"
 
-#include <cheri/cherireg.h>
+#include <stdatomic.h>
+#include <stdbool.h>
+#include <pthread.h>
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
+#define TBL_FLAGS (\
+	MAP_ANON | MAP_SHARED | MAP_ALIGNED_CHERI \
+	| MAP_ALIGNED_SUPER | MAP_PREFAULT_READ )
+#define TBL_PERMS ( PROT_READ | PROT_WRITE )
+
+typedef struct _coport_tbl_entry_t
+{
+	unsigned int id;
+	sys_coport_t port;
+	sys_coport_t * port_cap;
+	char name[COPORT_NAME_LEN];
+	long ref_count;
+} coport_tbl_entry_t;
+
+typedef struct _coport_tbl_t
+{
+	_Atomic int index;
+	_Atomic int lookup_in_progress;
+	_Atomic int add_in_progress;
+	coport_tbl_entry_t * table;
+} coport_tbl_t;
+
+
+void init_coport_table_entry(coport_tbl_entry_t * entry, sys_coport_t port, const char * name);
+int coport_tbl_setup(void);
+int lookup_port(char * port_name,sys_coport_t ** port_buf, coport_type_t type);
+int add_port(coport_tbl_entry_t entry);
+bool in_coport_table(void * __capability addr);
+
+//extern comutex_tbl_t comutex_table;
+extern coport_tbl_t coport_table;
+
 #endif
-
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
-
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
-
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H

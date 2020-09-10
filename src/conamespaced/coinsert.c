@@ -31,7 +31,7 @@
 #include "ukern/namespace_object.h"
 #include "ukern/utils.h"
 
-#define CLEAR_STORE_PERM(c) cheri_andperm(c, ~(CHERI_PERM_STORE | CHERI_PERM_STORE_CAP))
+
 
 int validate_coinsert_args(coinsert_args_t *cocall_args)
 {
@@ -58,15 +58,15 @@ void insert_namespace_object(coinsert_args_t *cocall_args, void *token)
 	switch(cocall_args->type) {
 		case COMMAP:
 			obj->obj = cocall_args->obj;
-			obj = CLEAR_STORE_PERM(obj);
+			obj = CLEAR_NSOBJ_STORE_PERM(obj);
 			break;
 		case COSERVICE:
 			obj->coservice = cocall_args->coservice;
-			obj = CLEAR_STORE_PERM(obj);
+			obj = CLEAR_NSOBJ_STORE_PERM(obj);
 			break;
 		case COPORT:
 			obj->coport = cocall_args->coport;
-			obj = CLEAR_STORE_PERM(obj);
+			obj = CLEAR_NSOBJ_STORE_PERM(obj);
 			break;
 		case RESERVATION:
 			obj->obj = NULL;
@@ -84,6 +84,7 @@ void insert_namespace_object(coinsert_args_t *cocall_args, void *token)
 	 * which is stripped once the handle is stored. Using handles after this point becomes 
 	 * tricky however. Microkernel calls might need to be special to allow this.
 	 * It also requires the cocall_args to be allocated with PERMIT_STORE_LOCAL_CAPABILITY
+	 * which should be fine so long as we make it a local variable everywhere.
 	 */
 	cocall_args->nsobj = seal_nsobj(obj);
 

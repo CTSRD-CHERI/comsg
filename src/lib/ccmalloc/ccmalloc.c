@@ -413,8 +413,7 @@ void cocall_free(void *cap)
 	{
 		if (bucket->batches[i].freed)
 			continue;
-		if (cheri_is_address_inbounds(bucket->batches[i].map_cap, cap_base))
-		{
+		else if (cheri_is_address_inbounds(bucket->batches[i].map_cap, cap_base)) {
 			if (!free_batch_entry(&bucket->batches[i], cap))
 				err(EINVAL, "cocall_free: cap does not authorise free");
 			else

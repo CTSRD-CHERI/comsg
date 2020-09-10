@@ -23,30 +23,26 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
+#ifndef _SYS_COMUTEX_H
+#define _SYS_COMUTEX_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include "comutex.h"
+#include "sys_comsg.h"
 
-#include <cheri/cherireg.h>
+typedef struct _sys_comutex_t
+{
+	comtx_t * user_mtx;
+	comtx_t * kern_mtx;
+	char name[COMUTEX_NAME_LEN];
+	void * key;
+} sys_comutex_t;
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+__inline int cmtx_cmp(comutex_t * a,comutex_t * b);
+__inline int cmtx_validate(comutex_t * a);
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
+int sys_cotrylock(sys_comutex_t * mutex, void * key);
+int sys_colock(sys_comutex_t * mutex,void * key);
+int sys_counlock(sys_comutex_t * mutex,void * key);
+int sys_comutex_init(char * name, sys_comutex_t * m);
+
 #endif
-
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
-
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
-
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H

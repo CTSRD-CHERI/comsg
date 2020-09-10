@@ -75,7 +75,7 @@ void provide_coservice(coprovide_args_t *cocall_args, void *token)
 	coservice_ptr->workers = cocall_calloc(cocall_args->nworkers, sizeof(worker_args_t));
 	memcpy(coservice_ptr->workers, cocall_args->workers, cheri_getlen(cocall_args->workers));
 
-	cocall_args->service = seal_coservice(coservice_ptr);
+	cocall_args->service = create_coservice_handle(coservice_ptr);
 	cocall_args->status = 0;
 	cocall_args->error = 0;
 

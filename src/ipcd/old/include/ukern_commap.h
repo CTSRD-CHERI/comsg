@@ -23,30 +23,41 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
+#ifndef UKERN_COMMAP_H
+#define UKERN_COMMAP_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include <stdatomic.h>
+#include <sys/queue.h>
+#include <sys/socket.h>
+#include "commap.h"
+#include "sys_comsg.h"
 
-#include <cheri/cherireg.h>
+#define RANDOM_LEN 20
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+#define RECV_FLAGS 0
+#define MAX_FDS 255
+#define MAX_MAP_INFO_SIZE ( MAX_FDS * sizeof(commap_info_t)  )
+#define MAX_MSG_SIZE ( MAX_MAP_INFO_SIZE + sizeof(commap_msghdr_t) )
+#define MAX_CMSG_BUFFER_SIZE ( CMSG_BUFFER_SIZE(MAX_FDS) )
+#define TOKEN_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE )
+#define MMAP_FLAGS(f) ( ( f & ~(MAP_32BIT | MAP_GUARD MAP_STACK) ) | MAP_SHARED )
+#define TOKEN_OTYPE 3
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
+struct ukern_mapping {
+    LIST_ENTRY(ukern_mapping) entries;
+    token_t token;
+    FILE_POS;
+    void * __capability map_cap;
+    _Atomic int refs;
+};
+
+struct ukern_mapping_table {
+    LIST_HEAD(,ukern_mapping) mappings;
+    _Atomic uint count;
+};
+
+
+void *ukern_mmap(void *args);
+void *co_unmap(void *args);
+void *co_mmap(void *args);
 #endif
-
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
-
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
-
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H

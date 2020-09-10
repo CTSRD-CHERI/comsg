@@ -23,30 +23,38 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CAP_H
-#define _NSD_CAP_H
+#ifndef _COMESG_KERN
+#define _COMESG_KERN
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
-
+#include <pthread.h>
+#include <stdatomic.h>
+#include <cheri/cheric.h>
 #include <cheri/cherireg.h>
+#include <stdbool.h>
+#include <sys/queue.h>
 
-#define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+#include "coport.h"
+#include "sys_comsg.h"
+#include "sys_comutex.h"
+#include "ukern_params.h"
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
+
+
+/*#define TBL_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | \
+	CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL |\
+	CHERI_PERM_STORE_LOCAL_CAP )*/
+#define WORKER_FUNCTIONS ( U_FUNCTIONS + UKERN_PRIV )
+
+void *copoll_deliver(void *args);
+void *cocarrier_poll(void *args);
+void *cocarrier_register(void *args);
+void *cocarrier_recv(void *args);
+void *cocarrier_send(void *args);
+void *coport_open(void *args);
+int main(int argc, const char *argv[]);
+
+extern otype_t seal_cap;
+extern long sealed_otype;
+
+
 #endif
-
-namespace_t *unseal_ns(namespace_t *ns_cap);
-namespace_t *seal_ns(namespace_t *ns_cap);
-
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
-
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
-
-#endif //_NSD_CAP_H

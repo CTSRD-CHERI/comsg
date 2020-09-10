@@ -28,16 +28,56 @@
 #include "ukern/cocall_args.h"
 #include "ukern/utils.h"
 
+#include <cheri/cheric.h>
+
 int validate_coupdate_args(coupdate_args_t *cocall_args)
 {
-	UNUSED(cocall_args);
-	return (1);
+	nsobject_t *obj = unseal_nsobj(cocall_args->nsobj);
+	if (!valid_nsobject_cap(cocall_args->nsobj))
+		return (0);
+	else if (!cheri_getsealed(cocall_args->nsobj))
+		return (0);
+	else if ((cocall_args->type & (RESERVATION | INVALID)) == 0)
+		return (0);
+	else if (!cheri_getsealed(cocall_args->obj))
+		return (0);
+	else if (!cheri_local(cocall_args->obj))
+		return (0);
+	else
+		return (1);
 }
 
 void update_namespace_object(coupdate_args_t *cocall_args, void *token)
 {
-	UNUSED(cocall_args);
 	UNUSED(token);
-	//TODO-PBB: implement
-	return;
-}
+	nsobject_t *nsobj, *parent_obj;
+
+	/* BIGTODO-PBB: I'm almost certain there are many races now. Fix this. */
+	nsobj = unseal_nsobj(cocall_args->nsobj);
+	if (nsobj == NULL)
+		COCALL_ERR(cocall_args, ENOENT);
+	else if (!NSOBJ_PERMITS_WRITE(nsobj))
+		COCALL_ERR(cocall_args, EPERM);
+	else if (nsobj->type != RESERVATION) /* Not reached(?). Could be in races? */
+		COCALL_ERR(cocall_args, ENODEV);
+
+	nsobj->type = cocall_args->type;
+	switch(cocall_args->type) {
+		case COMMAP:
+			nsobj->obj = cocall_args->obj;
+			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
+			break;
+		case COSERVICE:
+			nsobj->coservice = cocall_args->coservice;
+			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
+			break;
+		case COPORT:
+			nsobj->coport = cocall_args->coport;
+			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
+			break;
+		default:
+			break;
+	}
+	cocall_args->nsobj = nsobj;
+	COCALL_RETURN(cocall_args);
+}	

@@ -131,8 +131,10 @@ otype_t get_nsobj_unsealcap(nsobjtype_t type)
 static
 nsobjtype_t get_nsobject_type(nsobject_t *nsobj)
 {
+	if (!cheri_getsealed(nsobj))
+		return (nsobj->type);
 	long otype = cheri_gettype(nsobj);
-	return nsobj_otype_to_type(otype);
+	return (nsobj_otype_to_type(otype));
 }
 
 static
@@ -208,6 +210,7 @@ int valid_namespace_cap(namespace_t *ns_cap)
 		return (1);
 }
 
+
 int valid_nsobject_cap(nsobject_t *obj_cap)
 {
 	vaddr_t cap_addr = cheri_getaddress(obj_cap);
@@ -223,4 +226,14 @@ int valid_nsobject_cap(nsobject_t *obj_cap)
 		return (0);
 	else
 		return (1);
+}
+
+int valid_reservation_cap(nsobject_t *obj_cap)
+{
+	if (!cheri_getsealed(obj_cap))
+		return (0);
+	else if (get_nsobject_type(obj_cap) != RESERVATION)
+		return (0)
+	else
+		return (valid_nsobject_cap(obj_cap));
 }

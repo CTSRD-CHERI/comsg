@@ -52,7 +52,7 @@ void setup_table(void)
 	coservice_table.services = mmap(NULL, coservice_table_len, coservice_table_prot, coservice_table_flags, -1, 0);
 	max_services = cheri_getlen(coservice_table.services) / sizeof(struct coservice_t);
 	coservice_table.next_service = max_services - 1;
-	coservice_table.nservices = 0UL;
+	coservice_table.active_services = 0UL;
 }
 
 coservice_t *allocate_coservice(void)
