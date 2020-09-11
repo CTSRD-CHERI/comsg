@@ -71,20 +71,20 @@ struct codelete
 struct coinsert
 {
 	char name[NS_NAME_LEN];
-	nsobject_type_t type;
 	union {
 		void *obj;
 		coservice_t *coservice;
 		coport_t *coport;
 	};
 	nsobject_t *nsobj;
+	nsobject_type_t type;
 };
 
 struct coselect
 {
 	char name[NS_NAME_LEN];
-	nsobject_type_t type;
 	nsobject_t *nsobj;
+	nsobject_type_t type;
 };
 
 struct codiscover
@@ -106,7 +106,14 @@ struct coopen
 	coport_t *port; 
 };
 
-struct cocarrier_send
+struct cosend
+{
+	coport_t *cocarrier;
+	void *message;
+	size_t length;
+};
+
+struct corecv
 {
 	coport_t *cocarrier;
 	void *message;
@@ -156,7 +163,7 @@ struct cocall_args
 		/* copoll */
 		struct copoll;
 		/*cocarrier send/recv*/
-		struct cocarrier_send;
+		struct cosend;
 		/* ukernel function/service lookup */
 		struct codiscover;
 		//

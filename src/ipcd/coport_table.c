@@ -132,7 +132,7 @@ int can_allocate_coport(coport_type_t type)
  * listening for events.
  */
 coport_t **
-walk_cocarrier_table(size_t mod, size_t r)
+get_cocarrier_events(size_t mod, size_t r)
 {
 	coport_t **cocarriers, *cocarrier;
 	size_t idx, end, start, expected_max_len, i;
@@ -151,8 +151,7 @@ walk_cocarrier_table(size_t mod, size_t r)
 			continue;
 		else if (LIST_EMPTY(&cocarrier->cd->listeners))
 			continue;
-		cocarriers[idx] = cocarrier;
-		idx++;
+		cocarriers[++idx] = cocarrier;
 	}
 	if (idx != 0) {
 		cocarriers[idx] = NULL;

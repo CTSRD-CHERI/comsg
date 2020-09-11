@@ -35,8 +35,8 @@
 static pthread_mutex_t global_copoll_lock;
 static pthread_cond_t global_cosend_cond;
 
-__attribute__((constructor)) static
-void init_copoll_lock(void)
+__attribute__((constructor)) static void 
+init_copoll_lock(void)
 {
 	pthread_mutexattr_t global_mtx_attr;
 	pthread_condattr_t global_cond_attr;
@@ -48,17 +48,20 @@ void init_copoll_lock(void)
 	pthread_cond_init(&global_cosend_cond, global_cond_attr);
 }
 
-void acquire_copoll_mutex(void)
+void 
+acquire_copoll_mutex(void)
 {
 	pthread_mutex_lock(&global_copoll_lock);
 }
 
-void release_copoll_mutex(void)
+void 
+release_copoll_mutex(void)
 {
 	pthread_mutex_unlock(&global_copoll_lock);
 }
 
-void copoll_wait(pthread_cond_t *wait_cond, long timeout)
+void 
+copoll_wait(pthread_cond_t *wait_cond, long timeout)
 {
 	struct timespec wait_time, curtime;
 	if (timeout > 0) {
@@ -72,9 +75,17 @@ void copoll_wait(pthread_cond_t *wait_cond, long timeout)
 		pthread_cond_wait(wait_cond, &global_copoll_lock);
 }
 
-void await_copoll_events(void)
+void 
+await_copoll_events(void)
 {
 	pthread_cond_wait(&global_cosend_cond, &global_copoll_lock);
+}
+
+void 
+copoll_notify(coport_t *cocarrier)
+{
+	if(!LIST_EMPTY(&cocarrier->listeners))
+        pthread_cond_signal(&global_cosend_cond);
 }
 
 

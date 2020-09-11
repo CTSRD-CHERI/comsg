@@ -45,7 +45,8 @@
 int 
 validate_copoll_args(copoll_args_t *cocall_args)
 {
-	for (size_t i = 0; i < cocall_args->ncoports; i++) {
+	size_t i;
+	for (i = 0; i < cocall_args->ncoports; i++) {
 		if (!valid_cocarrier(cocall_args->coports[i].coport))
 			return (0);
 	}
@@ -85,8 +86,11 @@ populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
 static coport_listener_t *
 init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 {
-	coport_listener_t *listen_entries = cocall_calloc(ncoports, CHERICAP_SIZE);
-	for (uint i = 0; i < ncoports; i++) {
+	coport_listener_t *listen_entries;
+	uint i;
+	
+	listen_entries = cocall_calloc(ncoports, CHERICAP_SIZE);
+	for (i = 0; i < ncoports; i++) {
 		listen_entries[i] = malloc(sizeof(coport_listener_t));
 		listen_entries[i]->wakeup = cond;
 		listen_entries[i]->revents = NOEVENT;
@@ -99,9 +103,9 @@ init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 static int 
 wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 {
+	coport_listener_t *listen_entries;
 	pthread_cond_t wake;
 	pthread_condattr_t wake_attr;
-	coport_listener_t *listen_entries;
 	int matched;
 	uint i;
 
