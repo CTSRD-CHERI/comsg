@@ -29,11 +29,14 @@
  * SUCH DAMAGE.
  */
 #include "ipcd_cap.h"
+#include "copoll_utils.h"
 
 #include "ukern/cocall_args.h"
+#include "ukern/coport.h"
 #include "ukern/utils.h"
 
 #include <stdatomic.h>
+#include <stddef.h>
 
 int 
 validate_corecv_args(corecv_args_t *cocall_args)
@@ -57,15 +60,23 @@ cocarrier_recv(corecv_args_t *cocall_args, void *token)
 	cocarrier = unseal_coport(cocall_args->cocarrier);
 	cocarrier_buf = cocarrier->buffer->buf;
 
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire))
-		status = COPORT_OPEN;
-	atomic_thread_fence(memory_order_acquire);
+	status = COPORT_OPEN;
+	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
+		switch (status) {
+		case COPORT_CLOSED:
+		case COPORT_CLOSING:
+			COCALL_ERR(cocall_args, EPIPE);
+			break; /* NOTREACHED */
+		default:
+			status = COPORT_OPEN;
+			break;
+		}
+	}
 	event = cocarrier->info->event;
 	port_len = cocarrier->info->length;
 
 	if(port_len == 0 || ((event & COPOLL_IN) == 0)) {
 		cocarrier->info->event = (event | COPOLL_RERR);
-		atomic_thread_fence(memory_order_release);
 		atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
 		COCALL_ERR(cocall_args, EAGAIN);
 	}

@@ -97,7 +97,7 @@ typedef struct {
     _Atomic size_t end;
     _Atomic coport_status_t status;
     _Atomic coport_eventmask_t event;
-} coport_info_t; //bad name :c
+} coport_info_t; //bad name :c and too many atomics (I think)
 
 typedef struct {
     void *buf;
