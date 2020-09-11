@@ -132,7 +132,7 @@ int can_allocate_coport(coport_type_t type)
  * listening for events.
  */
 coport_t **
-get_cocarrier_events(size_t mod, size_t r)
+get_cocarriers(size_t mod, size_t r)
 {
 	coport_t **cocarriers, *cocarrier;
 	size_t idx, end, start, expected_max_len, i;

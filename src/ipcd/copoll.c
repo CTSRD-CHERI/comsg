@@ -130,7 +130,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 	}
 
 	copoll_wait(&wake, timeout);
-	
+
 	for (i = 0; i < ncoports; i++) {
 		coport = unseal_coport(coports[i].coport);
 		status = COPORT_OPEN;
@@ -140,6 +140,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 		LIST_REMOVE(listen_entries[i], entries);
 		atomic_store_explicit(&coport->info->status, COPORT_OPEN, memory_order_release);
 	}
+	pthread_cond_destroy(&wake);
 	release_copoll_mutex();
 
 	matched = 0;

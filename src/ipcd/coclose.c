@@ -29,6 +29,11 @@
  * SUCH DAMAGE.
  */
 
+#include "ipcd_cap.h"
+
+#include "ukern/cocall_args.h"
+#include "ukern/coport.h"
+
 int 
 validate_coclose_args(coclose_args_t *cocall_args)
 {
@@ -38,10 +43,26 @@ validate_coclose_args(coclose_args_t *cocall_args)
 void
 coport_close(coclose_args_t *cocall_args, void *token) 
 {
-	UNUSED(token);
+	UNUSED(token)
+	coport_t *coport;
+	coport_status_t status;
 
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_CLOSING, memory_order_acq_rel, memory_order_acquire))
-		status = COPORT_OPEN;
+	/* TODO-PBB: check permissions */
+	coport = unseal_coport(cocall_args->coport);
+
+	/* TODO-PBB: We should account for closing from COPORT_DONE, or other states, some day*/
+	status = COPORT_OPEN;
+	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_CLOSING, memory_order_acq_rel, memory_order_relaxed)) {
+		switch (status) {
+		case COPORT_CLOSED:
+		case COPORT_CLOSING:
+			COCALL_ERR(cocall_args, EPIPE);
+			break; /* NOTREACHED */
+		default:
+			status = COPORT_OPEN;
+			break;
+		}
+	}
 
 
 	COCALL_RETURN(cocall_args, 0);

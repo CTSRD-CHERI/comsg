@@ -74,17 +74,29 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
 	memcpy(msg_buffer, cocall_args->message, msg_len);
 
 	cocarrier = unseal_coport(cocall_args->cocarrier);
-	cocarrier_buf = cocarrier->buffer->buf;
-
+	
 	/* Set the status to busy so we don't interleave.*/
 	/* We are not expecting high contention, and we can't sched_yield inside cocalls without slowdown */
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed))
-		status = COPORT_OPEN;
+	status = COPORT_OPEN;
+	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
+		switch (status) {
+		case COPORT_CLOSED:
+		case COPORT_CLOSING:
+			cocall_free(msg_buffer);
+			COCALL_ERR(cocall_args, EPIPE);
+			break; /* NOTREACHED */
+		default:
+			status = COPORT_OPEN;
+			break;
+		}
+	}
 
+	cocarrier_buf = cocarrier->buffer->buf;
 	event = cocarrier->info->event;
 	port_len = cocarrier->info->length;
 
 	if ((port_len >= COCARRIER_SIZE) || ((event & COPOLL_OUT) == 0)) {
+		cocall_free(msg_buffer);
 		event = (event | COPOLL_WERR);
         atomic_store_explicit(&cocarrier->info->event, event, memory_order_release);
         atomic_store_explicit(&cocarrier->info->status, COPORT_OPEN, memory_order_release);
@@ -106,6 +118,5 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
     atomic_store_explicit(&cocarrier->info->status, COPORT_DONE, memory_order_release);
 
     copoll_notify(cocarrier);
-
     COCALL_RETURN(cocall_args, msg_len);
 }

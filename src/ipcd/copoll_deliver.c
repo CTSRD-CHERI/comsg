@@ -62,14 +62,16 @@ copoll_deliver(void *raw_args)
 		while (cocarrier != NULL) {
 			status = atomic_load_explicit(&cocarrier->info->status, memory_order_acquire);
 			event = cocarrier->info->event;
-			if (status == COPORT_DONE)
+			if (status == COPORT_DONE) {
 				atomic_compare_exchange_strong_explicit(&cocarrier->info->status, &status, COPORT_OPEN, memory_order_acq_rel, memory_order_relaxed);
-			assert(status == COPORT_DONE);
+				assert(status == COPORT_DONE); /* Should catch if this is failing */
+			}
 			LIST_FOREACH(listener, &cocarrier->cd->listeners, entries) {
 				revents = (event & listener->events);
 				listener->revents = revents;
 				if(revents == NOEVENT) 
 					continue;
+				//TODO-PBB: replace with copoll_utils variant (?)
 				pthread_cond_signal(&listener->wakeup);
 			}
 			cocarrier = cocarrier_array[++idx];
