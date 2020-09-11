@@ -28,46 +28,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "copoll_utils.h"
-#include "coport_table.h"
+#ifndef _CORECV_H
+#define _CORECV_H
 
-#include "ukern/coport.h"
+int validate_corecv_args(corecv_args_t *cocall_args);
+void cocarrier_recv(corecv_args_t *cocall_args, void *token);
 
-#include <stdatomic.h>
-
-void *
-copoll_deliver(void *raw_args)
-{
-	struct copoll_delivery_args *args;
-	size_t idx, modulo, remainder;
-	coport_t **cocarrier_array, *cocarrier;
-	coport_listener_t *listener, *temp_listener;
-	coport_eventmask_t revents, event;
-
-	args = raw_args;
-	modulo = args->modulo;
-	remainder = args->remainder;
-
-	acquire_copoll_mutex();
-	for (;;) {
-		await_copoll_events();
-		cocarrier_array = get_cocarrier_events(modulo, remainder);
-		if (cocarrier_array == NULL)
-			continue;
-		cocarrier = cocarrier_array[0];
-		while (cocarrier != NULL) {
-			LIST_FOREACH(listener, &cocarrier->cd->listeners, entries) {
-				event = atomic_load_explicit(&cocarrier->info->event, memory_order_acquire);
-				revents = (event & listener->events);
-				listener->revents = revents;
-				if(revents == NOEVENT) 
-					continue;
-				pthread_cond_signal(&listener->wakeup);
-			}
-			cocarrier = cocarrier_array[++idx];
-		}
-		free(cocarrier_array);
-	}
-	release_copoll_mutex();
-	return (NULL);
-}
+#endif //!defined(_CORECV_H)

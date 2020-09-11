@@ -30,84 +30,63 @@
  */
 #include "ipcd_cap.h"
 
-#include "ukern/ccmalloc.h"
 #include "ukern/cocall_args.h"
-#include "ukern/coport.h"
 #include "ukern/utils.h"
 
-#include <cheri/cheric.h>
-#include <cheri/cherireg.h>
-#include <pthread.h>
 #include <stdatomic.h>
-#include <sys/queue.h>
 
-//TODO-PBB: better definition of these
-#define COCARRIER_MAX_LEN (1024 * 1024)
-#define COCARRIER_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
-
-int validate_cosend_args(coopen_args_t *cocall_args)
+int 
+validate_corecv_args(corecv_args_t *cocall_args)
 {
-	if (cocall_args->length > COCARRIER_MAX_LEN)
-		return (0);
-	else if (cheri_gettag(cocall_args->message) == 0)
-		return (0);
-	else if (cheri_getlen(cocall_args->message) > COCARRIER_MAX_LEN)
-		return (0);
-	else if (!valid_cocarrier(cocall_args->cocarrier))
+	if (!valid_cocarrier(cocall_args->cocarrier))
 		return (0);
 	else 
 		return (1);
 }
 
-void cocarrier_send(coopen_args_t *cocall_args, void *token)
+void 
+cocarrier_recv(corecv_args_t *cocall_args, void *token) 
 {
 	UNUSED(token);
 	coport_t *cocarrier;
 	void **cocarrier_buf;
-	size_t port_len, index, new_len;
 	coport_eventmask_t event;
-	coport_status_t status = COPORT_OPEN;
-
-	size_t msg_len = MIN(cocall_args->length, cheri_getlen(cocall_args->message));
-	char *msg_buffer = cocall_malloc(msg_len);
-
-	memcpy(msg_buffer, cocall_args->message, msg_len);
+	coport_status_t status;
+	size_t port_len, index, new_len;
 
 	cocarrier = unseal_coport(cocall_args->cocarrier);
 	cocarrier_buf = cocarrier->buffer->buf;
 
-	/* Set the status to busy so we don't interleave.*/
-	/* We are not expecting high contention, and we can't sched_yield inside cocalls without slowdown */
 	while(!atomic_compare_exchange_strong_explicit(&cocarrier->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire))
 		status = COPORT_OPEN;
 	atomic_thread_fence(memory_order_acquire);
 	event = cocarrier->info->event;
 	port_len = cocarrier->info->length;
 
-	if ((port_len >= COCARRIER_SIZE) || ((event & COPOLL_OUT) == 0)) {
-        cocarrier->info->event = (event | COPOLL_WERR);
-        atomic_thread_fence(memory_order_release);
-        atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
-        COCALL_ERR(cocall_args, EAGAIN);
-    }
+	if(port_len == 0 || ((event & COPOLL_IN) == 0)) {
+		cocarrier->info->event = (event | COPOLL_RERR);
+		atomic_thread_fence(memory_order_release);
+		atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
+		COCALL_ERR(cocall_args, EAGAIN);
+	}
 
-    index = cocarrier->info->end;
-    cocarrier->info->end = (index + 1) % COCARRIER_SIZE;
-    new_len = port_len + 1;
-    cocarrier->info->length = new_len;
+	new_len = port_len - 1;
+	index = cocarrier->info->start;
+	cocarrier->info->start = (index + 1) % COCARRIER_SIZE;
+	cocarrier->info->length = new_len;
 
-    cocarrier_buf[index] = msg_buffer;
+	cocall_args->message = cocarrier_buf[index];
 
-    if(new_len == COCARRIER_SIZE)
-    	cocarrier->event = ((COPOLL_IN | event) & ~(COPOLL_WERR | COPOLL_OUT));
-    else
-        cocarrier->event = (COPOLL_IN | event) & ~COPOLL_WERR;
-    atomic_thread_fence(memory_order_release);
-    /* Should synchronise after this point */
-    /* Not sure if this emits the right fence, but I'm pretty sure it does? */
-    copoll_notify(cocarrier);
+	if (new_len == 0)
+		cocarrier->info->event = ((COPOLL_OUT | event) & ~(COPOLL_RERR | COPOLL_IN));
+	else 
+		cocarrier->info->event = ((COPOLL_OUT | event) & ~COPOLL_RERR);
+	atomic_thread_fence(memory_order_release);
 
-    atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
+	copoll_notify(cocarrier);
 
-    COCALL_RETURN(cocall_args, msg_len);
+	atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
+
+	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));
 }
+

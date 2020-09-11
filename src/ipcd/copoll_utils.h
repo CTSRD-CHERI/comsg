@@ -38,5 +38,6 @@ void release_copoll_mutex(void);
 void await_copoll_events(void);
 
 void copoll_wait(pthread_cond_t wait_cond, long timeout);
+void copoll_notify(coport_t *cocarrier)
 
 #endif
