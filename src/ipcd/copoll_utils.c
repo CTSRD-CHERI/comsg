@@ -30,7 +30,14 @@
  */
 #include "copoll_utils.h"
 
+#include "ukern/coport.h"
+
+#include <err.h>
+#include <errno.h>
 #include <pthread.h>
+#include <sys/queue.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 static pthread_mutex_t global_copoll_lock;
 static pthread_cond_t global_cosend_cond;
@@ -44,10 +51,17 @@ init_copoll_lock(void)
 	pthread_mutexattr_init(&global_mtx_attr);
 	pthread_condattr_init(&global_cond_attr);
 
+	pthread_mutexattr_settype(&global_mtx_attr, PTHREAD_MUTEX_ERRORCHECK);
+
 	pthread_mutex_init(&global_copoll_lock, global_mtx_attr);
 	pthread_cond_init(&global_cosend_cond, global_cond_attr);
 }
 
+/*
+ * TODO-PBB: have a single thread wait on the global condition
+ * that wakes up the approriate thread rather than waking them all up.
+ */
+	
 void 
 acquire_copoll_mutex(void)
 {
@@ -64,6 +78,11 @@ void
 copoll_wait(pthread_cond_t *wait_cond, long timeout)
 {
 	struct timespec wait_time, curtime;
+	int locked;
+
+	locked = pthread_mutex_lock(&global_copoll_lock);
+	if (locked != EDEADLK)
+		err(locked, "copoll_wait: lock acquisition failed");
 	if (timeout > 0) {
 		wait_time.tv_sec = timeout / 1000;
 		wait_time.tv_nsec = (timeout % 1000) * 1000000;
@@ -73,6 +92,9 @@ copoll_wait(pthread_cond_t *wait_cond, long timeout)
 	}
 	else 
 		pthread_cond_wait(wait_cond, &global_copoll_lock);
+	/* If we locked from within this function, */
+	if (locked == 0)
+		pthread_mutex_unlock(&global_copoll_lock);
 }
 
 void 
@@ -84,8 +106,11 @@ await_copoll_events(void)
 void 
 copoll_notify(coport_t *cocarrier)
 {
-	if(!LIST_EMPTY(&cocarrier->listeners))
+	if(!LIST_EMPTY(&cocarrier->listeners)) {
+		acquire_copoll_mutex();
         pthread_cond_signal(&global_cosend_cond);
+        release_copoll_mutex();
+	}
 }
 
 
