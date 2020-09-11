@@ -33,7 +33,10 @@
 
 #include "ukern/coport.h"
 
+#include <assert.h>
+#include <pthread.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 
 void *
 copoll_deliver(void *raw_args)
@@ -43,6 +46,7 @@ copoll_deliver(void *raw_args)
 	coport_t **cocarrier_array, *cocarrier;
 	coport_listener_t *listener, *temp_listener;
 	coport_eventmask_t revents, event;
+	coport_status_t status;
 
 	args = raw_args;
 	modulo = args->modulo;
@@ -56,8 +60,12 @@ copoll_deliver(void *raw_args)
 			continue;
 		cocarrier = cocarrier_array[0];
 		while (cocarrier != NULL) {
+			status = atomic_load_explicit(&cocarrier->info->status, memory_order_acquire);
+			event = cocarrier->info->event;
+			if (status == COPORT_DONE)
+				atomic_compare_exchange_strong_explicit(&cocarrier->info->status, &status, COPORT_OPEN, memory_order_acq_rel, memory_order_relaxed);
+			assert(status == COPORT_DONE);
 			LIST_FOREACH(listener, &cocarrier->cd->listeners, entries) {
-				event = atomic_load_explicit(&cocarrier->info->event, memory_order_acquire);
 				revents = (event & listener->events);
 				listener->revents = revents;
 				if(revents == NOEVENT) 

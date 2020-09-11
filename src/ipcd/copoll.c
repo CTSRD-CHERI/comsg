@@ -38,6 +38,7 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <string.h>
 #include <sys/queue.h>
@@ -83,7 +84,7 @@ populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
  * 1. We control cocarrier use more tightly to enable event delivery
  * 2. We need 1 microkernel thread per user thread to service cocalls, and have to economise somewhere
  */
-static coport_listener_t *
+static coport_listener_t **
 init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 {
 	coport_listener_t *listen_entries;
@@ -103,9 +104,11 @@ init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 static int 
 wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 {
-	coport_listener_t *listen_entries;
+	coport_t *coport;
+	coport_listener_t **listen_entries;
 	pthread_cond_t wake;
 	pthread_condattr_t wake_attr;
+	coport_status_t status;
 	int matched;
 	uint i;
 
@@ -116,13 +119,27 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 	listen_entries = init_listeners(coports, ncoports, &wake);
 
 	acquire_copoll_mutex();
-	for (i = 0; i < ncoports; i++)
+	for (i = 0; i < ncoports; i++) {
+		coport = unseal_coport(coports[i].coport);
+		status = COPORT_OPEN;
+		//TODO-PBB: An area where better waiting could possibly be used
+		while(!atomic_compare_exchange_weak_explicit(&coport->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed))
+			status = COPORT_OPEN;
 		LIST_INSERT_HEAD(&coports[i].coport->cd->listeners, listen_entries[i], entries);
+		atomic_store_explicit(&coport->info->status, COPORT_OPEN, memory_order_release);
+	}
 
 	copoll_wait(&wake, timeout);
-
-	for (i = 0; i < ncoports; i++) 
+	
+	for (i = 0; i < ncoports; i++) {
+		coport = unseal_coport(coports[i].coport);
+		status = COPORT_OPEN;
+		//TODO-PBB: An area where better waiting could possibly be used
+		while(!atomic_compare_exchange_weak_explicit(&coport->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed))
+			status = COPORT_OPEN;
 		LIST_REMOVE(listen_entries[i], entries);
+		atomic_store_explicit(&coport->info->status, COPORT_OPEN, memory_order_release);
+	}
 	release_copoll_mutex();
 
 	matched = 0;

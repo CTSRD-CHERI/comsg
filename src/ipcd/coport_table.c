@@ -143,9 +143,8 @@ get_cocarrier_events(size_t mod, size_t r)
 	expected_max_len = ((start - end) / mod) + 1;
 
 	cocarriers = calloc(expected_max_len, CHERICAP_SIZE);
-	for (i = start; i > end; i--) {
-		if (i % mod != r)
-			continue;
+	for (i = (start - r); i > end; i-=mod) {
+		assert((start - i) % mod == r); /*TODO-PBB: remove this sanity check */
 		cocarrier = &cocarrier_table.coports[i].port;
 		if (cocarrier->info->status == COPORT_CLOSED)
 			continue;

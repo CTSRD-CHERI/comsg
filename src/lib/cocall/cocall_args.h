@@ -23,6 +23,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COCALL_ARGS_H
+#define _COCALL_ARGS_H
+
 //TODO-PBB: get params correctly
 #include "sys_comsg.h"
 
@@ -191,3 +194,5 @@ typedef struct cocall_args commap_args_t;
 typedef struct cocall_args coselect_args_t;
 typedef struct cocall_args coinsert_args_t;
 typedef struct cocall_args coproc_init_args_t;
+
+#endif //!defined(_COCALL_ARGS_H)

@@ -78,36 +78,34 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
 
 	/* Set the status to busy so we don't interleave.*/
 	/* We are not expecting high contention, and we can't sched_yield inside cocalls without slowdown */
-	while(!atomic_compare_exchange_strong_explicit(&cocarrier->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire))
+	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed))
 		status = COPORT_OPEN;
-	atomic_thread_fence(memory_order_acquire);
+
 	event = cocarrier->info->event;
 	port_len = cocarrier->info->length;
 
 	if ((port_len >= COCARRIER_SIZE) || ((event & COPOLL_OUT) == 0)) {
-        cocarrier->info->event = (event | COPOLL_WERR);
-        atomic_thread_fence(memory_order_release);
-        atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
+		event = (event | COPOLL_WERR);
+        atomic_store_explicit(&cocarrier->info->event, event, memory_order_release);
+        atomic_store_explicit(&cocarrier->info->status, COPORT_OPEN, memory_order_release);
         COCALL_ERR(cocall_args, EAGAIN);
     }
 
     index = cocarrier->info->end;
-    cocarrier->info->end = (index + 1) % COCARRIER_SIZE;
     new_len = port_len + 1;
+    cocarrier->info->end = (index + 1) % COCARRIER_SIZE;
     cocarrier->info->length = new_len;
 
     cocarrier_buf[index] = msg_buffer;
 
     if(new_len == COCARRIER_SIZE)
-    	cocarrier->event = ((COPOLL_IN | event) & ~(COPOLL_WERR | COPOLL_OUT));
+    	event = (COPOLL_IN | event) & ~(COPOLL_WERR | COPOLL_OUT);
     else
-        cocarrier->event = (COPOLL_IN | event) & ~COPOLL_WERR;
-    atomic_thread_fence(memory_order_release);
-    /* Should synchronise after this point */
-    /* Not sure if this emits the right fence, but I'm pretty sure it does? */
-    copoll_notify(cocarrier);
+    	event = (COPOLL_IN | event) & ~COPOLL_WERR;
+    cocarrier->info->event = event;
+    atomic_store_explicit(&cocarrier->info->status, COPORT_DONE, memory_order_release);
 
-    atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
+    copoll_notify(cocarrier);
 
     COCALL_RETURN(cocall_args, msg_len);
 }

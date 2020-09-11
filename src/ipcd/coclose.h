@@ -28,63 +28,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "ipcd_cap.h"
+#ifndef _COCLOSE_H
+#define _COCLOSE_H
 
 #include "ukern/cocall_args.h"
-#include "ukern/utils.h"
 
-#include <stdatomic.h>
+int validate_coclose_args(coclose_args_t *cocall_args);
+void coport_close(coclose_args_t *cocall_args, void *token);
 
-int 
-validate_corecv_args(corecv_args_t *cocall_args)
-{
-	if (!valid_cocarrier(cocall_args->cocarrier))
-		return (0);
-	else 
-		return (1);
-}
-
-void 
-cocarrier_recv(corecv_args_t *cocall_args, void *token) 
-{
-	UNUSED(token);
-	coport_t *cocarrier;
-	void **cocarrier_buf;
-	coport_eventmask_t event;
-	coport_status_t status;
-	size_t port_len, index, new_len;
-
-	cocarrier = unseal_coport(cocall_args->cocarrier);
-	cocarrier_buf = cocarrier->buffer->buf;
-
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire))
-		status = COPORT_OPEN;
-	atomic_thread_fence(memory_order_acquire);
-	event = cocarrier->info->event;
-	port_len = cocarrier->info->length;
-
-	if(port_len == 0 || ((event & COPOLL_IN) == 0)) {
-		cocarrier->info->event = (event | COPOLL_RERR);
-		atomic_thread_fence(memory_order_release);
-		atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
-		COCALL_ERR(cocall_args, EAGAIN);
-	}
-
-	new_len = port_len - 1;
-	index = cocarrier->info->start;
-	cocarrier->info->start = (index + 1) % COCARRIER_SIZE;
-	cocarrier->info->length = new_len;
-
-	cocall_args->message = cocarrier_buf[index];
-
-	if (new_len == 0)
-		event = ((COPOLL_OUT | event) & ~(COPOLL_RERR | COPOLL_IN));
-	else 
-		event = ((COPOLL_OUT | event) & ~COPOLL_RERR);
-	cocarrier->info->event = event;
-	atomic_store_explicit(&cocarrier->info->status, COPORT_DONE, memory_order_release);
-
-	copoll_notify(cocarrier);
-	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));
-}
-
+#endif //!defined(_COCLOSE_H)

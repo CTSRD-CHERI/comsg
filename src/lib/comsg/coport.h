@@ -86,18 +86,17 @@ typedef struct __no_subobject_bounds _coport_listener
 } coport_listener_t;
 
 typedef union {
-        struct cocarrier_fields
-        {
-            LIST_HEAD(, _coport_listener) listeners;
-        }; 
+    struct cocarrier_fields {
+        LIST_HEAD(, _coport_listener) listeners;
+    }; 
 } coport_typedep_t;
 
 typedef struct {
-        _Atomic size_t length; 
-        _Atomic size_t start;
-        _Atomic size_t end;
-        _Atomic coport_status_t status;
-        _Atomic coport_eventmask_t event;
+    _Atomic size_t length; 
+    _Atomic size_t start;
+    _Atomic size_t end;
+    _Atomic coport_status_t status;
+    _Atomic coport_eventmask_t event;
 } coport_info_t; //bad name :c
 
 typedef struct {
@@ -109,7 +108,7 @@ struct _coport_t
     coport_info_t *info; //Read and Write data only
     coport_type_t type; //Pointer to whole struct R/O + Load caps
     coport_buf_t *buffer;  //Permissions vary on type
-    coport_typedep_t *cd; //Read and Write caps
+    coport_typedep_t *cd; //Read and Write + R/W Caps
 };
 
 #else 
