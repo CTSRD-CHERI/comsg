@@ -28,15 +28,45 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COPOLL_UTILS_H
-#define _COPOLL_UTILS_H
 
-#include <pthread.h>
 
-void acquire_copoll_mutex(void);
-void release_copoll_mutex(void);
-void await_copoll_events(void);
 
-void copoll_wait(pthread_cond_t wait_cond, long timeout);
+static int 
+coport_event_match(coport_t *port, coport_eventmask_t event)
+{
+	if (port->event & e)
+		return (1);
+	else
+		return (0);
+}
 
-#endif
+void *
+copoll_deliver(void *args)
+{
+	size_t idx;
+	coport_t **cocarrier_array, *cocarrier;
+	coport_listener_t *listener, *temp_listener;
+	coport_eventmask_t revents;
+
+	acquire_copoll_mutex();
+	for (;;) {
+		await_copoll_events();
+		cocarrier_array = walk_cocarrier_table(modulo, remainder);
+		if (cocarrier_array == NULL)
+			continue;
+		cocarrier = cocarrier_array[0];
+		while (cocarrier != NULL) {
+			LIST_FOREACH(listener, &cocarrier->cd->listeners, entries) {
+				revents = (cocarrier->info->event & listener->events);
+				listener->revents = revents;
+				if(revents == NOEVENT) 
+					continue;
+				pthread_cond_signal(&listener->wakeup);
+			}
+			cocarrier = cocarrier_array[++idx];
+		}
+		free(cocarrier_array);
+	}
+	release_copoll_mutex();
+	return (NULL);
+}

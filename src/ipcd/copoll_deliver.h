@@ -28,15 +28,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COPOLL_UTILS_H
-#define _COPOLL_UTILS_H
 
-#include <pthread.h>
+#ifndef _COPOLL_DELIVER_H
+#define _COPOLL_DELIVER_H
 
-void acquire_copoll_mutex(void);
-void release_copoll_mutex(void);
-void await_copoll_events(void);
+struct copoll_delivery_args {
+	size_t modulo;
+	size_t remainder;
+};
 
-void copoll_wait(pthread_cond_t wait_cond, long timeout);
+void *copoll_deliver(void *args);
 
-#endif
+#endif //!defined(_COPOLL_DELIVER_H)
