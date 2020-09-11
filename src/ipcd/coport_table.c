@@ -33,56 +33,132 @@
 
 #include <stdatomic.h>
 #include <sys/mman.h>
+#include <sys/queue.h>
 
 typedef struct {
 	coport_t port;
 	size_t ref_count;
 } coport_tbl_entry_t;
 
-static struct {
+static struct _coport_table {
 	_Atomic size_t next_coport;
 	_Atomic size_t ncoports;
+	size_t first_coport;
 	coport_tbl_entry_t *coports;
-} coport_table;
+} cocarrier_table, copipe_table, cochannel_table;
 
-static size_t max_coports = 255;
+static size_t max_coports = 256;
 static size_t coport_table_len = max_coports * sizeof(coport_tbl_entry_t);
-static int coport_table_prot = ( PROT_READ | PROT_WRITE );
-static int coport_table_flags = ( MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_CHERI );
+static int coport_table_prot = (PROT_READ | PROT_WRITE);
+static int coport_table_flags = (MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_CHERI);
 
 __attribute__((constructor)) static
 void setup_table(void) 
 {
-	coport_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	max_coports = cheri_getlen(coport_table.coports) / sizeof(struct coport_t);
-	coport_table.next_coport = max_coports - 1;
-	coport_table.ncoports = 0;
+	size_t top_of_table;
+
+	cocarrier_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
+	top_of_table = (cheri_getlen(cocarrier_table.coports) / sizeof(struct coport_t)) - 1;
+	cocarrier_table.next_coport = top_of_table;
+	cocarrier_table.first_coport = top_of_table;
+	cocarrier_table.ncoports = 0;
+
+	copipe_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
+	top_of_table = (cheri_getlen(copipe_table.coports) / sizeof(struct coport_t)) - 1;
+	copipe_table.next_coport = top_of_table;
+	copipe_table.first_coport = top_of_table;
+	copipe_table.ncoports = 0;
+
+	cochannel_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
+	top_of_table = (cheri_getlen(cochannel_table.coports) / sizeof(struct coport_t)) - 1;
+	cochannel_table.next_coport = top_of_table;
+	cochannel_table.first_coport = top_of_table;
+	cochannel_table.ncoports = 0;
 }
 
-coport_t *allocate_coport(void)
+static
+struct _coport_table *get_coport_table(coport_type_t type)
+{
+	struct _coport_table *table;
+	switch (type)
+	{
+		case COCARRIER:
+			table = &cocarrier_table;
+			break;
+		case COPIPE:
+			table = &copipe_table;
+			break;
+		case COCHANNEL:
+			table = &cochannel_table;
+			break;
+	}
+	return (table);
+}
+
+coport_t *allocate_coport(coport_type_t type)
 {
 	coport_t *ptr;
-	size_t index = atomic_fetch_sub(&coport_table.next_coport, 1);
 
-	ptr = &coport_table.coports[index];
+	struct _coport_table *coport_table = get_coport_table(type);
+	size_t index = atomic_fetch_sub(&coport_table->next_coport, 1);
+
+	ptr = &coport_table->coports[index];
 	ptr = cheri_setbounds_exact(ptr, sizeof(coport_t));
 	memset(ptr, 0, sizeof(coport_t));
 
-	atomic_fetch_add(&coport_table.ncoports, 1);
+	atomic_fetch_add(&coport_table->ncoports, 1);
 	return (ptr);
 }
 
-int in_coport_table(coport_t *ptr)
+int in_coport_table(coport_t *ptr, coport_type_t type)
 {
+	struct _coport_table *coport_table = get_coport_table(type);
 	vaddr_t addr = cheri_getaddress(ptr);
-	return (cheri_is_address_inbounds(coport_table.coports, addr));
+	return (cheri_is_address_inbounds(coport_table->coports, addr));
 }
 
-int can_allocate_coport(void)
+int can_allocate_coport(coport_type_t type)
 {
-	if(coport_table.next_coport == 0)
+	struct _coport_table *coport_table = get_coport_table(type);
+	if(coport_table->next_coport == 0)
 		return (0);
 	else
 		return (1);
 }
 
+/*
+ * Used for copoll delivery. Walks a vertical slice of the cocarrier table
+ * and returns a NULL-terminated array of those cocarriers with threads 
+ * listening for events.
+ */
+coport_t **
+walk_cocarrier_table(size_t mod, size_t r)
+{
+	coport_t **cocarriers, *cocarrier;
+	size_t idx, end, start, expected_max_len, i;
+	
+	idx = 0;
+	end = atomic_load(cocarrier_table.next_coport)
+	start = cocarrier_table.first_coport;
+	expected_max_len = ((start - end) / mod) + 1;
+
+	cocarriers = calloc(expected_max_len, CHERICAP_SIZE);
+	for (i = start; i > end; i--) {
+		if (i % mod != r)
+			continue;
+		cocarrier = &cocarrier_table.coports[i].port;
+		if (cocarrier->info->status == COPORT_CLOSED)
+			continue;
+		else if (LIST_EMPTY(&cocarrier->cd->listeners))
+			continue;
+		cocarriers[idx] = cocarrier;
+		idx++;
+	}
+	if (idx != 0) {
+		cocarriers[idx] = NULL;
+		return (cocarriers);
+	} else {
+		free(cocarriers);
+		return (NULL);
+	}
+}

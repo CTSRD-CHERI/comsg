@@ -33,14 +33,19 @@
 #include <pthread.h>
 
 static pthread_mutex_t global_copoll_lock;
+static pthread_cond_t global_cosend_cond;
 
 __attribute__((constructor)) static
 void init_copoll_lock(void)
 {
 	pthread_mutexattr_t global_mtx_attr;
+	pthread_condattr_t global_cond_attr;
+	
 	pthread_mutexattr_init(&global_mtx_attr);
+	pthread_condattr_init(&global_cond_attr);
 
 	pthread_mutex_init(&global_copoll_lock, global_mtx_attr);
+	pthread_cond_init(&global_cosend_cond, global_cond_attr);
 }
 
 void acquire_copoll_mutex(void)
@@ -66,3 +71,10 @@ void copoll_wait(pthread_cond_t *wait_cond, long timeout)
 	else 
 		pthread_cond_wait(wait_cond, &global_copoll_lock);
 }
+
+void await_copoll_events(void)
+{
+	pthread_cond_wait(&global_cosend_cond, &global_copoll_lock);
+}
+
+

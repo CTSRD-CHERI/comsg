@@ -28,29 +28,39 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "copoll.h"
 
-#include "ukern/ccmalloc.h"
+#include "ipcd_cap.h"
+#include "copoll_utils.h"
+
 #include "ukern/cocall_args.h"
 #include "ukern/utils.h"
 
+#include <assert.h>
+#include <pthread.h>
+#include <stddef.h>
+#include <string.h>
+#include <sys/queue.h>
 
-int validate_copoll_args(copoll_args_t *cocall_args)
+int 
+validate_copoll_args(copoll_args_t *cocall_args)
 {
-	for (size_t i = 0; i < cocall_args->ncoports; i++)
-	{
+	for (size_t i = 0; i < cocall_args->ncoports; i++) {
 		if (!valid_cocarrier(cocall_args->coports[i].coport))
 			return (0);
 	}
 	return (1);
 }
 
-static
-int inspect_events(pollcoport_t *coports, size_t ncoports)
+static int 
+inspect_events(pollcoport_t *coports, size_t ncoports)
 {
-	int matched_events = 0;
+	size_t i;
+	int matched_events;
 	coport_t *cocarrier;
-	for (size_t i = 0; i < ncoports; i++)
-	{
+
+	matched_events = 0;
+	for (i = 0; i < ncoports; i++) {
 		coports[i].coport = unseal_coport(coports[i].coport);
 		coports[i].revents = (coports[i].events & coports[i].coport->info->event);
 		if (coports[i].revents != NOEVENT)
@@ -59,12 +69,12 @@ int inspect_events(pollcoport_t *coports, size_t ncoports)
 	return (matched_events);
 }
 
-static
-void populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
+static void 
+populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
 {
-	for (uint i = 0; i < ncoports; i++)
+	uint i;
+	for (i = 0; i < ncoports; i++)
 		user[i].revents = ukern[i].revents;
-	return;
 }
 
 /* 
@@ -72,12 +82,12 @@ void populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
  * 1. We control cocarrier use more tightly to enable event delivery
  * 2. We need 1 microkernel thread per user thread to service cocalls, and have to economise somewhere
  */
-coport_listener_t *init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
+static coport_listener_t *
+init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 {
 	coport_listener_t *listen_entries = cocall_calloc(ncoports, CHERICAP_SIZE);
-	for (uint i = 0; i < ncoports; i++) 
-	{
-		listen_entries[i] = cocall_malloc(sizeof(coport_listener_t));
+	for (uint i = 0; i < ncoports; i++) {
+		listen_entries[i] = malloc(sizeof(coport_listener_t));
 		listen_entries[i]->wakeup = cond;
 		listen_entries[i]->revents = NOEVENT;
 		listen_entries[i]->events = coports[i].events;
@@ -86,54 +96,60 @@ coport_listener_t *init_listeners(pollcoport_t *coports, uint ncoports, pthread_
 }
 
 
-static
-int wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
+static int 
+wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 {
 	pthread_cond_t wake;
 	pthread_condattr_t wake_attr;
-	int matched = 0;
+	coport_listener_t *listen_entries;
+	int matched;
+	uint i;
 
 	pthread_condattr_init(&wake_attr);
 	pthread_condattr_setclock(&wake_attr, CLOCK_MONOTONIC);
 	pthread_cond_init(&wake, wake_attr);
 
-	coport_listener_t *listen_entries = init_listeners(coports, ncoports, &wake);
+	listen_entries = init_listeners(coports, ncoports, &wake);
 
 	acquire_copoll_mutex();
-	for (uint i = 0; i < ncoports; i++)
-		LIST_INSERT_HEAD(&coports[i].coport->listeners, listen_entries[i], entries);
+	for (i = 0; i < ncoports; i++)
+		LIST_INSERT_HEAD(&coports[i].coport->cd->listeners, listen_entries[i], entries);
 
 	copoll_wait(&wake, timeout);
 
-	for (uint i = 0; i < ncoports; i++) 
+	for (i = 0; i < ncoports; i++) 
 		LIST_REMOVE(listen_entries[i], entries);
-
 	release_copoll_mutex();
 
-	for (uint i = 0; i < ncoports; i++){
+	matched = 0;
+	for (i = 0; i < ncoports; i++) {
 		coports[i].revents = listen_entries[i]->revents;
 		if (coports[i].revents != NOEVENT)
 			matched++;
-		cocall_free(listen_entries[i]);
+		free(listen_entries[i]);
 	}
-	cocall_free(listen_entries);
+	free(listen_entries);
 
 	assert(matched != 0 || timeout > 0);
 
 	return (matched);
 }
 
-void cocarrier_poll(copoll_args_t *cocall_args, void *token)
+void 
+cocarrier_poll(copoll_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
+	uint ncoports; 
+	int matched;
+	size_t target_len;
 
-	uint ncoports = cocall_args->ncoports;
-	size_t target_len = ncoports * sizeof(pollcoport_t);
+	ncoports = cocall_args->ncoports;
+	target_len = ncoports * sizeof(pollcoport_t);
 
 	pollcoport_t *targets = cocall_malloc(target_len);
 	memcpy(targets, cocall_args->coports, target_len); //copyin
 
-	int matched = inspect_events(targets, ncoports);
+	matched = inspect_events(targets, ncoports);
 	/* 
 	 * If the caller is willing to wait and we have no matches on the events polled for,
 	 * then wait for the specified amount of time.
@@ -142,9 +158,8 @@ void cocarrier_poll(copoll_args_t *cocall_args, void *token)
 		/* Here (may) be syscalls; we are henceforth on the slow-path. */
 		matched = wait_for_events(targets, ncoports, cocall_args->timeout);
 	}
-
-
 	populate_revents(cocall_args->coports, targets, ncoports);
+	cocall_free(targets);
 
 	COCALL_RETURN(cocall_args, matched);
 }

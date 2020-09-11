@@ -30,9 +30,13 @@
  */
 #include "coport_table.h"
 
+
 #include "ukern/ccmalloc.h"
 #include "ukern/cocall_args.h"
 #include "ukern/coport.h"
+
+#include <cheri/cheric.h>
+#include <sys/queue.h>
 
 int validate_coopen_args(coopen_args_t *cocall_args)
 {
@@ -92,14 +96,15 @@ coport_t *seal_coport(coport_t *ptr)
 void open_coport(coopen_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	_Thread_local coport_t *port_handle = NULL;
+	//Brain-sludge is making me forget whether static is redundant here
+	static _Thread_local coport_t *port_handle = NULL;
 
 	if (port_handle == NULL) {
 		if(!can_allocate_coport() && port_handle == NULL)
 			COCALL_ERR(cocall_args, ENOMEM);
-		port_handle = allocate_coport();
+		port_handle = allocate_coport(cocall_args->type);
 	}
-	init_coport(port_handle);
+	init_coport(cocall_args->type, port_handle);
 
 	port_handle = cheri_andperm(port_handle, COPORT_PERMS);
 	port_handle = seal_coport(port_handle);

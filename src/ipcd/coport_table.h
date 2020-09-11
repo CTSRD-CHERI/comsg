@@ -32,9 +32,11 @@
 #ifndef _COPORT_TABLE_H
 #define _COPORT_TABLE_H
 
-coport_t allocate_coport(void);
-int in_coport_table(coport_t *ptr);
-int can_allocate_coport(void);
+#include "ukern/coport.h"
 
+coport_t *allocate_coport(coport_type_t type);
+int in_coport_table(coport_t *ptr, coport_type_t type);
+int can_allocate_coport(coport_type_t type);
+coport_t **walk_cocarrier_table(size_t mod, size_t r)
 
 #endif //!defined(_COPORT_TABLE_H)
