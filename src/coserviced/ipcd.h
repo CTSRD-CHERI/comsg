@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -24,40 +29,18 @@
  * SUCH DAMAGE.
  */
 
-/*
- * Functions provided:
- * create child namespace - requires ownership of the parent namespace
- * create object within specified namespace - requires write permission to the namespace 
- * list objects within specified namespace - requires read permission to the namespace 
- * retrieve handle to named object from specified namespace - requires read permission to the namespace
- * delete object from namespace - requires ownership of the object and write permission to the namespace; or ownership of the namespace
- * delete namespace - requires ownership; certain types are deleted by the system.
- * 
- */
+#ifndef _COSERVICED_H
+#define _COSERVICED_H
 
-/* 
- * Responsibilities:
- * track lifetime of coprocess-aware processes and threads inside them
- * 	+ creates and deletes namespaces for them 
- * 	+ manages the global namespace
- * 	+ performs cleanup on thread/program exit
- * 		+ deletes coservices provided by dead threads
- */
+#ifndef COPROC_UKERN
+#define COPROC_UKERN 1
+#endif
 
-#include "nsd_daemons.h"
+#include "ukern/worker_map.h"
 
-#include <err.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <unistd.h>
+coservice_provision_t coopen_serv, coclose_serv, cosend_serv, corecv_serv, copoll_serv;
 
-static namespace_t *global_ns;
+//TODO-PBB: Revisit
+const int nworkers = 12;
 
-
-int main(int argc, char const *argv[])
-{
-	//we can dance if we want to
-	global_ns = create_namespace("coproc", GLOBAL, NULL);
-	
-	return (0);
-}
+#endif

@@ -177,7 +177,7 @@ cocarrier_poll(copoll_args_t *cocall_args, void *token)
 	 * then wait for the specified amount of time.
 	 */
 	if (cocall_args->timeout != 0 && matched == 0) {
-		/* Here (may) be syscalls; we are henceforth on the slow-path. */
+		/* Here (may) be syscalls; we should henceforth be on the slow-path. */
 		matched = wait_for_events(targets, ncoports, cocall_args->timeout);
 	}
 	populate_revents(cocall_args->coports, targets, ncoports);

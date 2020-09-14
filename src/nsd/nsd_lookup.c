@@ -80,7 +80,7 @@ int in_namespace(const char *name, namespace_t *ns_cap)
 	struct _ns_member *member, *member_temp;
 	ns_cap = unseal_ns(ns_cap);
 
-	LIST_FOREACH_SAFE (member, &ns_cap->members->objects, entries, member_temp) {
+	LIST_FOREACH_SAFE(member, &ns_cap->members->objects, entries, member_temp) {
 		obj = member->nsobj;
 		if(strncmp(obj->name, name, NS_NAME_LEN) == 0) 
 			return (1);
@@ -91,7 +91,6 @@ int in_namespace(const char *name, namespace_t *ns_cap)
 		if(strncmp(ns->name, name, NS_NAME_LEN) == 0) 
 			return (1);
 		
-
 	}
 	return (0);
 }

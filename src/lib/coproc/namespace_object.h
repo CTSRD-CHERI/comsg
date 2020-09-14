@@ -62,12 +62,12 @@
 
 #define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_andperm(c, ~NSOBJ_PERM_W) )
 
-typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobjtype_t;
+typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
 
 typedef struct _nsobject
 {
 	char name[NS_NAME_LEN];
-	nsobjtype_t type;
+	nsobject_type_t type;
 	union
 	{
 		void *obj;
@@ -81,9 +81,9 @@ typedef struct _nsobject
 #if 0
 //handled by the namespace manager
 //for user programs, might implement something similar
-nobjtype_t get_nsobject_type(nsobject_t *nsobj);
-nsobjtype_t nsobject_otype_to_type(long otype);
-long nsobject_type_to_otype(nsobjtype_t type);
+nsobject_type_t get_nsobject_type(nsobject_t *nsobj);
+nsobject_type_t nsobject_otype_to_type(long otype);
+long nsobject_type_to_otype(nsobject_type_t type);
 int valid_nsobj_otype(long type);
 #endif
 

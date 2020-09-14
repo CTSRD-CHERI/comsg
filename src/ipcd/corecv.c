@@ -64,9 +64,10 @@ cocarrier_recv(corecv_args_t *cocall_args, void *token)
 	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
 		switch (status) {
 		case COPORT_CLOSED:
-		case COPORT_CLOSING:
 			COCALL_ERR(cocall_args, EPIPE);
 			break; /* NOTREACHED */
+		case COPORT_CLOSING:
+			break;
 		default:
 			status = COPORT_OPEN;
 			break;
@@ -93,7 +94,8 @@ cocarrier_recv(corecv_args_t *cocall_args, void *token)
 	else 
 		event = ((COPOLL_OUT | event) & ~COPOLL_RERR);
 	cocarrier->info->event = event;
-	atomic_store_explicit(&cocarrier->info->status, COPORT_DONE, memory_order_release);
+	/* Restore status value (might be COPORT_CLOSING or COPORT_OPEN) */
+	atomic_store_explicit(&cocarrier->info->status, status, memory_order_release);
 
 	copoll_notify(cocarrier);
 	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));

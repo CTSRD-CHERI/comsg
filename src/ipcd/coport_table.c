@@ -136,6 +136,7 @@ get_cocarriers(size_t mod, size_t r)
 {
 	coport_t **cocarriers, *cocarrier;
 	size_t idx, end, start, expected_max_len, i;
+	coport_status_t status;
 	
 	idx = 0;
 	end = atomic_load(cocarrier_table.next_coport)
@@ -146,9 +147,12 @@ get_cocarriers(size_t mod, size_t r)
 	for (i = (start - r); i > end; i-=mod) {
 		assert((start - i) % mod == r); /*TODO-PBB: remove this sanity check */
 		cocarrier = &cocarrier_table.coports[i].port;
-		if (cocarrier->info->status == COPORT_CLOSED)
+		status = cocarrier->info->status;
+		if (status == COPORT_CLOSING && cocarrier->info->length == 0) 
+			atomic_store_explicit(&cocarrier->info->status, COPORT_CLOSED, memory_order_release);
+		else if (status == COPORT_CLOSED)
 			continue;
-		else if (LIST_EMPTY(&cocarrier->cd->listeners))
+		if (LIST_EMPTY(&cocarrier->cd->listeners))
 			continue;
 		cocarriers[++idx] = cocarrier;
 	}

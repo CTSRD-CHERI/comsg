@@ -292,7 +292,7 @@ struct bucket *find_bucket_min(size_t len)
 {
 	for(size_t i = 0; i < bucket_table.nbuckets; i++) {
 		if (bucket_table.buckets[i].size < len)
-			return &bucket_table.buckets[i];
+			return (&bucket_table.buckets[i]);
 	}
 	return (NULL);
 }
@@ -320,7 +320,7 @@ struct bucket *find_bucket_cheri(size_t len)
 static
 void *get_mem(size_t len)
 {
-	struct bucket *memory_bucket = find_bucket(len);
+	struct bucket *memory_bucket = find_bucket_exact(len);
 	struct _bucket_entry *new_next;
 	void *cap;
 	int resize = 0;
@@ -328,9 +328,10 @@ void *get_mem(size_t len)
 
 	if (memory_bucket == NULL) {
 		resize = 1;
-		memory_bucket = find_bucket_min(len);
+		memory_bucket = find_bucket_cheri(len);
 		if (memory_bucket == NULL)
-			err(EINVAL, "cocall_alloc: get_mem: bucket for size %lu not initialized");
+			memory_bucket = find_bucket_min(len);
+		err(EINVAL, "cocall_alloc: get_mem: bucket for size %lu not initialized");
 	}
 
 	while(!atomic_compare_exchange_weak(&memory_bucket->next_free_entry->status, &new_status, ALLOCATED))

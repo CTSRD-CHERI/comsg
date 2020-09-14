@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,12 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSD_CRUD_H
-#define _NSD_CRUD_H
+#ifndef _NSD_SETUP_H
+#define _NSD_SETUP_H
 
-namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *parent);
-nsobject_t *create_nsobject(const char *name, nsobjtype_t type, namespace_t *parent);
+void init_services(void);
 
-int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap);
-
-#endif //!defined (_NSD_CRUD_H)
+#endif //!defined(_NSD_SETUP_H)

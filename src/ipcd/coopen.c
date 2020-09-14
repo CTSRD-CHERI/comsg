@@ -51,7 +51,7 @@ void init_coport(coport_type_t type, coport_t *port)
 {
 	port->type = type;
 	
-	port->info = cocall_malloc(sizeof(coport_bounds_t));
+	port->info = cocall_malloc(sizeof(coport_info_t));
 	port->info = cheri_andperm(port.info, COPORT_INFO_PERMS);
 	port->info->start = 0;
 	port->info->end = 0;

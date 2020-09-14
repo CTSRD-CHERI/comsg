@@ -28,48 +28,39 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coport_table.h"
+#include "ipcd.h"
 
-#include "ipcd_cap.h"
+#include "ukern/namespace.h"
+#include "ukern/worker_map.h"
+#include "ukern/ukern_calls.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/coport.h"
+#include <err.h>
 
-int 
-validate_coclose_args(coclose_args_t *cocall_args)
+static namespace_t *global;
+
+static 
+void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
 {
-	return (1);
+	function_map_t *service_map = spawn_workers(func, valid, nworkers);
+
+	serv->function_map = service_map;
+	serv->service = coprovide(get_worker_scbs(service_map), nworkers);
+	serv->nsobj = coinsert(name, COSERVICE, serv->service, global);
+	if (serv->nsobj == NULL)
+		err(errno, "init_service: error inserting %s into global namespace", name);
 }
 
-void
-coport_close(coclose_args_t *cocall_args, void *token) 
+void ipcd_startup(void)
 {
-	UNUSED(token)
-	coport_t *coport;
-	coport_status_t status;
-	coport_eventmask_t events;
+	global = coproc_init(NULL, NULL, NULL, NULL);
+	if (global == NULL)
+		err(error, "coproc_init: cocall failed");
+	//init own services
+	init_service(&coopen_serv, open_coport, validate_coopen_args, U_COOPEN);
+	init_service(&coclose_serv, close_coport, validate_coclose_args, U_COCLOSE);
+	init_service(&cosend_serv, cocarrier_send, validate_cosend_args, U_COSEND);
+	init_service(&corecv_serv, cocarrier_recv, validate_corecv_args, U_CORECV);
+	init_service(&copoll_serv, cocarrier_poll, validate_copoll_args, U_COPOLL);
 
-	/* TODO-PBB: check permissions */
-	coport = unseal_coport(cocall_args->coport);
-
-	/* TODO-PBB: We should account for closing from COPORT_DONE, or other states, some day*/
-	status = COPORT_OPEN;
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
-		switch (status) {
-		case COPORT_CLOSED:
-		case COPORT_CLOSING:
-			COCALL_ERR(cocall_args, EPIPE);
-			break; /* NOTREACHED */
-		default:
-			status = COPORT_OPEN;
-			break;
-		}
-	}
-	events = coport->info->events;
-	events &= ~(COPOLL_OUT);
-	events |= COPOLL_CLOSED;
-	coport->info->events = events;
-
-	atomic_store_explicit(&cocarrier->info->status, COPORT_CLOSING, memory_order_release);
-
-	COCALL_RETURN(cocall_args, 0);
 }

@@ -28,48 +28,55 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "ukern/cocalls.h"
 
-#include "ipcd_cap.h"
+#include <err.h>
+#include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
 
-#include "ukern/cocall_args.h"
-#include "ukern/coport.h"
-
-int 
-validate_coclose_args(coclose_args_t *cocall_args)
+static 
+void usage(void)
 {
-	return (1);
+	//todo
+	//should be called with lookup string
+	//e.g "coserviced lookup_string"
+	return;
 }
 
-void
-coport_close(coclose_args_t *cocall_args, void *token) 
+size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(coport_typedep_t), COCARRIER_MAX_LEN};
+
+int main(int argc, char const *argv[])
 {
-	UNUSED(token)
-	coport_t *coport;
-	coport_status_t status;
-	coport_eventmask_t events;
-
-	/* TODO-PBB: check permissions */
-	coport = unseal_coport(cocall_args->coport);
-
-	/* TODO-PBB: We should account for closing from COPORT_DONE, or other states, some day*/
-	status = COPORT_OPEN;
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
-		switch (status) {
-		case COPORT_CLOSED:
-		case COPORT_CLOSING:
-			COCALL_ERR(cocall_args, EPIPE);
-			break; /* NOTREACHED */
-		default:
-			status = COPORT_OPEN;
+	int opt, error;
+	void *init_cap;
+	
+	while((opt == getopt(argc, argv, "")) != -1) {
+		switch (opt) {
+		case '?':
+		default: 
+			usage();
 			break;
 		}
 	}
-	events = coport->info->events;
-	events &= ~(COPOLL_OUT);
-	events |= COPOLL_CLOSED;
-	coport->info->events = events;
+	if(argc >= 2) {
+		error = colookup(argv[argc], &init_cap);
+		if(error)
+			err(error, "main: colookup of init %s failed", optarg);
+		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
+	}
+	else {
+		printf("Missing lookup string for init\n");
+		usage();
+	}
+	ipcd_startup();
 
-	atomic_store_explicit(&cocarrier->info->status, COPORT_CLOSING, memory_order_release);
+	for(;;) {
+		for (int i = 0; i < coopen_serv.function_map->nworkers; i++)
+			pthread_join(coopen_serv.function_map->workers[i].worker, NULL);
+		for (int i = 0; i < coclose_serv.function_map->nworkers; i++)
+			pthread_join(coclose_serv.function_map->workers[i].worker, NULL);
+	}
 
-	COCALL_RETURN(cocall_args, 0);
+	return (0);
 }

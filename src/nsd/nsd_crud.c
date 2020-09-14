@@ -87,7 +87,7 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 }
 
 static __inline void 
-validate_nsobjcreate_params(const char *name, nsobjtype_t type, namespace_t *parent)
+validate_nsobjcreate_params(const char *name, nsobject_type_t type, namespace_t *parent)
 {
 	validate_namespace_cap(parent);
 
@@ -143,7 +143,7 @@ namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *pare
 	return (ns_ptr);
 }
 
-nsobject_t *create_nsobject(const char *name, nsobjtype_t type, namespace_t *parent)
+nsobject_t *create_nsobject(const char *name, nsobject_type_t type, namespace_t *parent)
 {
 	validate_nsobjcreate_params(name, type, parent);
 	

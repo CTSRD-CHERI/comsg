@@ -39,14 +39,14 @@ int valid_nsobj_otype(long type)
 	return (type == reservation_nsobj_otype || type == commap_nsobj_otype || type == coport_nsobj_otype || type == coservice_nsobj_otype);
 }
 
-nsobjtype_t get_nsobject_type(nsobject_t *nsobj)
+nsobject_type_t get_nsobject_type(nsobject_t *nsobj)
 {
 	long otype = cheri_gettype(nsobj);
 	return nsobj_otype_to_type(otype);
 	
 }
 
-nsobjtype_t nsobj_otype_to_type(long otype)
+nsobject_type_t nsobj_otype_to_type(long otype)
 {
 	switch(otype)
 	{
@@ -63,7 +63,7 @@ nsobjtype_t nsobj_otype_to_type(long otype)
 	}
 }
 
-long nsobject_type_to_otype(nsobjtype_t type)
+long nsobject_type_to_otype(nsobject_type_t type)
 {
 	switch(type)
 	{
