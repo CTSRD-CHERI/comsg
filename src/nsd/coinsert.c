@@ -56,23 +56,23 @@ void insert_namespace_object(coinsert_args_t *cocall_args, void *token)
 	/* create object */
 	obj = create_nsobject(cocall_args->name, cocall_args->type, ns);
 	switch(cocall_args->type) {
-		case COMMAP:
-			obj->obj = cocall_args->obj;
-			obj = CLEAR_NSOBJ_STORE_PERM(obj);
-			break;
-		case COSERVICE:
-			obj->coservice = cocall_args->coservice;
-			obj = CLEAR_NSOBJ_STORE_PERM(obj);
-			break;
-		case COPORT:
-			obj->coport = cocall_args->coport;
-			obj = CLEAR_NSOBJ_STORE_PERM(obj);
-			break;
-		case RESERVATION:
-			obj->obj = NULL;
-			break;
-		default:
-			break;
+	case COMMAP:
+		obj->obj = cocall_args->obj;
+		obj = CLEAR_NSOBJ_STORE_PERM(obj);
+		break;
+	case COSERVICE:
+		obj->coservice = cocall_args->coservice;
+		obj = CLEAR_NSOBJ_STORE_PERM(obj);
+		break;
+	case COPORT:
+		obj->coport = cocall_args->coport;
+		obj = CLEAR_NSOBJ_STORE_PERM(obj);
+		break;
+	case RESERVATION:
+		obj->obj = NULL;
+		break;
+	default:
+		break;
 	}
 	/* TODO-PBB: I am flip-flopping on whether this is the right thing to do
 	 * Sealing all nsobjects requires tighter integration of microkernel compartments

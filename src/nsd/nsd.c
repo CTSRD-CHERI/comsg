@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,19 +28,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coservice_table.h"
 
-#include "ukern/ukern_calls.h"
-#include "ukern/coservice.h"
-#include "ukern/worker.h"
-#include "ukern/worker_map.h"
+/*
+ * Functions provided:
+ * create child namespace - requires ownership of the parent namespace
+ * create object within specified namespace - requires write permission to the namespace 
+ * list objects within specified namespace - requires read permission to the namespace 
+ * retrieve handle to named object from specified namespace - requires read permission to the namespace
+ * delete object from namespace - requires ownership of the object and write permission to the namespace; or ownership of the namespace
+ * delete namespace - requires ownership; certain types are deleted by the system.
+ * 
+ */
 
-#include <pthread.h>
-#include <stdatomic.h>
+/* 
+ * Responsibilities:
+ * track lifetime of coprocess-aware processes and threads inside them
+ * 	+ creates and deletes namespaces for them 
+ * 	+ manages the global namespace
+ * 	+ performs cleanup on thread/program exit
+ * 		+ deletes coservices provided by dead threads
+ */
+#include "nsd.h"
+#include "nsd_crud.h"
+#include "nsd_setup.h"
 
-static const int nworkers = 16;
-static coservice_t *codiscover, *coprovide;
-static nsobject_t *codiscover_obj, *coprovide_obj;
+#include "ukern/ccmalloc.h"
+
+#include <err.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 static namespace_t *global_ns;
 
 static 
@@ -44,8 +67,11 @@ void usage(void)
 	//todo
 	//should be called with lookup string
 	//e.g "coserviced lookup_string"
-	return;
+	exit(1);
 }
+
+const size_t nbuckets = 2;
+size_t buckets[] = {sizeof(struct _ns_members), sizeof(struct _ns_member)}
 
 
 int main(int argc, char const *argv[])
@@ -66,21 +92,17 @@ int main(int argc, char const *argv[])
 		if(error)
 			err(error, "main: colookup of init %s failed", optarg);
 		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
-	}
-	else {
+	} else {
 		printf("Missing lookup string for init\n");
 		usage();
 	}
 
-	coserviced_startup();
+	//we can dance if we want to
+	global_ns = create_namespace("coproc", GLOBAL, NULL);
+	ccmalloc_init(buckets, nbuckets);
 	
-	//TODO-PBB: revise
-	for(;;) {
-		for (int i = 0; i < coprovide_serv.function_map->nworkers; i++)
-			pthread_join(coprovide_serv.function_map->workers[i].worker, NULL);
-		for (int i = 0; i < codiscover_serv.function_map->nworkers; i++)
-			pthread_join(codiscover_serv.function_map->workers[i].worker, NULL);
-	}
+	init_services();
+
 
 	return (0);
 }

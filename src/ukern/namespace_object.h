@@ -37,12 +37,12 @@
 
 #define NSOBJ_PERMS_OWN_MASK ( NS_PERMS_OWN_MASK | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
 
-typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobjtype_t;
+typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
 
 typedef struct _nsobject
 {
 	char name[NS_NAME_LEN];
-	nsobjtype_t type;
+	nsobject_type_t type;
 	union
 	{
 		void *obj;
@@ -53,9 +53,9 @@ typedef struct _nsobject
 
 #define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
 
-nobjtype_t get_nsobject_type(nsobject_t *nsobj);
-nsobjtype_t nsobject_otype_to_type(long otype);
-long nsobject_type_to_otype(nsobjtype_t type);
+nsobject_type_t get_nsobject_type(nsobject_t *nsobj);
+nsobject_type_t nsobject_otype_to_type(long otype);
+long nsobject_type_to_otype(nsobject_type_t type);
 
 int valid_nsobj_name(const char *name);
 int valid_nsobj_otype(long type);

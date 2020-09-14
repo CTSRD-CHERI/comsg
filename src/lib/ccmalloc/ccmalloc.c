@@ -292,7 +292,7 @@ struct bucket *find_bucket_min(size_t len)
 {
 	for(size_t i = 0; i < bucket_table.nbuckets; i++) {
 		if (bucket_table.buckets[i].size < len)
-			return &bucket_table.buckets[i];
+			return (&bucket_table.buckets[i]);
 	}
 	return (NULL);
 }
@@ -302,7 +302,7 @@ struct bucket *find_bucket_exact(size_t len)
 {
 	for(size_t i = 0; i < bucket_table.nbuckets; i++) {
 		if (bucket_table.buckets[i].size == len)
-			return &bucket_table.buckets[i];
+			return (&bucket_table.buckets[i]);
 	}
 	return (NULL);
 }
@@ -312,7 +312,7 @@ struct bucket *find_bucket_cheri(size_t len)
 {
 	for(size_t i = 0; i < bucket_table.nbuckets; i++) {
 		if (bucket_table.buckets[i].cherisize == len)
-			return &bucket_table.buckets[i];
+			return (&bucket_table.buckets[i]);
 	}
 	return (NULL);
 }

@@ -2,11 +2,6 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
- * This software was developed by SRI International and the University of
- * Cambridge Computer Laboratory (Department of Computer Science and
- * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
- * DARPA SSITH research programme.
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -28,48 +23,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _NSD_CRUD_H
+#define _NSD_CRUD_H
 
-#include "ipcd_cap.h"
+namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *parent);
+nsobject_t *create_nsobject(const char *name, nsobject_type_t type, namespace_t *parent);
 
-#include "ukern/cocall_args.h"
-#include "ukern/coport.h"
+int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap);
 
-int 
-validate_coclose_args(coclose_args_t *cocall_args)
-{
-	return (1);
-}
-
-void
-coport_close(coclose_args_t *cocall_args, void *token) 
-{
-	UNUSED(token)
-	coport_t *coport;
-	coport_status_t status;
-	coport_eventmask_t events;
-
-	/* TODO-PBB: check permissions */
-	coport = unseal_coport(cocall_args->coport);
-
-	/* TODO-PBB: We should account for closing from COPORT_DONE, or other states, some day*/
-	status = COPORT_OPEN;
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
-		switch (status) {
-		case COPORT_CLOSED:
-		case COPORT_CLOSING:
-			COCALL_ERR(cocall_args, EPIPE);
-			break; /* NOTREACHED */
-		default:
-			status = COPORT_OPEN;
-			break;
-		}
-	}
-	events = coport->info->events;
-	events &= ~(COPOLL_OUT);
-	events |= COPOLL_CLOSED;
-	coport->info->events = events;
-
-	atomic_store_explicit(&cocarrier->info->status, COPORT_CLOSING, memory_order_release);
-
-	COCALL_RETURN(cocall_args, 0);
-}
+#endif //!defined (_NSD_CRUD_H)

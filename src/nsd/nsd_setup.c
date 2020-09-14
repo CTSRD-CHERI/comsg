@@ -47,6 +47,8 @@
  * Handling this is a question of correctness. 
  */
 
+/* TODO-PBB: make this implementation more uniform with ipcd and coserviced */
+
 static
 void safety_dance(void)
 {
@@ -106,6 +108,7 @@ void init_services(void)
 	codrop_serv.function_map = spawn_workers(drop_namespace, validate_codrop_args, nworkers);
 
 	safety_dance();
+	/* COINSERT and COSELECT inited by safety_dance */
 	init_global_service(U_COUPDATE, &coupdate_serv);
 	init_global_service(U_COPROVIDE, &coprovide_serv);
 	init_global_service(U_CODELETE, &codelete_serv);

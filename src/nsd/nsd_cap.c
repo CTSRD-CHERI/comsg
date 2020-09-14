@@ -91,7 +91,7 @@ otype_t get_ns_unsealcap(nstype_t type)
 }
 
 static 
-otype_t get_nsobj_sealcap(nsobjtype_t type)
+otype_t get_nsobj_sealcap(nsobject_type_t type)
 {
 	switch(type)
 	{
@@ -104,13 +104,13 @@ otype_t get_nsobj_sealcap(nsobjtype_t type)
 		case RESERVATION:
 			return reservation_nsobj.sc;
 		default:
-			err(EINVAL, "get_nsobj_sealcap: invalid nsobjtype_t value %d supplied", type);
+			err(EINVAL, "get_nsobj_sealcap: invalid nsobject_type_t value %d supplied", type);
 	}
 	return NULL;
 }
 
 static 
-otype_t get_nsobj_unsealcap(nsobjtype_t type)
+otype_t get_nsobj_unsealcap(nsobject_type_t type)
 {
 	switch(type)
 	{
@@ -123,13 +123,13 @@ otype_t get_nsobj_unsealcap(nsobjtype_t type)
 		case RESERVATION:
 			return reservation_nsobj.usc;
 		default:
-			err(EINVAL, "get_nsobj_unsealcap: invalid nsobjtype_t value %d supplied", type);
+			err(EINVAL, "get_nsobj_unsealcap: invalid nsobject_type_t value %d supplied", type);
 	}
 	return (NULL);
 }
 
 static
-nsobjtype_t get_nsobject_type(nsobject_t *nsobj)
+nsobject_type_t get_nsobject_type(nsobject_t *nsobj)
 {
 	if (!cheri_getsealed(nsobj))
 		return (nsobj->type);
@@ -138,7 +138,7 @@ nsobjtype_t get_nsobject_type(nsobject_t *nsobj)
 }
 
 static
-nsobjtype_t nsobj_otype_to_type(long otype)
+nsobject_type_t nsobj_otype_to_type(long otype)
 {
 	switch(otype)
 	{
@@ -177,7 +177,7 @@ nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap)
 {
 	if (!cheri_getsealed(nsobj_cap))
 		return (nsobj_cap);
-	nsobjtype_t type = get_nsobject_type(nsobj_cap);
+	nsobject_type_t type = get_nsobject_type(nsobj_cap);
 	if (type == INVALID)
 		return (NULL);
 	otype_t unseal_cap = get_nsobj_unsealcap(type);
@@ -188,7 +188,7 @@ nsobject_t *seal_nsobj(nsobject_t *nsobj_cap)
 {
 	if (cheri_getsealed(nsobj_cap))
 		return (nsobj_cap);
-	nsobjtype_t type = nsobj_cap->type;
+	nsobject_type_t type = nsobj_cap->type;
 	otype_t seal_cap = get_nsobj_sealcap(type);
 	return (cheri_seal(nsobj_cap, seal_cap));
 }

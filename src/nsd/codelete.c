@@ -23,43 +23,53 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "namespace_table.h"
 #include "nsd.h"
-
 #include "nsd_cap.h"
+#include "nsd_crud.h"
 #include "nsd_lookup.h"
+
 #include "ukern/cocall_args.h"
-#include "ukern/namespace_object.h"
+#include "ukern/utils.h"
 
-#include <errno.h>
+#include <assert.h>
+#include <string.h>
 
-int validate_coselect_args(coselect_args_t*)
+int validate_codelete_args(codelete_args_t *cocall_args)
 {
-	/*
-	 *
-	 */
-	return (1);
+	nsobject_t *obj = unseal_nsobj(cocall_args->nsobj);
+	namespace_t *ns = unseal_ns(cocall_args->ns_cap);
+	if (!valid_namespace_cap(cocall_args->ns_cap))
+		return (0);
+	else if (!valid_nsobject_cap(cocall_args->nsobj)) 
+		return (0);
+	else
+		return (1);
 }
 
-void select_namespace_object(coselect_args_t * cocall_args, void *token)
+void delete_namespace_object(codelete_args_t *cocall_args, void *token)
 {
-	nsobject_t *obj;
+	UNUSED(token);
+	nsobject_t *nsobj, *parent_obj;
 
-	obj = lookup_nsobject(cocall_args->name, cocall_args->ns_cap, cocall_args->type);
-	if(obj == NULL) {
-		cocall_args->status = -1;
-		cocall_args->error = ENOENT;
-		cocall_args->nsobj = NULL;
-		return;
-	}
-
-	obj = cheri_andperm(obj, NS_HW_PERMS_MASK);
-	if(!is_privileged(token))
-		cocall_args->nsobj = seal_nsobj(obj);
-	else 
-		cocall_args->nsobj = obj;
+	if (!NSOBJ_PERMITS_DELETE(cocall_args->nsobj)) 
+		COCALL_ERR(EACCES);
 	
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
-	return;
+	nsobj = unseal_nsobj(cocall_args->nsobj);
+	//Check that the supplied namespace authorises actions on this namespace object
+	parent_obj = lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap);
+	if (parent_obj == NULL) 
+		COCALL_ERR(cocall_args, ENOENT); //No object with that name and type.
+	else if (parent_obj != nsobj) 
+		COCALL_ERR(cocall_args, EPERM); //There is an object with that name and type, but it's not this object
+	//XXX-PBB: The EPERM above may be incorrect and leak information about the namespace contents.
+	
+	if(!delete_nsobject(parent_obj, cocall_args->ns_cap)) {
+		//Someone beat us to it
+		//Or there's a bug
+		assert(lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap) != nsobj) 
+		COCALL_ERR(cocall_args, ENOENT);
+	}
+	
+	COCALL_RETURN(cocall_args);
 }
