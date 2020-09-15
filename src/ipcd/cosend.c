@@ -41,17 +41,15 @@
 #include <stdatomic.h>
 #include <sys/queue.h>
 
-//TODO-PBB: better definition of these
-#define COCARRIER_MAX_LEN (1024 * 1024)
-#define COCARRIER_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+
 
 int validate_cosend_args(coopen_args_t *cocall_args)
 {
-	if (cocall_args->length > COCARRIER_MAX_LEN)
+	if (cocall_args->length > COCARRIER_MAX_MSG_LEN)
 		return (0);
 	else if (cheri_gettag(cocall_args->message) == 0)
 		return (0);
-	else if (cheri_getlen(cocall_args->message) > COCARRIER_MAX_LEN)
+	else if (cheri_getlen(cocall_args->message) > COCARRIER_MAX_MSG_LEN)
 		return (0);
 	else if (!valid_cocarrier(cocall_args->cocarrier))
 		return (0);
@@ -69,7 +67,7 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
 	coport_status_t status = COPORT_OPEN;
 
 	size_t msg_len = MIN(cocall_args->length, cheri_getlen(cocall_args->message));
-	char *msg_buffer = cocall_malloc(msg_len);
+	char *msg_buffer = cocall_flexible_malloc(msg_len);
 
 	memcpy(msg_buffer, cocall_args->message, msg_len);
 

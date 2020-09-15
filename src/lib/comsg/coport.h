@@ -75,6 +75,9 @@ typedef enum {RECV=1, SEND=2, CREAT=4, EXCL=8, ONEWAY=16} coport_flags_t; //curr
     CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL )
 #define DEFAULT_BUFFER_PERMS ( CHERI_PERM_LOAD_CAP | CHERI_PERM_LOAD | CHERI_PERM_GLOBAL )
 
+//TODO-PBB: better definition of these
+#define COCARRIER_MAX_MSG_LEN (1024 * 1024)
+
 #if 1
 
 typedef struct __no_subobject_bounds _coport_listener 

@@ -28,64 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "ipcd.h"
-#include "ipcd_startup.h"
+#ifndef _IPCD_STARTUP_H
+#define _IPCD_STARTUP_H
 
-#include "ukern/cocalls.h"
-#include "ukern/coport.h"
+void ipcd_startup(void);
 
-#include <err.h>
-#include <errno.h>
-#include <pthread.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-
-static 
-void usage(void)
-{
-	//todo
-	//should be called with lookup string
-	//e.g "coserviced lookup_string"
-	exit(0);
-}
-
-static size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(coport_typedep_t), COCARRIER_MAX_MSG_LEN};
-static size_t nbuckets = 5;
-
-int main(int argc, char const *argv[])
-{
-	int opt, error;
-	void *init_cap;
-	
-	while((opt == getopt(argc, argv, "")) != -1) {
-		switch (opt) {
-		case '?':
-		default: 
-			usage();
-			break;
-		}
-	}
-	if(argc >= 2) {
-		error = colookup(argv[argc], &init_cap);
-		if(error)
-			err(error, "main: colookup of init %s failed", optarg);
-		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
-	}
-	else {
-		printf("Missing lookup string for init\n");
-		usage();
-	}
-	ccmalloc_init(buckets, nbuckets);
-	ipcd_startup();
-
-	for(;;) {
-		for (int i = 0; i < coopen_serv.function_map->nworkers; i++)
-			pthread_join(coopen_serv.function_map->workers[i].worker, NULL);
-		for (int i = 0; i < coclose_serv.function_map->nworkers; i++)
-			pthread_join(coclose_serv.function_map->workers[i].worker, NULL);
-	}
-
-	return (0);
-}
+#endif //!defined(_IPCD_STARTUP_H)

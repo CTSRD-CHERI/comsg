@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,12 +54,13 @@
 static const int bucket_batch = 64;
 static pthread_t bucket_refiller, batch_freer;
 
-typedef enum {UNINITIALIZED=0, READY=1, ALLOCATED=2, FREED=3} bucket_entry_status_t;
+typedef enum {UNINITIALIZED=0, READY=1, ALLOCATED=2, SPLIT=3, FREED=4} bucket_entry_status_t;
 
 struct _bucket_entry {
 	TAILQ_ENTRY(_bucket_entry) next;
-	void *mem;
+	_Atomic(void *) mem;
 	_Atomic bucket_entry_status_t status;
+	_Atomic int nchunks;
 }
 
 struct _batch {
@@ -77,6 +79,7 @@ struct bucket {
 	_Atomic int nbatches;
 	int batch_size;
 	_Atomic int used_entries;
+	size_t smallest_alloc; /* UNUSED unless flexible_bucket */
 };
 
 struct bucket_table
@@ -84,6 +87,7 @@ struct bucket_table
 	struct bucket buckets[MAX_BUCKETS];
 	size_t sizes[MAX_BUCKETS]; 
 	size_t nbuckets;
+	struct bucket *flexible_bucket;
 };
 
 static 
@@ -150,11 +154,12 @@ struct bucket init_bucket(size_t len)
 	new_bucket.cherisize = CHERI_REPRESENTABLE_LENGTH(len);
 	new_bucket.alignment = CHERI_REPRESENTABLE_ALIGNMENT(len);
 	new_bucket.used_entries = 0;
+	new_bucket.smallest_alloc = 0;
 	TAILQ_INIT(&new_bucket.entries);
 	new_bucket.batch_size = bucket_batch;
 	new_bucket_batch(&new_bucket);
 
-	return new_bucket;
+	return (new_bucket);
 }
 
 static
@@ -235,16 +240,14 @@ void *refill_buckets(void *args)
 				new_bucket_batch(bucket);
 			}
 		}
-		if (didwork)
-		{
+		if (didwork) {
 			if (!started_freer) {
 				//a batch is only going to be freed after the next one has been allocated
 				pthread_create(&batch_freer, NULL, free_batches, NULL);
 				started_freer = 1;
 			}
 			wait_period.tv_nsec = 1000;
-		}
-		else {
+		} else {
 			new_wait = wait_period.tv_nsec * 2;
 			wait_period.tv_nsec = (new_wait < WAITMAX) ? new_wait : wait_period.tv_nsec;
 		}
@@ -262,6 +265,8 @@ void set_nbuckets(void)
 void
 ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 {
+	int error;
+	size_t i;
 	if (nbuckets != 0)
 		err(EINVAL, "ccmalloc_init: called ccmalloc twice");
 	else if (nbuckets > MAX_BUCKETS)
@@ -271,18 +276,21 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 	else if (cheri_getlen(bucket_sizes) < (nbuckets * sizeof(size_t)))
 		err(EINVAL, "ccmalloc_init: invalid bounds for number of requested buckets (%d) ", nbuckets);
 
-	for(size_t i = 0; i < nbuckets; i++) {
+	for(i = 0; i < nbuckets; i++) {
 		bucket_table.buckets[i] = init_bucket(bucket_sizes[i]);
 		bucket_table.nbuckets++;
 	}
 	qsort(bucket_table.buckets, bucket_table.nbuckets, sizeof(struct bucket), bucket_compare);
+
+	bucket_table.flexible_bucket = bucket_table.buckets[i];
 	bucket_table.sizes[0] = bucket_table.buckets[0].size;
-	for(size_t i = 1; i < bucket_table.nbuckets; i++) {
+	for(i = 1; i < bucket_table.nbuckets; i++) {
 		bucket_table.sizes[i] = bucket_table.buckets[i].size;
 		if (bucket_table.sizes[i-1] == bucket_table.sizes[i]) 
 			err(EINVAL, "ccmalloc_init: duplicate bucket sizes submitted");
 	}
-	int error = pthread_create(&bucket_refiller, NULL, refill_buckets, NULL);
+	
+	error = pthread_create(&bucket_refiller, NULL, refill_buckets, NULL);
 	if (error)
 		err(error, "ccmalloc_init: failed to start bucket refiller thread");
 }
@@ -320,17 +328,18 @@ struct bucket *find_bucket_cheri(size_t len)
 static
 void *get_mem(size_t len)
 {
-	struct bucket *memory_bucket = find_bucket(len);
+	struct bucket *memory_bucket;
 	struct _bucket_entry *new_next;
 	void *cap;
-	int resize = 0;
+	int resize;
 	bucket_entry_status_t new_status;
 
+	resize = 0;
+	memory_bucket = find_bucket_exact(len);
 	if (memory_bucket == NULL) {
-		resize = 1;
-		memory_bucket = find_bucket_min(len);
+		memory_bucket = find_bucket_cheri(len);
 		if (memory_bucket == NULL)
-			err(EINVAL, "cocall_alloc: get_mem: bucket for size %lu not initialized");
+			err(EINVAL, "cocall_alloc: get_mem: bucket for size %lu not initialized; if required size varies, use flexible malloc");
 	}
 
 	while(!atomic_compare_exchange_weak(&memory_bucket->next_free_entry->status, &new_status, ALLOCATED))
@@ -342,8 +351,14 @@ void *get_mem(size_t len)
 	assert(len <= cheri_getlen(cap)); //something is wrong if this ever happens
 	
 	new_next = TAILQ_NEXT(memory_bucket->next_free_entry, next);
-	assert(new_next->status == READY);
-	atomic_store(&memory_bucket->next_free_entry, new_next);
+	while (new_next != NULL) {
+		if (new_next->status != READY && new_next->status != SPLIT)
+			new_next = TAILQ_NEXT(new_next, next);
+		else 
+			break;
+	}
+	if (new_next != NULL)
+		atomic_store(&memory_bucket->next_free_entry, new_next);
 
 	return (cap);
 }
@@ -353,6 +368,81 @@ void *cocall_alloc_noresize(size_t len)
 {
 	return (get_mem(len));
 }
+
+void *cocall_flexible_malloc(size_t len)
+{
+	struct bucket *bucket;
+	struct _bucket_entry *entry, *new_next;
+	void *entry_mem, *new_entry_mem, *result_mem;
+	size_t free_mem;
+	bool size_prompts_update;
+	bucket_entry_status_t status;
+
+	bucket = bucket_table.flexible_bucket;
+	assert(len >= bucket->cherisize);
+	
+	entry = bucket->next_free_entry;
+	for (;;) {
+		assert(entry != NULL);
+		entry_mem = atomic_load_explicit(&entry->mem, memory_order_acquire);
+		free_mem = cheri_getlen(entry_mem) - cheri_getoffset(entry_mem);
+		if (len < free_mem) {
+			entry = TAILQ_NEXT(entry, next);
+			continue;
+		}
+		status = atomic_load_explicit(&entry->status, memory_order_acquire);
+		if ((len == bucket->cherisize || len == bucket->size)) {
+			if (status != READY) {
+				entry = TAILQ_NEXT(entry, next);
+				continue;
+			}
+			if(!atomic_compare_exchange_strong_explicit(&entry->status, &status, ALLOCATED, memory_order_acq_rel, memory_order_relaxed)) {
+				entry = TAILQ_NEXT(entry, next);
+				continue;
+			}
+			result_mem = cheri_setbounds(entry->mem, len);
+			break;
+		} else {
+			if (status == READY)
+				atomic_store_explicit(&entry->status, SPLIT, memory_order_release);
+			else
+				assert(status == SPLIT);
+			do {
+				free_mem = cheri_getlen(entry_mem) - cheri_getoffset(entry_mem);
+				if (len < free_mem) {
+					result_mem = NULL;
+					break;
+				}
+				result_mem = cheri_setbounds(entry_mem, len);
+				new_entry_mem = cheri_incoffset(entry_mem, cheri_getlen(result_mem));
+			} while(!atomic_compare_exchange_strong_explicit(&entry->mem, &entry_mem, new_entry_mem, memory_order_acq_rel, memory_order_acquire));
+			if(result_mem == NULL) {
+				entry = TAILQ_NEXT(entry, next);
+				continue;
+			}
+			result_mem = cheri_andperm(result_mem, ~CHERI_PERM_CHERIABI_VMMAP);
+			atomic_fetch_add(&entry->nchunks, 1);
+			break;
+		}
+	}
+	free_mem = cheri_getlen(entry->mem) - cheri_getoffset(entry->mem);
+	size_prompts_update = (!(bucket->smallest_alloc < (bucket->size / 2)) == !(free_mem < bucket->smallest_alloc));
+	if (entry == bucket->next_free_entry && size_prompts_update) {
+		do {
+			new_next = TAILQ_NEXT(entry, next);
+			if (new_next == NULL) 
+				goto done;
+		} while (new_next->status != ALLOCATED && new_next->status != FREED);
+		atomic_compare_exchange_strong(bucket->next_free_entry, &entry, new_next);
+	}
+done:
+	if(len < bucket->smallest_alloc)
+		bucket->smallest_alloc = len;
+	return (result_mem);
+		
+
+}
+
 
 void *cocall_malloc(size_t len)
 {
