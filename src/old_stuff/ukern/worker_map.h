@@ -23,37 +23,36 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _UKERN_PARAMS_H
-#define _UKERN_PARAMS_H
+#ifndef _WORKER_MAP_H
+#define _WORKER_MAP_H
 
-#define WORKER_COUNT 1
-#define THREAD_STRING_LEN 16
+#include <coproc/namespace_object.h>
+#include <cocall/worker.h>
 
-#define MAX_COMUTEXES 20
-#define MAX_COPOLL 255
+#include <cheri/cherireg.h>
 
-#define UKERN_PRIV 1
+#define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
 
-//TODO-PBB: revise
-const int nworkers = 12;
+typedef struct _worker_map_entry
+{
+	nsobject_t *func_name;
+	_Atomic int nworkers;
+	worker_args_t *workers;
+} function_map_t;
 
+#ifdef COPROC_UKERN
 
+typedef struct coservice_prov {
+	coservice_t *service;
+	function_map_t *function_map;
+} coservice_provision_t;
 
-#define MAX_COPORTS 10
+#endif 
 
-#define COPORT_BUF_LEN 4096
-#ifndef NS_NAME_LEN
-#define LOOKUP_STRING_LEN 255
-#define COPORT_NAME_LEN 255
-#define COMUTEX_NAME_LEN 255
-#else
-#define LOOKUP_STRING_LEN NS_NAME_LEN
-#define COPORT_NAME_LEN NS_NAME_LEN
-#define COMUTEX_NAME_LEN NS_NAME_LEN
-#endif
-#define UKERN_OTYPE 2
-#define COCARRIER_OTYPE ( UKERN_OTYPE )
-#define COCARRIER_SIZE ( COPORT_BUF_LEN / CHERICAP_SIZE )
-#define COCARRIER_MAX_MSGLEN (  )
+function_map_t *new_function_map(void);
+void spawn_worker(const char *worker_name, void *func, void *valid, function_map_t *func_map);
+void spawn_workers(const char *name, void *func, int nworkers);
+void spawn_worker_thread(worker_args_t *worker, function_map_t *func_map);
+void **get_worker_scbs(function_map_t *func);
 
-#endif
+#endif //!defined(_WORKER_MAP_H)

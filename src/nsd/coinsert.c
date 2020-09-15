@@ -32,9 +32,9 @@
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/namespace_object.h"
-#include "ukern/utils.h"
+#include <cocall/cocall_args.h>
+#include <coproc/namespace_object.h>
+#include <coproc/utils.h>
 
 
 

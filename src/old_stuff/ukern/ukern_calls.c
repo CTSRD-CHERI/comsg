@@ -28,13 +28,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "ukern/ukern_calls.h"
-#include "ukern/cocalls.h"
+#include <cocall/cocall_args.h>
+#include <cocall/cocalls.h>
 
-#include "ukern/coport.h"
-#include "ukern/coservice.h"
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include <comsg/coport.h>
+#include <coproc/coservice.h>
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
 #include <err.h>
 #include <errno.h>

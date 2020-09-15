@@ -31,9 +31,9 @@
 #include "coport_table.h"
 
 
-#include "ukern/ccmalloc.h"
-#include "ukern/cocall_args.h"
-#include "ukern/coport.h"
+#include <ccmalloc.h>
+#include <cocall/cocall_args.h>
+#include <comsg/coport.h>
 
 #include <cheri/cheric.h>
 #include <sys/queue.h>

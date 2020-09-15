@@ -25,10 +25,10 @@
  */
 #include "coservice_table.h"
 
-#include "ukern/ukern_calls.h"
-#include "ukern/coservice.h"
-#include "ukern/worker.h"
-#include "ukern/worker_map.h"
+#include <cocall/cocall_args.h>
+#include <coproc/coservice.h>
+#include <cocall/worker.h>
+#include <cocall/worker_map.h>
 
 #include <pthread.h>
 #include <stdatomic.h>

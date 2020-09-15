@@ -23,21 +23,73 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_H
-#define _COSERVICE_H
 
-#include "ukern/namespace.h"
-#include "ukern/worker.h"
+#include <coproc/namespace.h>
 
-#include <cheri/cherireg.h>
+static long global_ns_otype, proc_ns_otype, thread_ns_otype, explicit_ns_otype, library_ns_otype;
 
-#define MAX_WORKERS 16 //TODO-PBB: Arbitrary, revise.
-
-typedef struct _coservice
+int valid_ns_name(const char * name)
 {
-	void **worker_scbs;
-	_Atomic int next_worker;
-	int nworkers;
-} coservice_t;
+	if(name[0]=='\0')
+		return 0;
 
-#endif //_COSERVICE_H
+	for(int i = 0; i < strnlen(name, NS_NAME_LEN))
+	{
+		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
+			return 0;
+	}
+	return 1;
+}
+
+int valid_ns_otype(long otype)
+{
+	return ((otype == global_ns_otype) || (otype == proc_ns_otype) || (otype == thread_ns_otype) || (otype == explicit_ns_otype) || (otype == library_ns_otype));
+}
+
+nstype_t get_ns_type(namespace_t *ns)
+{
+	long otype = cheri_gettype(ns);
+	return ns_otype_to_type(otype);
+	
+}
+
+nstype_t ns_otype_to_type(long otype)
+{
+	switch(otype)
+	{
+		case global_ns_otype:
+			return GLOBAL;
+		case proc_ns_otype:
+			return PROCESS;
+		case thread_ns_otype:
+			return THREAD;
+		case explicit_ns_otype:
+			return EXPLICIT;
+		default:
+			return INVALID;
+	}
+}
+
+long ns_type_to_otype(nstype_t type)
+{
+	switch(type)
+	{
+		case GLOBAL:
+			return global_ns_otype;
+		case PROCESS:
+			return proc_ns_otype;
+		case THREAD:
+			return thread_ns_otype;
+		case EXPLICIT:
+			return explicit_ns_otype;
+		default:
+			/* should perhaps error instead */
+			return 0; // 0 AKA unsealed
+	}
+}
+
+__attribute__ ((constructor)) static 
+void setup_otypes(void)
+{
+	/* call into namespace daemon and get otypes */
+}

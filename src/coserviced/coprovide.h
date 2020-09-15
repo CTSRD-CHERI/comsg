@@ -26,7 +26,7 @@
 #ifndef _COPROVIDE_H
 #define _COPROVIDE_H
 
-#include "ukern/cocall_args.h"
+#include <cocall/cocall_args.h>
 
 int valid_coprovide_args(coprovide_args_t *args);
 void provide_coservice(coprovide_args_t *cocall_args, void *token);

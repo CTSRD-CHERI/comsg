@@ -25,8 +25,8 @@
  */
 #include "nsd.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/utils.h"
+#include <cocall/cocall_args.h>
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 

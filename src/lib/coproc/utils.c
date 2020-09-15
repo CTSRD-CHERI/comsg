@@ -24,7 +24,7 @@
  * SUCH DAMAGE.
  */
 
-#include "ukern_utils.h"
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 #include <stddef.h>

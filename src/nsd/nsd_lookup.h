@@ -26,10 +26,10 @@
 #ifndef _NSD_LOOKUP_H
 #define _NSD_LOOKUP_H
 
-#include "ukern/coservice.h"
-#include "ukern/coport.h"
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include <coproc/coservice.h>
+#include <comsg/coport.h>
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
 coservice_t *lookup_coservice(char * name, namespace_t *ns_cap);
 coport_t *lookup_coport(char * name, namespace_t *ns_cap);

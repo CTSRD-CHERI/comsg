@@ -28,7 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "ukern/cocalls.h"
+#include <cocall/cocalls.h>
 #include "ukern/tls_cocall.h"
 
 #include <unistd.h>

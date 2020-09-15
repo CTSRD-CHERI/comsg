@@ -24,66 +24,12 @@
  * SUCH DAMAGE.
  */
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
-//static long coport_nsobj_otype, coservice_nsobj_otype, commap_nsobj_otype, reservation_nsobj_otype;
 
 int valid_nsobj_name(const char *name)
 {
 	return (valid_ns_name(name));
 }
 
-#if 0
-int valid_nsobj_otype(long type)
-{
-	return (type == reservation_nsobj_otype || type == commap_nsobj_otype || type == coport_nsobj_otype || type == coservice_nsobj_otype);
-}
-
-nsobject_type_t get_nsobject_type(nsobject_t *nsobj)
-{
-	long otype = cheri_gettype(nsobj);
-	return nsobj_otype_to_type(otype);
-}
-
-nsobject_type_t nsobj_otype_to_type(long otype)
-{
-	switch(otype)
-	{
-		case coport_nsobj_otype:
-			return COPORT;
-		case coservice_nsobj_otype:
-			return COSERVICE;
-		case commap_nsobj_otype:
-			return COMMAP;
-		case reservation_nsobj_otype:
-			return RESERVATION;
-		default:
-			return INVALID;
-	}
-}
-
-long nsobject_type_to_otype(nsobject_type_t type)
-{
-	switch(type)
-	{
-		case COPORT:
-			return coport_nsobj_otype;
-		case COSERVICE:
-			return coservice_nsobj_otype;
-		case COMMAP:
-			return commap_nsobj_otype;
-		case RESERVATION:
-			return reservation_nsobj_otype;
-		default:
-			/* should perhaps error instead */
-			return 0; // 0 AKA unsealed
-	}
-}
-
-__attribute__ ((constructor)) static 
-void setup_otypes(void)
-{
-	/* call into namespace daemon and get otypes */
-}
-#endif

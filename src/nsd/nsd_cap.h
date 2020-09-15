@@ -26,8 +26,8 @@
 #ifndef _NSD_CAP_H
 #define _NSD_CAP_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
 #include <cheri/cherireg.h>
 

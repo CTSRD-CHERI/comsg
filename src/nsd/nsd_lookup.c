@@ -25,7 +25,7 @@
  */
 
 #include "nsd_cap.h"
-#include "ukern/namespace.h"
+#include <coproc/namespace.h>
 
 #include <cheri/cheric.h>
 

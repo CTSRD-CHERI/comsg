@@ -31,8 +31,8 @@
 #include "ipcd.h"
 #include "ipcd_startup.h"
 
-#include "ukern/cocalls.h"
-#include "ukern/coport.h"
+#include <cocall/cocalls.h>
+#include <comsg/coport.h>
 
 #include <err.h>
 #include <errno.h>
@@ -70,10 +70,9 @@ int main(int argc, char const *argv[])
 	if(argc >= 2) {
 		error = colookup(argv[argc], &init_cap);
 		if(error)
-			err(error, "main: colookup of init %s failed", optarg);
+			err(error, "main: colookup of init %s failed", argv[argc]);
 		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
-	}
-	else {
+	} else {
 		printf("Missing lookup string for init\n");
 		usage();
 	}

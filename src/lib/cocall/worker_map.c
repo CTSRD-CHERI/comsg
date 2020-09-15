@@ -23,8 +23,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "ukern/worker_map.h"
-#include "ukern/worker.h"
+#include <cocall/worker_map.h>
+#include <cocall/worker.h>
 
 #include <cheri/cheric.h>
 #include <pthread.h>

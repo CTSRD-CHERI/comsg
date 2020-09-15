@@ -24,11 +24,15 @@
  * SUCH DAMAGE.
  */
 //ECATS-BSD
-#include "cocall_args.h"
-#include "ukern/ukern_params.h"
-#include "ukern/ukern_utils.h"
-#include "worker.h"
+#include <cocall/cocall_args.h>
 
+#include <coproc/utils.h>
+#include <cocall/worker.h>
+
+#include <cheri/cheric.h>
+#include <cheri/cherireg.h>
+
+#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <pthread.h>
@@ -41,11 +45,15 @@ void coaccept_init(
     const char *target_name,
     void **target_cap)
 {
-    if(cosetup(COSETUP_COACCEPT, code_cap, data_cap) < 0)
+    if(cosetup(COSETUP_COACCEPT, code_cap, data_cap) != 0)
         err(errno, "coaccept_init: could not cosetup");
 
-    if (target_name[0] != '\0') {
-        if(coregister(target_name, target_cap) < 0) 
+    if (target_name != NULL) {
+        if (target_name[0] == '\0') {
+            *target_cap = data_cap;
+            return;
+        }
+        else if(coregister(target_name, target_cap) != 0) 
             err(errno, "coaccept_init: could not coregister with name %s", target_name);
     }
     else
@@ -66,8 +74,7 @@ void *coaccept_worker(void *worker_argp)
 
 	worker_args_t *worker_args = worker_argp;
 	coaccept_init(&sw, &scb, worker_args->name, &worker_args->scb_cap);
-	for(;;)
-	{
+	for(;;) {
 		if(coaccept(sw, scb, &cookie, cocall_args_ptr, sizeof(struct cocall_args)) == 0) {
             if(worker_args->validation_function != NULL) 
                 if(!worker_args->validation_function(&cocall_args, cookie)) {
@@ -76,8 +83,7 @@ void *coaccept_worker(void *worker_argp)
                     continue;
                 }
             worker_args->worker_func(&cocall_args);
-        }
-		else
+        } else
 			err(errno, "coaccept_worker: worker failed to coaccept");
 	}
     return (worker_args);

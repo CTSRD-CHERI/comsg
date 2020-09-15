@@ -30,8 +30,8 @@
 #define COPROC_UKERN 1
 #endif
 
-#include "ukern/coservice.h"
-#include "ukern/worker_map.h"
+#include <coproc/coservice.h>
+#include <cocall/worker_map.h>
 
 extern coservice_provision_t coinsert_serv, coselect_serv, coupdate_serv, codelete_serv, cocreate_serv, codrop_serv;
 

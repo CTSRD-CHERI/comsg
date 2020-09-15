@@ -29,8 +29,8 @@
  * SUCH DAMAGE.
  */
 
-#include "ukern/coservice.h"
-#include "ukern/utils.h"
+#include <coproc/coservice.h>
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 #include <err.h>

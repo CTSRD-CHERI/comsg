@@ -23,36 +23,42 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _WORKER_MAP_H
-#define _WORKER_MAP_H
+#ifndef _NSOBJ_H
+#define _NSOBJ_H
 
-#include "ukern/namespace_object.h"
-#include "ukern/worker.h"
+#include <coproc/namespace.h>
 
-#include <cheri/cherireg.h>
+/*
+ * Types
+ * 	+ RESERVATION:	For objects that are not yet ready to be returned via coselect
+ * 					e.g. services that will be registered later, or whose workers are 
+ * 					not yet ready to process requests.
+ */
 
-#define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+#define NSOBJ_PERMS_OWN_MASK ( NS_PERMS_OWN_MASK | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
 
-typedef struct _worker_map_entry
+typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
+
+typedef struct _nsobject
 {
-	nsobject_t *func_name;
-	_Atomic int nworkers;
-	worker_args_t *workers;
-} function_map_t;
+	char name[NS_NAME_LEN];
+	nsobject_type_t type;
+	union
+	{
+		void *obj;
+		coservice_t *coservice;
+		coport_t *coport;
+	}
+} nsobject_t;
 
-#ifdef COPROC_UKERN
+#define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
 
-typedef struct coservice_prov {
-	coservice_t *service;
-	function_map_t *function_map;
-} coservice_provision_t;
+nsobject_type_t get_nsobject_type(nsobject_t *nsobj);
+nsobject_type_t nsobject_otype_to_type(long otype);
+long nsobject_type_to_otype(nsobject_type_t type);
 
-#endif 
+int valid_nsobj_name(const char *name);
+int valid_nsobj_otype(long type);
 
-function_map_t *new_function_map(void);
-void spawn_worker(const char *worker_name, void *func, void *valid, function_map_t *func_map);
-void spawn_workers(const char *name, void *func, int nworkers);
-void spawn_worker_thread(worker_args_t *worker, function_map_t *func_map);
-void **get_worker_scbs(function_map_t *func);
 
-#endif //!defined(_WORKER_MAP_H)
+#endif
