@@ -30,10 +30,10 @@
  */
 #include "ipcd_cap.h"
 
-#include "ukern/ccmalloc.h"
-#include "ukern/cocall_args.h"
-#include "ukern/coport.h"
-#include "ukern/utils.h"
+#include <ccmalloc.h>
+#include <cocall/cocall_args.h>
+#include <comsg/coport.h>
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>

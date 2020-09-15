@@ -32,7 +32,7 @@
 #include "daemons.h"
 #include "dance.h"
 
-#include "ukern/cocall_args.h"
+#include <cocall/cocall_args.h>
 
 #include <err.h>
 #include <errno.h>

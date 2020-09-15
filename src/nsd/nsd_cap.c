@@ -26,9 +26,9 @@
 #include "nsd_cap.h"
 #include "namespace_table.h"
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
-#include "ukern/utils.h"
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
+#include <coproc/utils.h>
 
 #include <err.h>
 #include <errno.h>
@@ -131,9 +131,10 @@ otype_t get_nsobj_unsealcap(nsobject_type_t type)
 static
 nsobject_type_t get_nsobject_type(nsobject_t *nsobj)
 {
+	long otype;
 	if (!cheri_getsealed(nsobj))
 		return (nsobj->type);
-	long otype = cheri_gettype(nsobj);
+	otype = cheri_gettype(nsobj);
 	return (nsobj_otype_to_type(otype));
 }
 
@@ -150,6 +151,32 @@ nsobject_type_t nsobj_otype_to_type(long otype)
 			return COMMAP;
 		case reservation_nsobj.otype:
 			return RESERVATION;
+		default:
+			return INVALID;
+	}
+}
+
+static
+nstype_t get_ns_type(namespace_t *ns)
+{
+	long otype = cheri_gettype(ns);
+	return (ns_otype_to_type(otype));
+	
+}
+
+static
+nstype_t ns_otype_to_type(long otype)
+{
+	switch(otype)
+	{
+		case global_ns_otype:
+			return GLOBAL;
+		case proc_ns_otype:
+			return PROCESS;
+		case thread_ns_otype:
+			return THREAD;
+		case explicit_ns_otype:
+			return EXPLICIT;
 		default:
 			return INVALID;
 	}

@@ -52,7 +52,7 @@
 #include "nsd_crud.h"
 #include "nsd_setup.h"
 
-#include "ukern/ccmalloc.h"
+#include <ccmalloc.h>
 
 #include <err.h>
 #include <errno.h>

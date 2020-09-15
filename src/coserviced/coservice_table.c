@@ -24,7 +24,7 @@
  * SUCH DAMAGE.
  */
 
-#include "ukern/coservice.h"
+#include <coproc/coservice.h>
 
 #include <stdatomic.h>
 #include <stddef.h>

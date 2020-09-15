@@ -32,9 +32,9 @@
 #include "daemons.h"
 #include "dance.h"
 
-#include "ukern/worker.h"
-#include "ukern/worker_map.h"
-#include "ukern/utils.h"
+#include <cocall/worker.h>
+#include <cocall/worker_map.h>
+#include <coproc/utils.h>
 
 #include <unistd.h>
 #include <sys/types.h>

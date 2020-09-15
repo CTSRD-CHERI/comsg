@@ -35,7 +35,7 @@
 #define COPROC_UKERN 1
 #endif
 
-#include "ukern/worker_map.h"
+#include <cocall/worker_map.h>
 
 coservice_provision_t coopen_serv, coclose_serv, copoll_serv, cosend_serv, corecv_serv;
 

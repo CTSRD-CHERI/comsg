@@ -31,7 +31,7 @@
 #include "copoll_utils.h"
 #include "coport_table.h"
 
-#include "ukern/coport.h"
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <pthread.h>

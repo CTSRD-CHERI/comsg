@@ -23,42 +23,66 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _NSOBJ_H
-#define _NSOBJ_H
 
-#include "ukern/namespace.h"
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
-/*
- * Types
- * 	+ RESERVATION:	For objects that are not yet ready to be returned via coselect
- * 					e.g. services that will be registered later, or whose workers are 
- * 					not yet ready to process requests.
- */
+static long coport_nsobj_otype, coservice_nsobj_otype, commap_nsobj_otype, reservation_nsobj_otype;
 
-#define NSOBJ_PERMS_OWN_MASK ( NS_PERMS_OWN_MASK | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP )
-
-typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
-
-typedef struct _nsobject
+int valid_nsobj_name(const char *name)
 {
-	char name[NS_NAME_LEN];
-	nsobject_type_t type;
-	union
+	return (valid_ns_name(name));
+}
+
+int valid_nsobj_otype(long type)
+{
+	return (type == reservation_nsobj_otype || type == commap_nsobj_otype || type == coport_nsobj_otype || type == coservice_nsobj_otype);
+}
+
+nsobject_type_t get_nsobject_type(nsobject_t *nsobj)
+{
+	long otype = cheri_gettype(nsobj);
+	return nsobj_otype_to_type(otype);
+	
+}
+
+nsobject_type_t nsobj_otype_to_type(long otype)
+{
+	switch(otype)
 	{
-		void *obj;
-		coservice_t *coservice;
-		coport_t *coport;
+		case coport_nsobj_otype:
+			return COPORT;
+		case coservice_nsobj_otype:
+			return COSERVICE;
+		case commap_nsobj_otype:
+			return COMMAP;
+		case reservation_nsobj_otype:
+			return RESERVATION;
+		default:
+			return INVALID;
 	}
-} nsobject_t;
+}
 
-#define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
+long nsobject_type_to_otype(nsobject_type_t type)
+{
+	switch(type)
+	{
+		case COPORT:
+			return coport_nsobj_otype;
+		case COSERVICE:
+			return coservice_nsobj_otype;
+		case COMMAP:
+			return commap_nsobj_otype;
+		case RESERVATION:
+			return reservation_nsobj_otype;
+		default:
+			/* should perhaps error instead */
+			return 0; // 0 AKA unsealed
+	}
+}
 
-nsobject_type_t get_nsobject_type(nsobject_t *nsobj);
-nsobject_type_t nsobject_otype_to_type(long otype);
-long nsobject_type_to_otype(nsobject_type_t type);
-
-int valid_nsobj_name(const char *name);
-int valid_nsobj_otype(long type);
-
-
-#endif
+__attribute__ ((constructor)) static 
+void setup_otypes(void)
+{
+	/* call into namespace daemon and get otypes */
+}

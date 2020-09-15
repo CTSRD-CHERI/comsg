@@ -30,7 +30,7 @@
  */
 #include "copoll_utils.h"
 
-#include "ukern/coport.h"
+#include <comsg/coport.h>
 
 #include <err.h>
 #include <errno.h>

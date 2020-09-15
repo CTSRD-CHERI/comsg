@@ -26,9 +26,6 @@
 #ifndef _COCALL_ARGS_H
 #define _COCALL_ARGS_H
 
-//TODO-PBB: get params correctly
-#include "sys_comsg.h"
-
 #define COCALL_ERR(c, n) c->status = (-1);\
 	c->error = (n);\
 	return

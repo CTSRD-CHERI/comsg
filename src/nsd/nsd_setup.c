@@ -28,14 +28,14 @@
 #include "namespace_table.h"
 #include "nsd_crud.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/cocalls.h"
-#include "ukern/coservice.h"
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
-#include "ukern/ukern_calls.h"
-#include "ukern/worker.h"
-#include "ukern/worker_map.h"
+#include <cocall/cocall_args.h>
+#include <cocall/cocalls.h>
+#include <coproc/coservice.h>
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
+#include <cocall/cocall_args.h>
+#include <cocall/worker.h>
+#include <cocall/worker_map.h>
 
 #include <sys/queue.h>
 #include <sys/time.h>

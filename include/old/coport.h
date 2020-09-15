@@ -34,7 +34,7 @@
 #include <stdatomic.h>
 #include <pthread.h>
 
-#include "ukern/namespace.h"
+#include <coproc/namespace.h>
 #include "sys_comsg.h"
 
 #ifndef COPORT_NAME_LEN

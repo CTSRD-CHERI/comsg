@@ -31,7 +31,7 @@
 #ifndef _UKERN_CALLS_H
 #define _UKERN_CALLS_H
 
-#include "ukern/cocalls.h"
+#include <cocall/cocalls.h>
 
 #define COCALL_INVALID (0) //not used
 #define COCALL_CODISCOVER (1)

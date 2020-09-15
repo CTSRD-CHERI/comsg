@@ -26,9 +26,9 @@
 #include "coservice_cap.h"
 #include "coservice_table.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/coservice.h"
-#include "ukern/utils.h"
+#include <cocall/cocall_args.h>
+#include <coproc/coservice.h>
+#include <coproc/utils.h>
 
 #include <errno.h>
 

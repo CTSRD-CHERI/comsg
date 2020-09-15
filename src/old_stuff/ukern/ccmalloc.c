@@ -27,7 +27,7 @@
 //TODO-PBB: Implement.
 #include "ccmalloc.h"
 
-#include "ukern/utils.h"
+#include <coproc/utils.h>
 
 #include <assert.h>
 #include <cheri/cheric.h>

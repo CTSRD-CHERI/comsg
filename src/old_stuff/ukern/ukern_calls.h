@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,73 +28,32 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _UKERN_CALLS_H
+#define _UKERN_CALLS_H
 
-#include "ukern/namespace.h"
+#include <cocall/cocalls.h>
 
-static long global_ns_otype, proc_ns_otype, thread_ns_otype, explicit_ns_otype, library_ns_otype;
+#define COCALL_INVALID (0) //not used
+#define COCALL_CODISCOVER (1)
+#define COCALL_COPROVIDE (2)
+#define COCALL_COINSERT (3)
+#define COCALL_COSELECT (4)
+#define COCALL_COUPDATE (5)
+#define COCALL_CODELETE (6)
+#define COCALL_COOPEN (7)
+#define COCALL_COCLOSE (8)
+#define COCALL_COSEND (9) 
+#define COCALL_CORECV (10)
+#define COCALL_COPOLL (11)
+#define COCALL_COPROC_INIT (12)
 
-int valid_ns_name(const char * name)
-{
-	if(name[0]=='\0')
-		return 0;
+const int n_ukern_calls = 13;
 
-	for(int i = 0; i < strnlen(name, NS_NAME_LEN))
-	{
-		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
-			return 0;
-	}
-	return 1;
-}
+extern pthread_key_t ukern_call_set;
 
-int valid_ns_otype(long otype)
-{
-	return ((otype == global_ns_otype) || (otype == proc_ns_otype) || (otype == thread_ns_otype) || (otype == explicit_ns_otype) || (otype == library_ns_otype));
-}
+namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *codiscover_scb);
 
-nstype_t get_ns_type(namespace_t *ns)
-{
-	long otype = cheri_gettype(ns);
-	return ns_otype_to_type(otype);
-	
-}
+coservice_t *coprovide(const char *name, void **worker_scbs, int nworkers, nsobject_t *nsobj, namespace_t *ns);
 
-nstype_t ns_otype_to_type(long otype)
-{
-	switch(otype)
-	{
-		case global_ns_otype:
-			return GLOBAL;
-		case proc_ns_otype:
-			return PROCESS;
-		case thread_ns_otype:
-			return THREAD;
-		case explicit_ns_otype:
-			return EXPLICIT;
-		default:
-			return INVALID;
-	}
-}
 
-long ns_type_to_otype(nstype_t type)
-{
-	switch(type)
-	{
-		case GLOBAL:
-			return global_ns_otype;
-		case PROCESS:
-			return proc_ns_otype;
-		case THREAD:
-			return thread_ns_otype;
-		case EXPLICIT:
-			return explicit_ns_otype;
-		default:
-			/* should perhaps error instead */
-			return 0; // 0 AKA unsealed
-	}
-}
-
-__attribute__ ((constructor)) static 
-void setup_otypes(void)
-{
-	/* call into namespace daemon and get otypes */
-}
+#endif //!defined(_UKERN_CALLS_H)

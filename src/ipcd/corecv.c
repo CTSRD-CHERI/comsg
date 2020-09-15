@@ -31,9 +31,9 @@
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/coport.h"
-#include "ukern/utils.h"
+#include <cocall/cocall_args.h>
+#include <comsg/coport.h>
+#include <coproc/utils.h>
 
 #include <stdatomic.h>
 #include <stddef.h>

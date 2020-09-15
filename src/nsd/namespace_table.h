@@ -26,8 +26,8 @@
 #ifndef _NSD_TABLE_H
 #define _NSD_TABLE_H
 
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
 #include <stdatomic.h>
 #include <stddef.h>

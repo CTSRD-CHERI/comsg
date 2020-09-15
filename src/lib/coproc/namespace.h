@@ -26,11 +26,10 @@
 #ifndef _NAMESPACE_H
 #define _NAMESPACE_H
 
-#include "coport.h"
-#include "coserv.h"
-
+#include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 #include <stdatomic.h>
+#include <sys/cdefs.h>
 
 
 /*
@@ -76,12 +75,6 @@
 #define NS_PERMITS_READ(c) ( ( cheri_getperm(c) & ( NS_PERM_WR | NS_PERM_RO ) ) != 0)
 
 /* 
- * By default:
- * the global (address space) namespace,
- * process namespace, and
- * thread namespace (for protection inside cocalls if this is required)
- * are all created automatically.
- *
  * Holders of a handle to any of these with appropriate permissions may create a sub-namespace.
  * Namespaces may contain coports or coservices.
  * Library namespaces are not yet fully thought out.
@@ -90,28 +83,25 @@
 typedef enum {INVALID=-1, GLOBAL=1, PROCESS=2, THREAD=4, EXPLICIT=8, LIBRARY=16} nstype_t;
 
 #ifndef NS_NAME_LEN
-#define NS_NAME_LEN ( CHERICAP_SIZE + ( CHERICAP_SIZE - sizeof(nstype_t) ) )
+#define NS_NAME_LEN ( (CHERICAP_SIZE * 2) + ( CHERICAP_SIZE - sizeof(nstype_t) ) )
 #endif
 
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
 struct _ns_members;
+typedef struct _namespace namespace_t;
 
-typedef struct _namespace
-{
-	namespace_t *parent;
-	char name[NS_NAME_LEN];
-	nstype_t type;
+struct _namespace {
+	namespace_t	*parent;
+	char 		name[NS_NAME_LEN];
+	nstype_t	 type;
 	struct _ns_members *members;
-} namespace_t;
+};
 
 #define VALID_NSOBJ_TYPE(type) ( type == GLOBAL || type == GLOBAL || type == PROCESS || type == THREAD || type == EXPLICIT || type == LIBRARY )
 
+__BEGIN_DECLS
+
 int valid_ns_name(const char * name);
 
-int valid_ns_otype(long otype);
-nstype_t get_ns_type(namespace_t *ns);
-nstype_t ns_otype_to_type(long otype);
-long ns_type_to_otype(nstype_t type);
+__END_DECLS
 
 #endif //_NAMESPACE_H

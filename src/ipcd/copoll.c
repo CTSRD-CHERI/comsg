@@ -33,8 +33,8 @@
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/utils.h"
+#include <cocall/cocall_args.h>
+#include <coproc/utils.h>
 
 #include <assert.h>
 #include <pthread.h>

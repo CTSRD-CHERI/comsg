@@ -26,10 +26,10 @@
 
 #include "ns_limits.h"
 
-#include "ukern/ccmalloc.h"
-#include "ukern/namespace.h"
-#include "ukern/namespace_object.h"
-#include "ukern/utils.h"
+#include <ccmalloc.h>
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
+#include <coproc/utils.h>
 
 #include <assert.h>
 #include <cheri/cheric.h>

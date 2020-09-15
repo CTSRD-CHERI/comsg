@@ -26,7 +26,11 @@
 #ifndef _NSOBJ_H
 #define _NSOBJ_H
 
-#include "ukern/namespace.h"
+#include <comsg/coport.h>
+#include <coproc/coservice.h>
+#include <coproc/namespace.h>
+
+#include <sys/cdefs.h>
 
 /*
  * Types
@@ -66,26 +70,17 @@ typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobje
 
 typedef struct _nsobject
 {
-	char name[NS_NAME_LEN];
-	nsobject_type_t type;
+	char 			name[NS_NAME_LEN];
+	nsobject_type_t	type;
 	union
 	{
-		void *obj;
-		coservice_t *coservice;
-		coport_t *coport;
+		void 		*obj;
+		coservice_t	*coservice;
+		coport_t	*coport;
 	}
 } nsobject_t;
 
 #define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
-
-#if 0
-//handled by the namespace manager
-//for user programs, might implement something similar
-nsobject_type_t get_nsobject_type(nsobject_t *nsobj);
-nsobject_type_t nsobject_otype_to_type(long otype);
-long nsobject_type_to_otype(nsobject_type_t type);
-int valid_nsobj_otype(long type);
-#endif
 
 int valid_nsobj_name(const char *name);
 

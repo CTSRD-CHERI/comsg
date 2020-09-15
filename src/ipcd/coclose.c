@@ -31,8 +31,8 @@
 
 #include "ipcd_cap.h"
 
-#include "ukern/cocall_args.h"
-#include "ukern/coport.h"
+#include <cocall/cocall_args.h>
+#include <comsg/coport.h>
 
 int 
 validate_coclose_args(coclose_args_t *cocall_args)

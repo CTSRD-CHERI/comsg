@@ -26,10 +26,10 @@
 
 #include "coservice_table.h"
 
-#include "ukern/ccmalloc.h"
-#include "ukern/cocall_args.h"
-#include "ukern/namespace.h"
-#include "ukern/utils.h"
+#include <ccmalloc.h>
+#include <cocall/cocall_args.h>
+#include <coproc/namespace.h>
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 #include <ctype.h>

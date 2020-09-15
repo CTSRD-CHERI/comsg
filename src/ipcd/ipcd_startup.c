@@ -32,9 +32,9 @@
 #include "ipcd.h"
 #include "ipcd_startup.h"
 
-#include "ukern/namespace.h"
-#include "ukern/worker_map.h"
-#include "ukern/ukern_calls.h"
+#include <coproc/namespace.h>
+#include <cocall/worker_map.h>
+#include <cocall/cocall_args.h>
 
 #include <err.h>
 
