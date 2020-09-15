@@ -30,6 +30,7 @@
  */
 #include "coport_table.h"
 #include "ipcd.h"
+#include "ipcd_startup.h"
 
 #include "ukern/namespace.h"
 #include "ukern/worker_map.h"
