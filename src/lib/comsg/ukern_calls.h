@@ -73,6 +73,5 @@ nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);
 coservice_t *codiscover(nsobject_t *nsobj, void **scb);
 coservice_t *coprovide(void **worker_scbs, int nworkers);
 coport_t *coopen(coport_type_t type);
-int cocarrier_send(coport_t *port, void *buf, size_t len);
 
 #endif //!defined(_UKERN_CALLS_H)

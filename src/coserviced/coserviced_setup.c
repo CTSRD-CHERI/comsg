@@ -34,7 +34,7 @@
 #include <coproc/namespace.h>
 #include <cocall/worker_map.h>
 #include <cocall/cocall_args.h>
-
+#include <comsg/ukern_calls.h>
 #include <err.h>
 
 static namespace_t *global;

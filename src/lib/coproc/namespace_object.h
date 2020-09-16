@@ -26,7 +26,7 @@
 #ifndef _NSOBJ_H
 #define _NSOBJ_H
 
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 #include <coproc/coservice.h>
 #include <coproc/namespace.h>
 

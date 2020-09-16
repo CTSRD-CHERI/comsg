@@ -24,18 +24,18 @@
  * SUCH DAMAGE.
  */
 #include "nsd.h"
-
 #include "namespace_table.h"
 #include "nsd_crud.h"
 
 #include <cocall/cocall_args.h>
 #include <cocall/cocalls.h>
-#include <coproc/coservice.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
 #include <cocall/cocall_args.h>
 #include <cocall/worker.h>
 #include <cocall/worker_map.h>
+#include <comsg/ukern_calls.h>
+#include <coproc/coservice.h>
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
 #include <sys/queue.h>
 #include <sys/time.h>

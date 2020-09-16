@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  */
 
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 
 #include <stdatomic.h>
 #include <sys/mman.h>

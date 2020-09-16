@@ -27,7 +27,7 @@
 #define _NSD_LOOKUP_H
 
 #include <coproc/coservice.h>
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
 

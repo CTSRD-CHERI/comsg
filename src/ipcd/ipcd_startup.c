@@ -28,13 +28,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coclose.h"
+#include "coopen.h"
+#include "copoll.h"
 #include "coport_table.h"
+#include "cosend.h"
+#include "corecv.h"
 #include "ipcd.h"
 #include "ipcd_startup.h"
 
-#include <coproc/namespace.h>
 #include <cocall/worker_map.h>
 #include <cocall/cocall_args.h>
+#include <coproc/namespace.h>
+#include <comsg/ukern_calls.h>
 
 #include <err.h>
 
