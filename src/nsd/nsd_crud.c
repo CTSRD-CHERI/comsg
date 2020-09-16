@@ -34,7 +34,7 @@
 #include <assert.h>
 #include <cheri/cheric.h>
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <stdatomic.h>
 #include <string.h>
 #include <sys/mman.h>

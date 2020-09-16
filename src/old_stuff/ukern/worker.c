@@ -30,7 +30,7 @@
 #include "worker.h"
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <pthread.h>
 #include <unistd.h>
 

@@ -10,7 +10,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <assert.h>
 #include "ukern_mman.h"
 #include "ukern_params.h"

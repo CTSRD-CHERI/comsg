@@ -31,7 +31,7 @@
 #include "ukern/cocall.h"
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <threads.h>
 #include <unistd.h>
 

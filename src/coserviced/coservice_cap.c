@@ -34,7 +34,7 @@
 
 #include <cheri/cheric.h>
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <machine/sysarch.h>
 #include <unistd.h>
 

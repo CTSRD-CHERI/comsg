@@ -29,7 +29,7 @@
 
 #include <cheri/cheric.h>
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <sys/mman.h>
 #include <pthread.h>
 #include <string.h>

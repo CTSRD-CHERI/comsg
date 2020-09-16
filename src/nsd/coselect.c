@@ -30,7 +30,7 @@
 #include <cocall/cocall_args.h>
 #include <coproc/namespace_object.h>
 
-#include <errno.h>
+#include <sys/errno.h>
 
 int validate_coselect_args(coselect_args_t*)
 {

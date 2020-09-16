@@ -30,7 +30,7 @@
 #include <coproc/coservice.h>
 #include <coproc/utils.h>
 
-#include <errno.h>
+#include <sys/errno.h>
 
 int validate_codiscover_args(codiscover_args_t *args)
 {

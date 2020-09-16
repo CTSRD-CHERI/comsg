@@ -33,7 +33,7 @@
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stddef.h>
