@@ -38,9 +38,10 @@
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
 
-
 #include <err.h>
 #include <sys/errno.h>
+#include <stdlib.h>
+#include <string.h>
 
 union coinsert_subject {
 	void *object;
@@ -230,8 +231,8 @@ cocarrier_recv(coport_t *port, void **buf, size_t len)
 	cocall_args.cocarrier = port;
 
 	error = targeted_cocall(ukern_call_set, COCALL_COSEND, &cocall_args, sizeof(cosend_args_t));
-    if(error)
-        err(error, "cocarrier_send: cocall failed");
+    if(error != 0)
+        err(error, "cocarrier_recv: cocall failed");
 
     if (call.status == -1) {
         errno = call.error;
@@ -240,4 +241,40 @@ cocarrier_recv(coport_t *port, void **buf, size_t len)
     else
     	*buf = cocall_args.message;
 	return (call.status);
+}
+
+int
+copoll(pollcoport_t *coports, int ncoports, int timeout)
+{
+	copoll_args_t cocall_args;
+	int error;
+
+	cocall_args.ncoports = ncoports;
+	cocall_args.timeout = timeout;
+	/* 
+	 * If there is no chance we will unborrow/go to the slow path, then we can use
+	 * the pointer supplied, as getting something modified in there so quickly
+	 * quickly would be our fault. Otherwise, we map something ourselves to be 
+	 * a bit more confident that that won't happen. Not sure I'm happy with either
+	 * situation.
+	 */
+	if (timeout == 0)
+		cocall_args.coports = coports;
+	else {
+		cocall_args.coports = calloc(ncoports, sizeof(pollcoport_t));
+		memcpy(cocall_args.coports, coports, sizeof(pollcoport_t) * ncoports);
+	}
+
+	error = targeted_cocall(ukern_call_set, COCALL_COPOLL, &cocall_args, sizeof(copoll_args_t));
+	if(error != 0)
+		err(error, "copoll: cocall failed");
+	if (call.status == -1) {
+		errno = call.error;
+		return (-1);
+	}
+	if (timeout != 0) {
+		memcpy(coports, cocall_args.coports, sizeof(pollcoport_t) * ncoports);
+		free(cocall_args.coports);
+	}
+	return (cocall_args.status);
 }
