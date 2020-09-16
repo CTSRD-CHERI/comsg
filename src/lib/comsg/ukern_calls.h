@@ -66,6 +66,7 @@
 const int n_ukern_calls = 13;
 
 extern pthread_key_t ukern_call_set;
+extern namespace_t *global_ns;
 
 namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb);
 nsobject_t *coinsert(const char *name, nsobject_type_t type, union coinsert_subject subject, namespace_t *ns);
@@ -73,5 +74,7 @@ nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);
 coservice_t *codiscover(nsobject_t *nsobj, void **scb);
 coservice_t *coprovide(void **worker_scbs, int nworkers);
 coport_t *coopen(coport_type_t type);
+
+void set_ukern_func(nsobject_t *service_obj, int function);
 
 #endif //!defined(_UKERN_CALLS_H)

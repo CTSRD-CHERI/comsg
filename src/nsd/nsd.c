@@ -53,13 +53,12 @@
 #include "nsd_setup.h"
 
 #include <ccmalloc.h>
+#include <comsg/ukern_calls.h>
 
 #include <err.h>
 #include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-static namespace_t *global_ns;
 
 static 
 void usage(void)

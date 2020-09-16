@@ -107,8 +107,6 @@ void *get_cocall_target(pthread_key_t set_key, int target_func)
 	call_set *set = pthread_getspecific(set_key);
 	if (set->target_caps[target_func] != NULL)
 		return (set->target_caps[target_func]);
-	else if (global_set.target_caps[target_func] != NULL)
-		return (global_set.target_caps[target_func]);
 	else
 		return (NULL);
 }
