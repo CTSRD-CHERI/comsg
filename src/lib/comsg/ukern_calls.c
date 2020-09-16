@@ -28,13 +28,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include <comsg/ukern_calls.h>
+
 #include <cocall/cocall_args.h>
 #include <cocall/cocalls.h>
 
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 #include <coproc/coservice.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
+
 
 #include <err.h>
 #include <errno.h>
@@ -173,7 +176,7 @@ namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *cosel
 {
 	int error;
 	
-	coproc_init_args_t *cocall_args = calloc(1, sizeof(coproc_init_args_t));
+	coproc_init_args_t cocall_args;
 
 	cocall_args->namespace =  global_ns;
 	cocall_args->coinsert = coinsert_scb;
@@ -181,7 +184,7 @@ namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *cosel
 	cocall_args->coselect = coselect_scb;
 
 	//the target of this varies based on whether caller is a microkernel compartment & which compartment
-	error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT, cocall_args, sizeof(coproc_init_args_t));
+	error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
 	if(error)
 		err(error, "coproc_init: cocall failed");
 	else if (cocall_args->status == -1) {
@@ -196,43 +199,24 @@ namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *cosel
 	return (cocall_args->namespace);
 }
 
-#if 0
-int coopen(const char *coport_name, coport_type_t type, coport_t **prt)
+int 
+cocarrier_send(coport_t *port, void *buf, size_t len)
 {
-    /* request new coport from microkernel */
-    void * __capability func;
-    cocall_coopen_t call;
-    uint error;
+	cosend_args_t cocall_args;
+	int error;
+	
+	cocall_args.cocarrier = port;
+    buf = cheri_setbounds(buf, len);
+    cocall_args.message = cheri_andperm(buf, COCARRIER_MSG_PERMS);
+    
+    error = targeted_cocall(ukern_call_set, COCALL_COSEND, &cocall_args, sizeof(cosend_args_t));
+    if(error)
+        err(error, "cocarrier_send: cocall failed");
 
-    /* cocall setup */
-    strcpy(call.name, coport_name);
-    call.args.type = type;
-    
-    //possible deferred call to malloc ends up in cocall, causing exceptions
-    if (get_cocall_target(COCALL_COOPEN) == NULL) {
-    	if (codiscover(U_COOPEN, global_ns, &func) == NULL)
-    		error("coopen: error performing codiscover");
-    	else
-    		set_cocall_target(ukern_call_set, COCALL_COOPEN, func);
-	}
-    error = targeted_cocall(COCALL_COOPEN, &call, sizeof(cocall_coopen_t));
-    if (!cheri_getsealed(call.port)) {
-        *prt = cheri_seal(call.port, libcomsg_coport_seal);
-        if (call.port->type == COPIPE) 
-            copipe_otype = cheri_gettype(*prt);
-        else if (call.port->type == COCHANNEL) 
-            cochannel_otype = cheri_gettype(*prt);
-        else 
-        	err("coopen: ipcd returned unknown coport type");
+    if (call.status == -1) {
+        errno = call.error;
+        return (-1);
     }
-    else {
-        cocarrier_otype = cheri_gettype(call.port);
-        *prt = call.port;
-        //pre-fetch cocarrier operations to speed up usage
-        ukern_lookup(&switcher_code, &switcher_data, U_COCARRIER_SEND, &func);
-        ukern_lookup(&switcher_code, &switcher_data, U_COCARRIER_RECV, &func);
-    }
-    
-    return (1);
+
+	return (call.status);
 }
-#endif

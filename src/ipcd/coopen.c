@@ -33,7 +33,7 @@
 
 #include <ccmalloc.h>
 #include <cocall/cocall_args.h>
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 
 #include <cheri/cheric.h>
 #include <sys/queue.h>

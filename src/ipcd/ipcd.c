@@ -32,7 +32,7 @@
 #include "ipcd_startup.h"
 
 #include <cocall/cocalls.h>
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 
 #include <err.h>
 #include <errno.h>

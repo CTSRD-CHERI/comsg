@@ -31,7 +31,7 @@
 #include <cocall/cocall_args.h>
 #include <cocall/cocalls.h>
 
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 #include <coproc/coservice.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
