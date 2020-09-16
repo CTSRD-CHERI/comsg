@@ -106,6 +106,11 @@ struct coopen
 	coport_t *port; 
 };
 
+struct coclose
+{
+	coport_t *port;
+};
+
 struct cosend
 {
 	coport_t *cocarrier;
@@ -160,36 +165,31 @@ struct cocall_args
 		struct codelete;
 		struct coselect;
 		struct coinsert;
-		/* copoll */
 		struct copoll;
-		/*cocarrier send/recv*/
 		struct cosend;
-		/* ukernel function/service lookup */
 		struct codiscover;
-		//
 		struct coprovide;
-		/*coopen*/
 		struct coopen;
-		//
+		struct coclose;
 		struct comunmap;
 		struct commap;
-
-
 		struct coproc_init;
-
 	};
 } __attribute__((__aligned__(16)));
 
 typedef struct cocall_args cocall_args_t;
 typedef struct cocall_args copoll_args_t;
-typedef struct cocall_args cocarrier_send_args_t;
+typedef struct cocall_args cosend_args_t;
+typedef struct cocall_args corecv_args_t;
 typedef struct cocall_args codiscover_args_t;
 typedef struct cocall_args coprovide_args_t;
 typedef struct cocall_args coopen_args_t;
-typedef struct cocall_args comunmap_args_t;
-typedef struct cocall_args commap_args_t;
+typedef struct cocall_args coclose_args_t;
 typedef struct cocall_args coselect_args_t;
 typedef struct cocall_args coinsert_args_t;
 typedef struct cocall_args coproc_init_args_t;
+
+typedef struct cocall_args comunmap_args_t;
+typedef struct cocall_args commap_args_t;
 
 #endif //!defined(_COCALL_ARGS_H)

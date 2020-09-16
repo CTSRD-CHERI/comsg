@@ -50,18 +50,16 @@
 #include "comsg.h"
 
 #include <comsg/ukern_calls.h>
+#include <coproc/utils.h>
 
 #define COPIPE_BUF_PERMS (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL )
 #define COPORT_IPC_OTYPE 1
-//Sealing root
-static void * __capability libcomsg_sealroot;
-//Sealing cap for coport_t
-static otype_t libcomsg_coport_seal;
-static long libcomsg_otype;
-static long cocarrier_otype = 0;
-static long copipe_otype = 0;
-static long cochannel_otype = 0;
+
 static long multicore = 0;
+
+struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
+
+struct object_type *otypes[] = {&copipe_otype, &cochannel_otype};
 
 typedef struct _port_tbl_entry {
     coport_t port;
@@ -94,36 +92,43 @@ process_coport_handle(coport_t *port, coport_type_t type)
 {
     switch (type) {
     case COPIPE:
-        copipe_otype = cheri_gettype(port);
+        port = cheri_clearperm(port, CHERI_PERM_GLOBAL);
+        port = cheri_seal(port, copipe_otype.sc);
         break;
     case COCHANNEL:
-        cochannel_otype = cheri_gettype(port);
+        port = cheri_clearperm(port, CHERI_PERM_GLOBAL);
+        port = cheri_seal(port, cochannel_otype.sc);
         break;
     case COCARRIER:
-        cocarrier_otype = cheri_gettype(port);
+        if (cocarrier_otype.otype == 0)
+            cocarrier_otype.otype = cheri_gettype(port);
+        else if (cocarrier_otype.otype != cheri_gettype(port))
+            warn("process_coport_handle: cocarrier otype has changed!!");
         cocarrier_preload();
         break;
     default:
         err(ENOSYS, "coopen: ipcd returned unknown coport type");
         break; /* NOTREACHED */
     }
+    return (port);
 } 
 
-nsobject_t *open_named_coport(const char *coport_name, coport_type_t type)
+nsobject_t *
+open_named_coport(const char *coport_name, coport_type_t type)
 {
     coport_t *port;
     ns_object_t *port_obj, *cosend_obj, *corecv_obj;
 
     port = coopen(type);
-    port_obj = coinsert(coport_name, COPORT, port, ns);
+    port = process_coport_handle(port, type);
 
-    port = port_obj->coport;
-    process_coport_handle(port, type);
+    port_obj = coinsert(coport_name, COPORT, port, ns);
 
     return (port_obj);
 }
 
-coport_t *open_coport(coport_type_t type)
+coport_t *
+open_coport(coport_type_t type)
 {
     coport_t *port;
 
@@ -162,8 +167,8 @@ release_coport_status(coport_t *port, coport_status_t desired)
     atomic_store_explicit(&port->info->status, desired, memory_order_release);
 }
 
-static 
-int copipe_send(const coport_t *port, const void *buf, size_t len)
+static int
+copipe_send(const coport_t *port, const void *buf, size_t len)
 {
     void *out_buffer;
     acquire_coport_status(port, COPORT_READY, COPORT_BUSY);
@@ -185,8 +190,8 @@ int copipe_send(const coport_t *port, const void *buf, size_t len)
     return (len);
 }
 
-static 
-int cochannel_send(const coport_t *port, const void *buf, size_t len)
+static int
+cochannel_send(const coport_t *port, const void *buf, size_t len)
 {
     size_t port_size, port_start, old_end, new_end, new_len;
     char *port_buffer, *msg_buffer;
@@ -235,7 +240,8 @@ int cochannel_send(const coport_t *port, const void *buf, size_t len)
 }
 
 
-int coport_send(const coport_t *prt, const void *buf, size_t len)
+int
+coport_send(const coport_t *prt, const void *buf, size_t len)
 {
     int retval;
     coport_type_t type;
@@ -332,7 +338,8 @@ copipe_corecv(const coport_t *port, void *buf, size_t len)
     return (cheri_getlen(buf));
 }
 
-int corecv(const coport_t *port, void **buf, size_t len)
+int 
+corecv(const coport_t *port, void **buf, size_t len)
 {
     int retval;
     coport_type_t type;
@@ -358,35 +365,40 @@ int corecv(const coport_t *port, void **buf, size_t len)
 }
 
 
-coport_type_t coport_gettype(coport_t port)
+coport_type_t 
+coport_gettype(coport_t *port)
 {
+    long port_otype;
     if(!cheri_getsealed(port))
         return (INVALID);
-    if (cheri_gettype(port) != libcomsg_otype) {
-        //XXX-PBB:this is bad. 
-        //if both are true we don't reach this. 
-        //we give sealed stuff a pass if we don't know the cocarrier_otype yet.
-        if(cocarrier_otype == -1 || cheri_gettype(port) == cocarrier_otype)
-            return (COCARRIER);
-    } else {
-        port = cheri_unseal(port, libcomsg_sealroot);
-        return (port->type);
+
+    port_otype = cheri_gettype(port);
+    switch (port_otype) {
+    case cocarrier_otype.otype:
+        return (COCARRIER);
+    case copipe_otype.otype:
+        return (COPIPE);
+    case cochannel_otype.otype:
+        return (COCHANNEL);
+    default:
+        return (INVALID);
     }
-    return (INVALID);
 }
 
-pollcoport_t make_pollcoport(coport_t port, int events)
+pollcoport_t 
+make_pollcoport(coport_t port, coport_eventmask_t events)
 {
     pollcoport_t pcpt;
 
     pcpt.coport = port;
     pcpt.events = events;
-    pcpt.revents = 0;
+    pcpt.revents = NOEVENT;
 
     return (pcpt);
 }
 
-int coclose(coport_t port)
+int
+coclose(coport_t *port)
 {
     //TODO-PBB: IMPLEMENT
     //if we possess the CLOSE permission, we can unilaterally close the port for all users.
@@ -395,105 +407,31 @@ int coclose(coport_t port)
     return (0);
 }
 
-static
-int cocarrier_poll(pollcoport_t * coports, int ncoports, int timeout)
+__attribute__ ((constructor)) static void 
+coport_ipc_init(void)
 {
-    void * __capability switcher_code;
-    void * __capability switcher_data;
-    void * __capability func;
-    copoll_args_t * call;
-    pollcoport_t * call_coports;
-
-
-    uint error;
-    int status;
-    call = calloc(1, sizeof(copoll_args_t));
-    //allocate our own for safety purposes
-    call_coports = calloc(ncoports, sizeof(pollcoport_t));
-    memcpy(call_coports, coports, sizeof(pollcoport_t)*ncoports);
-    
-    call->coports = call_coports;
-    call->ncoports = ncoports;
-    call->timeout = timeout;
-    /* cocall setup */
-    //TODO-PBB: Only do this once.
-
-    //possible deferred call to malloc ends up in cocall, causing exceptions?
-    error = ukern_lookup(&switcher_code, &switcher_data, U_COPOLL, &func);
-    if (error) {
-        free(call_coports);
-        free(call);
-        return (-1);
-    }
-    error = cocall(switcher_code, switcher_data, func, call, sizeof(cocall_coopen_t));
-    assert(error == 0);
-    errno = call->error;
-    status = call->status;
-    if (status != 0) {
-        for (int i = 0; i < ncoports; ++i)
-            coports[i].revents = call->coports[i].revents;
-    }
-    free(call_coports);
-    free(call);
-
-    return (status);
-}
-
-int copoll(pollcoport_t * coports, int ncoports, int timeout)
-{
-    assert(ncoports>0);
-    assert(cheri_gettag(coports));
-
-    for(int i = 1; i < ncoports; i++)
-        assert((coport_gettype(coports[i].coport) == coport_gettype(coports[i-1].coport))||(coport_gettype(coports[i].coport) != COCARRIER && (coport_gettype(coports[i-1].coport) != COCARRIER)));
-
-    if(coport_gettype(coports[0].coport) == COCARRIER)
-        return(cocarrier_poll(coports, ncoports, timeout));
-
-    err(ENOSYS, "copoll: copoll on non-cocarrier coports not yet implemented");
-    for(;;sched_yield())
-    {
-        for(int i = 0;i<ncoports;i++)
-        {
-            switch(coport_gettype(coports[i].coport))
-            {
-                case COPIPE:
-                    break;
-                case COCHANNEL:
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-    
-}
-
-__attribute__ ((constructor)) static 
-void libcomsg_init(void)
-{
-    if (sysarch(CHERI_GET_SEALCAP, &libcomsg_sealroot) < 0) {
-        libcomsg_sealroot = NULL;
-    }
-    assert((cheri_gettag(libcomsg_sealroot) != 0));    
-    assert(cheri_getlen(libcomsg_sealroot) != 0);
-    assert((cheri_getperm(libcomsg_sealroot) & CHERI_PERM_SEAL) != 0);
-    //XXX-PBB: Is 1 an okay value?
-    libcomsg_coport_seal = cheri_maketype(libcomsg_sealroot, LIBCOMSG_OTYPE);
-    libcomsg_otype = cheri_gettype(cheri_seal(libcomsg_coport_seal, libcomsg_coport_seal));
-    libcomsg_sealroot = cheri_setoffset(libcomsg_sealroot, LIBCOMSG_OTYPE);
-
+    void *sealroot;
     int mib[4];
+    size_t len;
     int cores;
-    size_t len = sizeof(cores); 
 
-    /* set the mib for hw.ncpu */
+    assert(sysarch(CHERI_GET_SEALCAP, &sealroot) != -1);
+
+    assert((cheri_gettag(sealroot) != 0));    
+    assert(cheri_getlen(sealroot) != 0);
+    assert((cheri_getperm(sealroot) & CHERI_PERM_SEAL) != 0);
+    /* TODO-PBB: simulate a divided otype space elsewhere */
+    sealroot = cheri_incoffset(sealroot, 128);
+
+    sealroot = make_otypes(sealroot, 2, otypes);
+    cocarrier_otype.otype = 0;
+
+    /* get the number of CPUs to determine how we spin */
+    len = sizeof(cores); 
     mib[0] = CTL_HW;
     mib[1] = HW_NCPU;
-
-    /* get the number of CPUs from the system */
     sysctl(mib, 2, &cores, &len, NULL, 0);
-    if (cores>1)
+    if (cores > 1)
         multicore = 1;
 
 }

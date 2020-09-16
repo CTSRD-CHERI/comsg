@@ -34,38 +34,41 @@
 #include <unistd.h>
 
 
-int generate_id(void)
+int
+generate_id(void)
 {
     static int id = 1;
     // TODO: Replace this with something smarter.
     return id++;
 }
 
-int rand_string(char *buf, size_t len)
+int
+rand_string(char *buf, size_t len)
 {
     char c;
     int rand_no;
     //last character should contain a NULL
-    len=MIN(len+1,cheri_getlen(buf)-1);
+    len = MIN(len + 1, cheri_getlen(buf) - 1);
     srandomdev();
     for (size_t i = 0; i < len; i++)
     {
         rand_no=random() % KEYSPACE;
         if (rand_no<10)
-            c=(char)rand_no+'0';
+            c = (char)rand_no + '0';
         else if (rand_no<36)
-            c=(char)(rand_no % 26)+'A';
+            c = (char)(rand_no % 26) + 'A';
         else 
-            c=(char)(rand_no % 26)+'a';
-        buf[i]=c;
+            c = (char)(rand_no % 26) + 'a';
+        buf[i] = c;
     }
-    buf[len]='\0';
+    buf[len] = '\0';
     return len;
 }
 
-int valid_scb(void * scb)
+int
+valid_scb(void * scb)
 {
-    return 1;
+    return (1);
 }
 
 static __inline otype_t
@@ -96,7 +99,7 @@ make_otype(void *root_type, register_t type, struct object_type *result)
     return (result);
 }
 
-void *make_otypes(void * rootcap, int n_otypes, struct object_type **results)
+void *make_otypes(void *rootcap, int n_otypes, struct object_type **results)
 {
     struct object_type new_otype;
     assert(cheri_getlen(rootcap) <= n_otypes);
