@@ -51,7 +51,7 @@
 
 #include <comsg/ukern_calls.h>
 
-
+#define COPIPE_BUF_PERMS (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL )
 #define COPORT_IPC_OTYPE 1
 //Sealing root
 static void * __capability libcomsg_sealroot;
@@ -180,7 +180,7 @@ int copipe_send(const coport_t *port, const void *buf, size_t len)
         return (-1);
     }
     memcpy(out_buffer, buf, len);
-
+    port->info->length = len;
     release_coport_status(port, COPORT_DONE);
     return (len);
 }
@@ -188,12 +188,13 @@ int copipe_send(const coport_t *port, const void *buf, size_t len)
 static 
 int cochannel_send(const coport_t *port, const void *buf, size_t len)
 {
-    size_t port_size, port_start, old_end, new_end;
+    size_t port_size, port_start, old_end, new_end, new_len;
     char *port_buffer, *msg_buffer;
     coport_eventmask_t event;
 
     port_size = port->info->length;
-    if(len > port_size) {
+    new_len = len + port_size;
+    if(new_len > COPORT_BUF_LEN) {
         errno = EWOULDBLOCK;
         return (-1);
     }
@@ -210,23 +211,22 @@ int cochannel_send(const coport_t *port, const void *buf, size_t len)
         errno = EAGAIN;
         return (-1);
     }
-
     port_buffer = port->buffer->buf;
     msg_buffer = buf;
     
-    new_end = (old_end + len) % port_size;
-    if (old_end + len > port_size) {
-        memcpy(&port_buffer[old_end], msg_buffer, port_size - old_end);
-        memcpy(port_buffer, &msg_buffer[port_size-old_end], new_end);
+    new_end = (old_end + len) % COPORT_BUF_LEN;
+    if (old_end + len > COPORT_BUF_LEN) {
+        memcpy(&port_buffer[old_end], msg_buffer, COPORT_BUF_LEN - old_end);
+        memcpy(port_buffer, &msg_buffer[COPORT_BUF_LEN-old_end], new_end);
     }
     else
         memcpy(&port_buffer[old_end], msg_buffer, len);
     port->info->end = new_end;
+    port->info->length = new_len;
     
     event |= COPOLL_IN;
-    if (new_end == port_start) 
+    if (new_len == COPORT_BUF_LEN) 
         event &= ~COPOLL_OUT;
-
     port->info->event = event;
 
     release_coport_status(port, COPORT_OPEN);
@@ -243,6 +243,7 @@ int coport_send(const coport_t *prt, const void *buf, size_t len)
     if(len == 0)
         return (0);
 
+    type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
         retval = cochannel_send(prt, buf, len);
@@ -260,147 +261,100 @@ int coport_send(const coport_t *prt, const void *buf, size_t len)
     return (retval);
 }
 
-int corecv(const coport_t prt, void ** buf, size_t len)
+static int
+cochannel_corecv(const coport_t *port, void *buf, size_t len)
 {
-    //we need more atomicity on changes to end
-    coport_t port = prt;
-    size_t old_start;
-    void * __capability switcher_code;
-    void * __capability switcher_data;
-    void * __capability func;
-    cocall_cocarrier_send_t call;
-    coport_status_t status_val;
-    coport_type_t type;
-    size_t port_size, port_end;
-    uint i = 0;
-    int retval = len;
-    size_t cherilen = CHERI_REPRESENTABLE_LENGTH(len);
+    char *out_buffer, *port_buffer;
+    size_t port_size, old_start, port_end, new_start, len_to_end, new_len;
+    coport_eventmask_t event;
+
+    port_size = port->info->length;
+    if (port_size < len) {
+        err(EMSGSIZE, "corecv: expected message length %lu larger than contents of buffer", len);
+        return (-1);
+    }
+    new_len = port_size - len;
+    if(acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED) != 0)
+        return (-1);
     
-    //assert(cheri_getperm(port)&COPORT_PERM_RECV); //doesn't work
-    //assert(cheri_getsealed(port) != 0);
-    if(len == 0)
-        return (0);
-    if (cheri_gettype(port) != libcomsg_otype) {
-        type = COCARRIER;
+    event = port->info->event;
+    if ((event & COPOLL_IN) == 0) {
+        /* UNREACHED */
+        release_coport_status(port, COPORT_OPEN);
+        errno = EAGAIN;
+        return (-1);
+    }
+    out_buffer = buf;
+    port_buffer = port->buffer->buf;
+    old_start = port->info->start;
+    new_start = (old_start + len) % COPORT_BUF_LEN;
+    
+    if (old_start + len > port_size) {
+        len_to_end = COPORT_BUF_LEN - old_start;
+        memcpy(out_buffer, &port_buffer[old_start], len_to_end);
+        memcpy(out_buffer[len_to_end], port_buffer, new_start);
     }
     else
-    {
-        port = cheri_unseal(port, libcomsg_sealroot);
-        type = port->type; 
-    }
-    switch(type)
-    {
-        case COCHANNEL:
-            port_size = atomic_load_explicit(&port->length, memory_order_acquire);
-            if (port_size<len) {
-                err(EMSGSIZE, "corecv: expected message length %lu larger than buffer", len);
-                return (-1);
-            }
-            for(;;) {
-                status_val = COPORT_OPEN;
-                if (atomic_compare_exchange_strong_explicit(&port->status, &status_val, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire)) {
-                    break;
-                }
-                if (!(i%30))
-                    sched_yield(); 
-                i++;
-            }
-            old_start = atomic_load_explicit(&port->start, memory_order_acquire);
-            port_end = atomic_load_explicit(&port->end, memory_order_acquire);
-            if ((port->event & COPOLL_IN) == 0) {
-                //warn("corecv: no message to receive");
-                errno = EAGAIN;
-                atomic_store_explicit(&port->status, COPORT_OPEN, memory_order_release);
-                return (-1);
-            }
-            if (!cheri_gettag(port->buffer)) {
-                warn("corecv: coport is closed");
-                errno = EPIPE;
-                atomic_store_explicit(&port->status, COPORT_OPEN, memory_order_release);
-                return (-1);
-            }
-            if(old_start == port_size)
-                old_start = 0;
-            if((old_start+len) == port_size)
-                atomic_store_explicit(&port->start, port_size, memory_order_release);
-            else
-                atomic_store_explicit(&port->start, (old_start+len)%(port_size), memory_order_release);
+        memcpy(buf, &port_buffer[old_start], len);
+    port->info->length = new_len;
+    port->info->start = new_start;
 
-            if (old_start+len>port_size) {
-                memcpy(*buf, (char *)port->buffer+old_start, port_size-old_start);
-                memcpy((char *)*buf+(port_size-old_start), (char *)port->buffer, (old_start+len)%(port_size));
-            }
-            else
-                memcpy(*buf, (char *)port->buffer+old_start, len);
+    event |= COPOLL_OUT;
+    if (new_len == 0)
+        event &= ~COPOLL_IN;
+    port->info->event = event;
 
-            port->event |= COPOLL_OUT;
-            if (port->end == port->start)
-                port->event &= ~COPOLL_IN;
-            atomic_store_explicit(&port->status, COPORT_OPEN, memory_order_release);
-            break;
-        case COCARRIER:
-            call.cocarrier = prt;
-            call.error = 0;
-            call.status = 0;
-            ukern_lookup(&switcher_code, &switcher_data, U_COCARRIER_RECV, &func);
-            cocall(switcher_code, switcher_data, func, &call, sizeof(cocall_cocarrier_send_t));
-            if (call.status == -1) {
-                errno = call.error;
-                warn("corecv: error occurred during cocarrier recv");
-                retval = call.status;
-            } else {
-                if (cheri_getlen(call.message) != len) {
-                    if(cheri_getlen(call.message) != cherilen)
-                        warn("corecv: message length (%lu) does not match len (%lu)", cheri_getlen(call.message), len);
-                }
-                if ((cheri_getperm(call.message)&(CHERI_PERM_LOAD|CHERI_PERM_LOAD_CAP)) == 0) {
-                    err(1, "corecv: received capability does not grant read permissions");
-                }
-                *buf = call.message;
-            }
-            break;
-        case COPIPE:
-            for(;;) {
-                status_val = COPORT_OPEN;
-                if (port->status == status_val || !multicore) {
-                    if (atomic_compare_exchange_strong_explicit(&port->status, &status_val, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire)) {
-                        break;
-                    }
-                } else {
-                    if ((i % 10 == 0) && !multicore) {
-                        //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
-                        //this context switch will eventually happen, so we skip some needless spinning this way
-                        sched_yield(); 
-                    }
-                    else if (i % 30 == 0)
-                        sched_yield(); 
-                    i++;
-                }
-            }
-            atomic_store_explicit(&port->buffer, *buf, memory_order_release);
-            atomic_store_explicit(&port->status, COPORT_READY, memory_order_release);
-            i = 0;
-
-            while(port->status != COPORT_DONE)
-            {
-                if (!(i%10)) {
-                        //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
-                        //this context switch will eventually happen, so we skip some needless spinning this way
-                        sched_yield(); 
-                }
-                i++;
-            }
-            atomic_store_explicit(&port->buffer, NULL, memory_order_release);
-            atomic_store_explicit(&port->status, COPORT_OPEN, memory_order_release);
-            retval = 0;
-            break;
-        default:
-            err(1, "corecv: invalid coport type");
-            break;
-    }
-    if(retval == -1)
-        return (retval);
+    release_coport_status(port, COPORT_OPEN);
     return (len);
+}
+
+static int
+copipe_corecv(const coport_t *port, void *buf, size_t len)
+{
+    size_t received_len;
+
+    if (cheri_getlen(buf) < len)
+        buf = cheri_setbounds(buf, len);
+    buf = cheri_andperm(buf, COPIPE_BUF_PERMS);
+
+    acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
+
+    port->buffer->buf = buf;
+
+    release_coport_status(port, COPORT_READY);
+    acquire_coport_status(port, COPORT_DONE, COPORT_BUSY);
+
+    port->buffer->buf = NULL;
+    received_len = port->info->length;
+
+    release_coport_status(port, COPORT_OPEN);
+
+    return (cheri_getlen(buf));
+}
+
+int corecv(const coport_t *port, void **buf, size_t len)
+{
+    int retval;
+    coport_type_t type;
+
+    if(len == 0)
+        return (0);
+    type = coport_gettype(port);
+    switch(type) {
+    case COCHANNEL:
+        retval = cochannel_corecv(port, *buf, len);
+        break;
+    case COCARRIER:
+        retval = cocarrier_recv(port, buf, len);
+        break;
+    case COPIPE:
+        retval = copipe_corecv(port, *buf, len);
+        break;
+    default:
+        err(1, "corecv: invalid coport type");
+        break;
+    }
+    return (retval);
 }
 
 

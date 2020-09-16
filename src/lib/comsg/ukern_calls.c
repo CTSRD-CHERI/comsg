@@ -220,3 +220,24 @@ cocarrier_send(coport_t *port, void *buf, size_t len)
 
 	return (call.status);
 }
+
+int
+cocarrier_recv(coport_t *port, void **buf, size_t len)
+{
+	corecv_args_t cocall_args;
+	int error;
+
+	cocall_args.cocarrier = port;
+
+	error = targeted_cocall(ukern_call_set, COCALL_COSEND, &cocall_args, sizeof(cosend_args_t));
+    if(error)
+        err(error, "cocarrier_send: cocall failed");
+
+    if (call.status == -1) {
+        errno = call.error;
+        return (-1);
+    }
+    else
+    	*buf = cocall_args.message;
+	return (call.status);
+}
