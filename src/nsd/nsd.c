@@ -103,6 +103,11 @@ int main(int argc, char const *argv[])
 	
 	init_services();
 
+	for (int i = 0; i < coinsert_serv.function_map->nworkers; i++)
+		pthread_join(coinsert_serv.function_map->workers[i].worker, NULL);
+	for (int i = 0; i < codelete_serv.function_map->nworkers; i++)
+		pthread_join(codelete_serv.function_map->workers[i].worker, NULL);
+
 
 	return (0);
 }
