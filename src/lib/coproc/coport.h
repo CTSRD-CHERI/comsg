@@ -77,6 +77,7 @@ typedef enum {RECV=1, SEND=2, CREAT=4, EXCL=8, ONEWAY=16} coport_flags_t; //curr
 
 //TODO-PBB: better definition of these
 #define COCARRIER_MAX_MSG_LEN (1024 * 1024)
+#define COPORT_BUF_LEN (4096)
 
 #if 1
 
