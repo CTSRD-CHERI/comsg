@@ -33,6 +33,7 @@
 #include <err.h>
 #include <time.h>
 #include <string.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/errno.h>
@@ -55,36 +56,27 @@
 #define COPIPE_BUF_PERMS (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL )
 #define COPORT_IPC_OTYPE 1
 
-static long multicore = 0;
+static bool multicore = 0;
 
 struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
 
 struct object_type *otypes[] = {&copipe_otype, &cochannel_otype};
 
-typedef struct _port_tbl_entry {
-    coport_t port;
-    int wired;
-} pentry_t;
-
-struct _ports_tbl {
-    int index;
-    pentry_t entries[10];
-};
-
-static namespace_t *global_ns = NULL;
+/* TODO-PBB: move global_ns so we only keep it in one place across all libs */
 static nsobject_t *cosend_obj = NULL;
 static nsobject_t *corecv_obj = NULL;
 
 static void
 cocarrier_preload(void)
 {
-    if (cosend_obj != NULL || corecv_obj != NULL)
-        return;
-    else if (global_ns == NULL)
+    if (global_ns == NULL)
         global_ns = coproc_init(NULL, NULL, NULL, NULL);
-
-    cosend_obj = coselect(U_COSEND, COSERVICE, global_ns);
-    corecv_obj = coselect(U_CORECV, COSERVICE, global_ns);
+    if (cosend_obj == NULL)
+        cosend_obj = coselect(U_COSEND, COSERVICE, global_ns);
+    if (corecv_obj == NULL)
+        corecv_obj = coselect(U_CORECV, COSERVICE, global_ns);
+    discover_ukern_func(cosend_obj, COCALL_COSEND);
+    discover_ukern_func(corecv_obj, COCALL_CORECV);
 }
 
 static void
@@ -341,8 +333,9 @@ copipe_corecv(const coport_t *port, void *buf, size_t len)
 int 
 corecv(const coport_t *port, void **buf, size_t len)
 {
-    int retval;
+    void *msg;
     coport_type_t type;
+    int retval;
 
     if(len == 0)
         return (0);
@@ -352,10 +345,16 @@ corecv(const coport_t *port, void **buf, size_t len)
         retval = cochannel_corecv(port, *buf, len);
         break;
     case COCARRIER:
-        retval = cocarrier_recv(port, buf, len);
+        msg = cocarrier_recv(port, buf, len);
+        if(msg == NULL)
+            retval = -1;
+        else {
+            *buf = msg;
+            retval = cheri_getlen(buf);
+        }
         break;
     case COPIPE:
-        retval = copipe_corecv(port, *buf, len);
+        retval = copipe_corecv(port, len);
         break;
     default:
         err(1, "corecv: invalid coport type");
@@ -431,7 +430,5 @@ coport_ipc_init(void)
     mib[0] = CTL_HW;
     mib[1] = HW_NCPU;
     sysctl(mib, 2, &cores, &len, NULL, 0);
-    if (cores > 1)
-        multicore = 1;
-
+    multicore = cores > 1;
 }

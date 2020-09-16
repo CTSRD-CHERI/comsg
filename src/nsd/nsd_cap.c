@@ -36,14 +36,14 @@
 #include <machine/sysarch.h>
 #include <unistd.h>
 
-static struct object_type global_ns, proc_ns, thread_ns, explicit_ns, library_ns;
+static struct object_type global_nscap, proc_nscap, thread_nscap, explicit_nscap, library_nscap;
 static struct object_type coservice_nsobj, coport_nsobj, commap_nsobj, reservation_nsobj;
 
-static const struct object_type *global_object_types[] = {&global_ns, &proc_ns, &thread_ns, &explicit_ns, &library_ns, &reservation_nsobj, &coservice_nsobj, &coport_nsobj, &commap_nsobj};
+static const struct object_type *global_object_types[] = {&global_nscap, &proc_nscap, &thread_nscap, &explicit_nscap, &library_nscap, &reservation_nsobj, &coservice_nsobj, &coport_nsobj, &commap_nsobj};
 static const int required_otypes = 9;
 
-__attribute__ ((constructor)) static 
-void setup_otypes(void)
+__attribute__ ((constructor)) static void 
+setup_otypes(void)
 {
     void *sealroot;
     if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0) {
@@ -52,84 +52,80 @@ void setup_otypes(void)
     sealroot = make_otypes(sealroot, required_otypes, global_object_types);
 }
 
-static 
-otype_t get_ns_sealcap(nstype_t type)
+static otype_t 
+get_ns_sealcap(nstype_t type)
 {
-	switch(type)
-	{
-		case GLOBAL:
-			return global_ns.sc;
-		case PROCESS:
-			return proc_ns.sc;
-		case THREAD:
-			return thread_ns.sc;
-		case EXPLICIT:
-			return explicit_ns.sc;
-		default:
-			err(EINVAL, "get_ns_sealcap: invalid nstype value %d supplied", type);
-	}
-	return NULL;
-}
-
-static 
-otype_t get_ns_unsealcap(nstype_t type)
-{
-	switch(type)
-	{
-		case GLOBAL:
-			return global_ns.usc;
-		case PROCESS:
-			return proc_ns.usc;
-		case THREAD:
-			return thread_ns.usc;
-		case EXPLICIT:
-			return explicit_ns.usc;
-		default:
-			err(EINVAL, "get_ns_unsealcap: invalid nstype value %d supplied", type);
-	}
-	return NULL;
-}
-
-static 
-otype_t get_nsobj_sealcap(nsobject_type_t type)
-{
-	switch(type)
-	{
-		case COMMAP:
-			return coservice_nsobj.sc;
-		case COPORT:
-			return coport_nsobj.sc;
-		case COSERVICE:
-			return commap_nsobj.sc;
-		case RESERVATION:
-			return reservation_nsobj.sc;
-		default:
-			err(EINVAL, "get_nsobj_sealcap: invalid nsobject_type_t value %d supplied", type);
-	}
-	return NULL;
-}
-
-static 
-otype_t get_nsobj_unsealcap(nsobject_type_t type)
-{
-	switch(type)
-	{
-		case COMMAP:
-			return coservice_nsobj.usc;
-		case COPORT:
-			return coport_nsobj.usc;
-		case COSERVICE:
-			return commap_nsobj.usc;
-		case RESERVATION:
-			return reservation_nsobj.usc;
-		default:
-			err(EINVAL, "get_nsobj_unsealcap: invalid nsobject_type_t value %d supplied", type);
+	switch(type) {
+	case GLOBAL:
+		return (global_ns.sc);
+	case PROCESS:
+		return (proc_ns.sc);
+	case THREAD:
+		return (thread_ns.sc);
+	case EXPLICIT:
+		return (explicit_ns.sc);
+	default:
+		err(EINVAL, "get_ns_sealcap: invalid nstype value %d supplied", type);
 	}
 	return (NULL);
 }
 
-static
-nsobject_type_t get_nsobject_type(nsobject_t *nsobj)
+static otype_t 
+get_ns_unsealcap(nstype_t type)
+{
+	switch(type) {
+	case GLOBAL:
+		return (global_ns.usc);
+	case PROCESS:
+		return (proc_ns.usc);
+	case THREAD:
+		return (thread_ns.usc);
+	case EXPLICIT:
+		return (explicit_ns.usc);
+	default:
+		err(EINVAL, "get_ns_unsealcap: invalid nstype value %d supplied", type);
+	}
+	return (NULL);
+}
+
+static otype_t 
+get_nsobj_sealcap(nsobject_type_t type)
+{
+	switch(type) {
+	case COMMAP:
+		return (coservice_nsobj.sc);
+	case COPORT:
+		return (coport_nsobj.sc);
+	case COSERVICE:
+		return (commap_nsobj.sc);
+	case RESERVATION:
+		return (reservation_nsobj.sc);
+	default:
+		err(EINVAL, "get_nsobj_sealcap: invalid nsobject_type_t value %d supplied", type);
+	}
+	return (NULL);
+}
+
+static otype_t 
+get_nsobj_unsealcap(nsobject_type_t type)
+{
+	switch(type) {
+	case COMMAP:
+		return (coservice_nsobj.usc);
+	case COPORT:
+		return (coport_nsobj.usc);
+	case COSERVICE:
+		return (commap_nsobj.usc);
+	case RESERVATION:
+		return (reservation_nsobj.usc);
+	default:
+		err(EINVAL, "get_nsobj_unsealcap: invalid nsobject_type_t value %d supplied", type);
+	}
+	return (NULL);
+}
+
+static nsobject_type_t 
+get_nsobject_type(nsobject_t *nsobj)
 {
 	long otype;
 	if (!cheri_getsealed(nsobj))
@@ -138,51 +134,49 @@ nsobject_type_t get_nsobject_type(nsobject_t *nsobj)
 	return (nsobj_otype_to_type(otype));
 }
 
-static
-nsobject_type_t nsobj_otype_to_type(long otype)
+static nsobject_type_t 
+nsobj_otype_to_type(long otype)
 {
-	switch(otype)
-	{
-		case coport_nsobj.otype:
-			return COPORT;
-		case coservice_nsobj.otype:
-			return COSERVICE;
-		case commap_nsobj.otype:
-			return COMMAP;
-		case reservation_nsobj.otype:
-			return RESERVATION;
-		default:
-			return INVALID;
+	switch(otype) {
+	case coport_nsobj.otype:
+		return (COPORT);
+	case coservice_nsobj.otype:
+		return (COSERVIC)E;
+	case commap_nsobj.otype:
+		return (COMMAP);
+	case reservation_nsobj.otype:
+		return (RESERVATION);
+	default:
+		return (INVALID);
 	}
 }
 
-static
-nstype_t get_ns_type(namespace_t *ns)
+static nstype_t 
+get_ns_type(namespace_t *ns)
 {
 	long otype = cheri_gettype(ns);
 	return (ns_otype_to_type(otype));
-	
 }
 
-static
-nstype_t ns_otype_to_type(long otype)
+static nstype_t 
+ns_otype_to_type(long otype)
 {
-	switch(otype)
-	{
-		case global_ns_otype:
-			return GLOBAL;
-		case proc_ns_otype:
-			return PROCESS;
-		case thread_ns_otype:
-			return THREAD;
-		case explicit_ns_otype:
-			return EXPLICIT;
-		default:
-			return INVALID;
+	switch(otype) {
+	case global_nscap.otype:
+		return (GLOBAL);
+	case proc_nscap.otype:
+		return (PROCESS);
+	case thread_nscap.otype:
+		return (THREAD);
+	case explicit_nscap.otype:
+		return (EXPLICIT);
+	default:
+		return (INVALID);
 	}
 }
 
-namespace_t *unseal_ns(namespace_t *ns_cap)
+namespace_t *
+unseal_ns(namespace_t *ns_cap)
 {
 	if (!cheri_getsealed(ns_cap))
 		return (ns_cap);
@@ -191,7 +185,8 @@ namespace_t *unseal_ns(namespace_t *ns_cap)
 	return (cheri_unseal(ns_cap, unseal_cap));
 }
 
-namespace_t *seal_ns(namespace_t *ns_cap);
+namespace_t *
+seal_ns(namespace_t *ns_cap);
 {
 	if (cheri_getsealed(ns_cap))
 		return (ns_cap);
@@ -200,7 +195,8 @@ namespace_t *seal_ns(namespace_t *ns_cap);
 	return (cheri_seal(ns_cap, seal_cap));
 }
 
-nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap)
+nsobject_t *
+unseal_nsobj(nsobject_t *nsobj_cap)
 {
 	if (!cheri_getsealed(nsobj_cap))
 		return (nsobj_cap);
@@ -211,7 +207,8 @@ nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap)
 	return (cheri_unseal(nsobj_cap, unseal_cap));
 }
 
-nsobject_t *seal_nsobj(nsobject_t *nsobj_cap)
+nsobject_t *
+seal_nsobj(nsobject_t *nsobj_cap)
 {
 	if (cheri_getsealed(nsobj_cap))
 		return (nsobj_cap);
@@ -220,7 +217,8 @@ nsobject_t *seal_nsobj(nsobject_t *nsobj_cap)
 	return (cheri_seal(nsobj_cap, seal_cap));
 }
 
-int valid_namespace_cap(namespace_t *ns_cap)
+int 
+valid_namespace_cap(namespace_t *ns_cap)
 {
 	vaddr_t cap_addr = cheri_getaddress(ns_cap);
 	if (!cheri_gettag(ns_cap))
@@ -238,7 +236,8 @@ int valid_namespace_cap(namespace_t *ns_cap)
 }
 
 
-int valid_nsobject_cap(nsobject_t *obj_cap)
+int 
+valid_nsobject_cap(nsobject_t *obj_cap)
 {
 	vaddr_t cap_addr = cheri_getaddress(obj_cap);
 	if (!cheri_gettag(ns_cap))
@@ -255,7 +254,8 @@ int valid_nsobject_cap(nsobject_t *obj_cap)
 		return (1);
 }
 
-int valid_reservation_cap(nsobject_t *obj_cap)
+int 
+valid_reservation_cap(nsobject_t *obj_cap)
 {
 	if (!cheri_getsealed(obj_cap))
 		return (0);
