@@ -31,7 +31,7 @@
 #include <coproc/utils.h>
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <cheri/cheric.h>
 #include <machine/sysarch.h>
 #include <unistd.h>

@@ -30,7 +30,7 @@
 #include <cocall/cocall_args.h>
 #include <coproc/utils.h>
 
-#include <errno.h>
+#include <sys/errno.h>
 
 int validate_cocreate_args(cocreate_args_t *cocall_args)
 {

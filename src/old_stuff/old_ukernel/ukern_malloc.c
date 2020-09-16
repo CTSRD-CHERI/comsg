@@ -11,7 +11,7 @@
 #include <sys/sched.h>
 #include <string.h>
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <stdatomic.h>
 #include <time.h>
 #include <stdio.h>

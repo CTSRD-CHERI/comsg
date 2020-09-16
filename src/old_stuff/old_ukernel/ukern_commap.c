@@ -36,7 +36,7 @@
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 
-#include <errno.h>
+#include <sys/errno.h>
 #include <err.h>
 #include <pthread.h>
 #include <stdatomic.h>

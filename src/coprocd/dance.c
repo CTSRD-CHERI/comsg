@@ -35,7 +35,7 @@
 #include <cocall/cocall_args.h>
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <stdatomic.h>
 #include <sys/types.h>
 #include <unistd.h>

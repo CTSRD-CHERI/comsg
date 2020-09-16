@@ -39,7 +39,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <ctype.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <stdbool.h>
 
 #include "coproc.h"

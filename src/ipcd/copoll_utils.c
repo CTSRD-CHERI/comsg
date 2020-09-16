@@ -33,7 +33,7 @@
 #include <coproc/coport.h>
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <sys/queue.h>

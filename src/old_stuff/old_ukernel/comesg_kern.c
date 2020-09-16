@@ -43,7 +43,7 @@
 #include <machine/sysarch.h>
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <stdatomic.h>
 #include <pthread.h>
 #include <pthread_np.h>

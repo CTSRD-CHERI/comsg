@@ -43,7 +43,7 @@
 #include <err.h>
 #include <pthread.h>
 #include <pthread_np.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <string.h>
 #include <stdio.h>
 #include "statcounters.h"

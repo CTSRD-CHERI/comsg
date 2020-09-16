@@ -37,7 +37,7 @@
 #include <coproc/namespace_object.h>
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 
 union coinsert_subject {
 	void *object;

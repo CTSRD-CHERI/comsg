@@ -35,7 +35,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <sched.h>
 #include <time.h>
 #include <sys/mman.h>

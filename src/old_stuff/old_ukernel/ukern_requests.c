@@ -30,7 +30,7 @@
 #include "ukern_utils.h"
 
 #include <err.h>
-#include <errno.h>
+#include <sys/errno.h>
 #include <stdio.h>
 #include <pthread.h>
 #include <stdbool.h>

@@ -29,7 +29,7 @@
 #include "sys_comsg.h"
 #include "coproc.h"
 
-#include <errno.h>
+#include <sys/errno.h>
 #include <err.h>
 #include <fcntl.h>
 #include <poll.h>
