@@ -74,9 +74,9 @@ void monitor_child(pid_t child_pid)
 	int status, opt;
 	opt = WEXITED; //implicit
 	daemon_pid = waitpid(child_pid, &status, opt);
-	if (daemon_pid == -1) {
+	/* if (daemon_pid == -1) {
 		//handle error
-	}
+	} */
 	return;
 }
 
@@ -84,8 +84,9 @@ static
 void respawn_daemon(_Atomic(pid_t) *pid, const char *exec_path, void *init_func)
 {
 	monitor_child(atomic_load(pid));
-	for(;;)
-	{
+	for(;;) {
+		if (atomic_load(pid) == atomic_load(nsd))
+			kill_daemons();
 		child_pid = fork();
 		if(!child_pid)
 			coexec_daemon(exec_path, init_name);
@@ -99,14 +100,15 @@ void respawn_daemon(_Atomic(pid_t) *pid, const char *exec_path, void *init_func)
 static 
 pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 {
-	pid_t child_pid;
-	char init_name[LOOKUP_STRING_LEN];
-	function_map_t *init_func_map;
+	char init_name[NS_NAME_LEN];
 	worker_args_t wargs;
+	function_map_t *init_func_map;
 	pthread_t monitor_thread;
-	struct respawn_args *monitor_args = calloc(1, sizeof(struct respawn_args));
-	
-	rand_string(init_name, LOOKUP_STRING_LEN);
+	struct respawn_args *monitor_args;
+	pid_t child_pid;
+
+	monitor_args = calloc(1, sizeof(struct respawn_args));
+	rand_string(init_name, NS_NAME_LEN);
 	//TODO-PBB: Revisit lack of validation if needed
 	//Pid is not supplied as a thread argument because it can change.
 	init_func_map = spawn_worker(init_name, init_func, NULL);
@@ -125,12 +127,24 @@ pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 	return (child_pid);
 }
 
+void kill_daemons(void)
+{
+	invalidate_startup_info();
+	if (coserviced != 0)
+		kill(coserviced, SIGTERM);
+	if (ipcd != 0)
+		kill(ipcd, SIGTERM);
+	if (nsd != 0)
+		kill(nsd, SIGTERM);
+}
+
 void spawn_daemons(void)
 {
 	atomic_store(&coprocd, getpid());
 	spawn_daemon(&nsd, nsd_path, nsd_init);
 	spawn_daemon(&coserviced, coserviced_path, coserviced_init);
 	spawn_daemon(&ipcd, ipcd_path, ipcd_init);
+	
 	return;
 }
 

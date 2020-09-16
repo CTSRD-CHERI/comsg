@@ -49,21 +49,16 @@
 #include "coport.h"
 #include "comsg.h"
 
-#if 0
-#define benchmark
-#endif
-#ifdef COPORT_BENCHMARK
-#include "statcounters.h"
-#endif
+
 #define COPORT_IPC_OTYPE 1
 //Sealing root
 static void * __capability libcomsg_sealroot;
 //Sealing cap for coport_t
 static otype_t libcomsg_coport_seal;
 static long libcomsg_otype;
-static long cocarrier_otype = -1;
-static long copipe_otype = -1;
-static long cochannel_otype = -1;
+static long cocarrier_otype = 0;
+static long copipe_otype = 0;
+static long cochannel_otype = 0;
 static long multicore = 0;
 
 typedef struct _port_tbl_entry
@@ -273,8 +268,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
                 err(EMSGSIZE, "corecv: expected message length %lu larger than buffer", len);
                 return (-1);
             }
-            for(;;)
-            {
+            for(;;) {
                 status_val = COPORT_OPEN;
                 if (atomic_compare_exchange_strong_explicit(&port->status, &status_val, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire)) {
                     break;
@@ -326,9 +320,7 @@ int corecv(const coport_t prt, void ** buf, size_t len)
                 errno = call.error;
                 warn("corecv: error occurred during cocarrier recv");
                 retval = call.status;
-            }
-            else 
-            {
+            } else {
                 if (cheri_getlen(call.message) != len) {
                     if(cheri_getlen(call.message) != cherilen)
                         warn("corecv: message length (%lu) does not match len (%lu)", cheri_getlen(call.message), len);
@@ -340,22 +332,19 @@ int corecv(const coport_t prt, void ** buf, size_t len)
             }
             break;
         case COPIPE:
-            for(;;)
-            {
+            for(;;) {
                 status_val = COPORT_OPEN;
                 if (port->status == status_val || !multicore) {
                     if (atomic_compare_exchange_strong_explicit(&port->status, &status_val, COPORT_BUSY, memory_order_acq_rel, memory_order_acquire)) {
                         break;
                     }
-                }
-                else
-                {
-                    if (!(i%10) && !multicore) {
+                } else {
+                    if ((i % 10 == 0) && !multicore) {
                         //at this point, as long as we are the scheduled thread it won't become ready, so yield the cpu
                         //this context switch will eventually happen, so we skip some needless spinning this way
                         sched_yield(); 
                     }
-                    else if (!(i%30))
+                    else if (i % 30 == 0)
                         sched_yield(); 
                     i++;
                 }
@@ -389,7 +378,6 @@ int corecv(const coport_t prt, void ** buf, size_t len)
 
 coport_type_t coport_gettype(coport_t port)
 {
-
     if(!cheri_getsealed(port))
         return (INVALID);
     if (cheri_gettype(port) != libcomsg_otype) {
@@ -398,9 +386,7 @@ coport_type_t coport_gettype(coport_t port)
         //we give sealed stuff a pass if we don't know the cocarrier_otype yet.
         if(cocarrier_otype == -1 || cheri_gettype(port) == cocarrier_otype)
             return (COCARRIER);
-    }
-    else 
-    {
+    } else {
         port = cheri_unseal(port, libcomsg_sealroot);
         return (port->type);
     }
@@ -462,10 +448,8 @@ int cocarrier_poll(pollcoport_t * coports, int ncoports, int timeout)
     errno = call->error;
     status = call->status;
     if (status != 0) {
-        for (int i = 0; i<ncoports; ++i)
-        {
+        for (int i = 0; i < ncoports; ++i)
             coports[i].revents = call->coports[i].revents;
-        }
     }
     free(call_coports);
     free(call);
@@ -475,15 +459,12 @@ int cocarrier_poll(pollcoport_t * coports, int ncoports, int timeout)
 
 int copoll(pollcoport_t * coports, int ncoports, int timeout)
 {
-    
-
     assert(ncoports>0);
     assert(cheri_gettag(coports));
 
-    for(int i = 1; i<ncoports; i++)
+    for(int i = 1; i < ncoports; i++)
         assert((coport_gettype(coports[i].coport) == coport_gettype(coports[i-1].coport))||(coport_gettype(coports[i].coport) != COCARRIER && (coport_gettype(coports[i-1].coport) != COCARRIER)));
 
-    
     if(coport_gettype(coports[0].coport) == COCARRIER)
         return(cocarrier_poll(coports, ncoports, timeout));
 

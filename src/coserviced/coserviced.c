@@ -74,13 +74,12 @@ int main(int argc, char const *argv[])
 
 	coserviced_startup();
 	
-	//TODO-PBB: revise
-	for(;;) {
-		for (int i = 0; i < coprovide_serv.function_map->nworkers; i++)
-			pthread_join(coprovide_serv.function_map->workers[i].worker, NULL);
-		for (int i = 0; i < codiscover_serv.function_map->nworkers; i++)
-			pthread_join(codiscover_serv.function_map->workers[i].worker, NULL);
-	}
+	//TODO-PBB: revise?
+	for (int i = 0; i < coprovide_serv.function_map->nworkers; i++)
+		pthread_join(coprovide_serv.function_map->workers[i].worker, NULL);
+	for (int i = 0; i < codiscover_serv.function_map->nworkers; i++)
+		pthread_join(codiscover_serv.function_map->workers[i].worker, NULL);
+
 
 	return (0);
 }

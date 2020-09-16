@@ -52,12 +52,23 @@ static _Atomic(void *) coselect_scb = NULL;
 #define COSERVICED_SELECTOR 2
 #define IPCD_SELECTOR 3
 
+void
+invalidate_startup_info(void)
+{
+	atomic_store(&codiscover_scb, NULL);
+	atomic_store(&global_namespace, NULL);
+	atomic_store(&coinsert_scb, NULL);
+	atomic_store(&coselect_scb, NULL);
+}
+
 //TODO-PBB: apply memory ordering that gives something sensible
 static
 int authenticate_dance(cocall_args_t *cocall_args, int selector)
 {
 	pid_t caller_pid, daemon_pid;
-	int error = cogetpid(&caller_pid);
+	int error;
+
+	error = cogetpid(&caller_pid);
 	switch (selector)
 	{
 		case NSD_SELECTOR:
@@ -97,20 +108,18 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 	/* Wait until coserviced is (re) ininitalized */
 	while(atomic_load(&codiscover_scb) == NULL) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
-		// this implementation may not do what we want
+		// this implementation may not do what we want (priority inversion?)
 		sched_yield();
 	}
 
 	/* You give me: scb capabilities for codiscover and coprovide */
 	cocall_args->codiscover = atomic_load(&codiscover_scb);
 
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-	return;
+	COCALL_RETURN(cocall_args, 0);
 }
 
 
-void coserviced_init(cocall_args_t * cocall_args, void *token)
+void coserviced_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, COSERVICED_SELECTOR))
 		return;
@@ -120,21 +129,17 @@ void coserviced_init(cocall_args_t * cocall_args, void *token)
 	 */
 	if (atomic_load(&global_namespace) == NULL) {
 		/* nsd has not yet started */
-		cocall_args->status = -1;
-		cocall_args->error = EAGAIN;
-		return;
+		COCALL_ERR(cocall_args, EAGAIN);
 	}
 	cocall_args->namespace = atomic_load(&global_namespace);
 	cocall_args->coinsert = atomic_load(&coinsert_scb);
 	cocall_args->coselect = atomic_load(&coselect_scb);
 	atomic_store(&codiscover_scb, cocall_args->codiscover);
 
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-	return;
+	COCALL_RETURN(cocall_args, 0);
 }
 
-void ipcd_init(cocall_args_t * cocall_args, void *token)
+void ipcd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
 		return;
@@ -143,16 +148,27 @@ void ipcd_init(cocall_args_t * cocall_args, void *token)
 	 */ 
 	if (atomic_load(&global_namespace) == NULL) {
 		/* nsd has not yet started */
-		cocall_args->status = -1;
-		cocall_args->error = EAGAIN;
-		return;
+		COCALL_ERR(cocall_args, EAGAIN);
 	}
 	cocall_args->namespace = atomic_load(&global_namespace);
 	cocall_args->codiscover = atomic_load(&codiscover_scb);
 	cocall_args->coinsert = atomic_load(&coinsert_scb);
 	cocall_args->coselect = atomic_load(&coselect_scb);
 	
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-	return;
+	COCALL_RETURN(cocall_args, 0);
+}
+
+void coproc_user_init(cocall_args_t *cocall_args, void *token)
+{
+	if (atomic_load(&global_namespace) == NULL) {
+		/* nsd has not yet started */
+		COCALL_ERR(cocall_args, EAGAIN);
+	}
+
+	cocall_args->namespace = atomic_load(&global_namespace);
+	cocall_args->codiscover = atomic_load(&codiscover_scb);
+	cocall_args->coinsert = atomic_load(&coinsert_scb);
+	cocall_args->coselect = atomic_load(&coselect_scb);
+	
+	COCALL_RETURN(cocall_args, 0);
 }

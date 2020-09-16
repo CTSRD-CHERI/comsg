@@ -23,25 +23,26 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
 #include "daemons.h"
 
+#include <cocall/worker_map.h>
+
+#include <stdlib.h>
 #include <pthread.h>
 
 int main(int argc, char const *argv[])
 {
-	pthread_mutex_t mtx;
-	pthread_mutexattr_t attr;
+	function_map_t *user_prog_mgr;
 	
 	//we can dance if we want to
 	spawn_daemons();
 
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_NORMAL);
-	pthread_mutex_init(&mtx, attr);
-	
-	//sleep forever
-	for(;;)
-		pthread_mutex_lock(&mtx);
+	for(;;) {
+		user_prog_mgr = spawn_worker("COPROC_INIT", coproc_user_init, NULL);
+		pthread_join(user_prog_mgr->workers[0].worker, NULL);
+		free(user_prog_mgr->workers);
+		free(user_prog_mgr);
+	}
+
 	return (0);
 }

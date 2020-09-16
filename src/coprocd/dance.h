@@ -32,4 +32,5 @@
 void nsd_init(cocall_args_t *cocall_args, void *token);
 void coserviced_init(cocall_args_t * cocall_args, void *token);
 void ipcd_init(cocall_args_t * cocall_args, void *token);
-
+void coproc_user_init(cocall_args_t *cocall_args, void *token);
+void invalidate_values(void);
