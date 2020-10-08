@@ -1,7 +1,7 @@
 BUILD_PATH := $(BUILD_DIR)/$(TGT)
 
 OBJS := $(SRCS:%=$(BUILD_PATH)/%.o)
-DEPS := $(SRCS:.o=.d)
+DEPS := $(OBJS:.o=.d)
 CFLAGS += -MMD -MP
 
 ifdef DEP_LIBS
