@@ -1,8 +1,10 @@
 LIB := ccmalloc
 
-SRCS :=	ccmalloc.c		
+SRCS :=	ccmalloc.c	
 
-SHLIB_MAJOR=	1
+DEP_LIBS := pthread
+
+SHLIB_MAJOR :=	1
 
 include $(MK_DIR)/comesg.lib.mk
 

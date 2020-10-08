@@ -31,9 +31,15 @@
 #ifndef _UKERN_WORKER_H
 #define _UKERN_WORKER_H
 
+#include <cocall/cocall_args.h>
+
 #include <cheri/cherireg.h>
 #include <pthread.h>
 #include <stdatomic.h>
+
+#define LOOKUP_STRING_LEN 16
+
+
 
 typedef struct _worker_args
 {
@@ -45,14 +51,14 @@ typedef struct _worker_args
 	 *  + modifies it in place,
 	 *  + sets status and error values before returning.
 	 */
-	void *worker_function;
+	void (*worker_function)(cocall_args_t *, void *);
 	/* 
 	 * pointer to a function that:
 	 * 	+ takes a pointer to struct cocall_args,
 	 * 	+ validates the arguments passed from a cocall
 	 * 	+ returns 0 if they fail, else non-zero
 	 */
-	void *validation_function;
+	int (*validation_function)(cocall_args_t *);
 	/* name to coregister under */
 	char name[LOOKUP_STRING_LEN];
 	/* result of coregister */

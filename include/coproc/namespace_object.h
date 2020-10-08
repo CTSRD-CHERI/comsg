@@ -66,7 +66,7 @@
 
 #define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_andperm(c, ~NSOBJ_PERM_W) )
 
-typedef enum {INVALID=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
+typedef enum {INVALID_NSOBJ=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
 
 typedef struct _nsobject
 {
@@ -77,7 +77,7 @@ typedef struct _nsobject
 		void 		*obj;
 		coservice_t	*coservice;
 		coport_t	*coport;
-	}
+	};
 } nsobject_t;
 
 #define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )

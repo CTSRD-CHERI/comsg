@@ -1,4 +1,4 @@
-PROG := coserviced
+PROG := ipcd
 
 SRCS :=	coclose.c \
 	coopen.c \
@@ -12,6 +12,8 @@ SRCS :=	coclose.c \
 	ipcd.c \
 	ipcd_cap.c \
 	ipcd_startup.c 
+
+DEP_LIBS := pthread comsg ccmalloc coproc cocall
 
 include $(MK_DIR)/comesg.prog.mk
 

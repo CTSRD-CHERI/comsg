@@ -26,7 +26,9 @@
 
 #include <coproc/utils.h>
 
+#include <assert.h>
 #include <cheri/cheric.h>
+#include <sys/sysctl.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/param.h>
@@ -96,23 +98,27 @@ make_otype(void *root_type, register_t type, struct object_type *result)
     result->sc = make_sealcap(root_type, type);
     result->usc = make_unsealcap(root_type, type);
     result->otype = cheri_gettype(cheri_seal(result, result->sc));
-    return (result);
 }
 
-void *make_otypes(void *rootcap, int n_otypes, struct object_type **results)
+void *
+make_otypes(void *rootcap, int n_otypes, struct object_type **results)
 {
     struct object_type new_otype;
+    void *seal_root;
+    int i;
+
     assert(cheri_getlen(rootcap) <= n_otypes);
     assert(cheri_getperm(rootcap) & ( CHERI_PERM_SEAL | CHERI_PERM_UNSEAL ));
 
-    void *seal_root = cheri_setboundsexact(rootcap, i);
-    for(int i = 0; i < n_otypes; i++)
+    seal_root = cheri_setboundsexact(rootcap, n_otypes);
+    for(i = 0; i < n_otypes; i++)
         make_otype(seal_root, i, results[i]);
 
     return (cheri_incoffset(rootcap, i));
 }
 
-int get_maxprocs(void)
+int 
+get_maxprocs(void)
 {
     int mib[4] = {CTL_KERN, KERN_MAXPROC, 0, 0};
     int maxprocs;

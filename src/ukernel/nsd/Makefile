@@ -12,5 +12,7 @@ SRCS :=	cocreate.c \
 	nsd_lookup.c \
 	nsd_setup.c 
 
+DEP_LIBS := pthread comsg ccmalloc coproc cocall
+
 include $(MK_DIR)/comesg.prog.mk
 

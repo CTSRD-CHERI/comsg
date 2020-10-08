@@ -80,7 +80,7 @@
  * Library namespaces are not yet fully thought out.
  */
 
-typedef enum {INVALID=-1, GLOBAL=1, PROCESS=2, THREAD=4, EXPLICIT=8, LIBRARY=16} nstype_t;
+typedef enum {INVALID_NS = -1, GLOBAL = 1, PROCESS = 2, THREAD = 4, EXPLICIT = 8, LIBRARY = 16} nstype_t;
 
 #ifndef NS_NAME_LEN
 #define NS_NAME_LEN ( (CHERICAP_SIZE * 2) + ( CHERICAP_SIZE - sizeof(nstype_t) ) )
@@ -96,7 +96,7 @@ struct _namespace {
 	struct _ns_members *members;
 };
 
-#define VALID_NSOBJ_TYPE(type) ( type == GLOBAL || type == GLOBAL || type == PROCESS || type == THREAD || type == EXPLICIT || type == LIBRARY )
+#define VALID_NS_TYPE(type) ( type == GLOBAL || type == GLOBAL || type == PROCESS || type == THREAD || type == EXPLICIT || type == LIBRARY )
 
 __BEGIN_DECLS
 

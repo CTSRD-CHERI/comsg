@@ -141,13 +141,13 @@ nsobj_otype_to_type(long otype)
 	case coport_nsobj.otype:
 		return (COPORT);
 	case coservice_nsobj.otype:
-		return (COSERVIC)E;
+		return (COSERVICE);
 	case commap_nsobj.otype:
 		return (COMMAP);
 	case reservation_nsobj.otype:
 		return (RESERVATION);
 	default:
-		return (INVALID);
+		return (INVALID_NSOBJ);
 	}
 }
 
@@ -171,7 +171,7 @@ ns_otype_to_type(long otype)
 	case explicit_nscap.otype:
 		return (EXPLICIT);
 	default:
-		return (INVALID);
+		return (INVALID_NS);
 	}
 }
 
@@ -201,7 +201,7 @@ unseal_nsobj(nsobject_t *nsobj_cap)
 	if (!cheri_getsealed(nsobj_cap))
 		return (nsobj_cap);
 	nsobject_type_t type = get_nsobject_type(nsobj_cap);
-	if (type == INVALID)
+	if (type == INVALID_NS)
 		return (NULL);
 	otype_t unseal_cap = get_nsobj_unsealcap(type);
 	return (cheri_unseal(nsobj_cap, unseal_cap));
@@ -248,7 +248,7 @@ valid_nsobject_cap(nsobject_t *obj_cap)
 		return (0);
 	else if (!in_nsobject_table(ns_cap))
 		return (0);
-	else if (!((get_nsobject_type(ns_cap) != INVALID) || !cheri_getsealed(ns_cap)))
+	else if (!((get_nsobject_type(ns_cap) != INVALID_NSOBJ) || !cheri_getsealed(ns_cap)))
 		return (0);
 	else
 		return (1);

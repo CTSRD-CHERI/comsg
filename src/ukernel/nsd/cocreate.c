@@ -37,9 +37,9 @@ int validate_cocreate_args(cocreate_args_t *cocall_args)
 	//XXX-PBB: extensive type based checking is neglected here, as types are likely to get a rework
 	if(!valid_namespace_cap(cocall_args->ns_cap))
 		return (0);
-	else if (cocall_args->type == GLOBAL || cocall_args->type == INVALID)
+	else if (cocall_args->ns_type == GLOBAL || cocall_args->ns_type == INVALID_NS)
 		return (0);
-	else if (!valid_ns_name(cocall_args->name))
+	else if (!valid_ns_name(cocall_args->ns_name))
 		return (0);
 	else
 		return (1);
@@ -51,10 +51,10 @@ void create_namespace(cocreate_args_t *cocall_args, void *token)
 
 	if(!NS_PERMITS_WRITE(cocall_args->ns_cap))
 		COCALL_ERR(cocall_args, EACCES);
-	else if (in_namespace(cocall_args->name, cocall_args->ns_cap)) 
+	else if (in_namespace(cocall_args->ns_name, cocall_args->ns_cap)) 
 		COCALL_ERR(cocall_args, EEXIST);
 
-	cocall_args->child_ns_cap = create_namespace(cocall_args->name, cocall_args->type, cocall_args->ns_cap);
+	cocall_args->child_ns_cap = create_namespace(cocall_args->ns_name, cocall_args->ns_type, cocall_args->ns_cap);
 	
 	COCALL_RETURN(cocall_args);
 }

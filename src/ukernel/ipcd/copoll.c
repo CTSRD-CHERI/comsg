@@ -33,6 +33,7 @@
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
+#include <ccmalloc.h>
 #include <cocall/cocall_args.h>
 #include <coproc/utils.h>
 
@@ -40,6 +41,7 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/queue.h>
 
@@ -87,14 +89,14 @@ populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
 static coport_listener_t **
 init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 {
-	coport_listener_t *listen_entries;
+	coport_listener_t **listen_entries;
 	uint i;
 	
 	listen_entries = cocall_calloc(ncoports, CHERICAP_SIZE);
 	for (i = 0; i < ncoports; i++) {
 		listen_entries[i] = malloc(sizeof(coport_listener_t));
 		listen_entries[i]->wakeup = cond;
-		listen_entries[i]->revents = NOEVENT;
+		listen_entries[i]->revent = NOEVENT;
 		listen_entries[i]->events = coports[i].events;
 	}
 	return (listen_entries);
@@ -145,7 +147,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 
 	matched = 0;
 	for (i = 0; i < ncoports; i++) {
-		coports[i].revents = listen_entries[i]->revents;
+		coports[i].revents = listen_entries[i]->revent;
 		if (coports[i].revents != NOEVENT)
 			matched++;
 		free(listen_entries[i]);

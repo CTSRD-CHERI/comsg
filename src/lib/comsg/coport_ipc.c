@@ -68,7 +68,7 @@ cocarrier_preload(void)
     discover_ukern_func(corecv_obj, COCALL_CORECV);
 }
 
-static void
+static coport_t *
 process_coport_handle(coport_t *port, coport_type_t type)
 {
     switch (type) {
@@ -95,10 +95,10 @@ process_coport_handle(coport_t *port, coport_type_t type)
 } 
 
 nsobject_t *
-open_named_coport(const char *coport_name, coport_type_t type)
+open_named_coport(const char *coport_name, coport_type_t type, namespace_t *ns)
 {
     coport_t *port;
-    ns_object_t *port_obj, *cosend_obj, *corecv_obj;
+    nsobject_t *port_obj, *cosend_obj, *corecv_obj;
 
     port = coopen(type);
     port = process_coport_handle(port, type);
@@ -122,6 +122,7 @@ static coport_status_t
 acquire_coport_status(coport_t *port, coport_status_t expected, coport_status_t desired)
 {
     coport_status_t status_val;
+    int i;
 
     status_val = expected;
     for(;;) {
@@ -185,7 +186,7 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
         return (-1);
     }
 
-    if(acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED) != 0)
+    if(acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) && ((COPORT_CLOSING | COPORT_CLOSED) != 0))
         return (-1);
 
     event = port->info->event;
@@ -222,10 +223,10 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
 
 
 int
-cosend(const coport_t *prt, const void *buf, size_t len)
+cosend(const coport_t *port, const void *buf, size_t len)
 {
-    int retval;
     coport_type_t type;
+    int retval;
   
     if(len == 0)
         return (0);
@@ -233,13 +234,13 @@ cosend(const coport_t *prt, const void *buf, size_t len)
     type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
-        retval = cochannel_send(prt, buf, len);
+        retval = cochannel_send(port, buf, len);
         break;
     case COCARRIER:
-        retval = cocarrier_send(prt, buf, len);
+        retval = cocarrier_send(port, buf, len);
         break;
     case COPIPE:
-        retavl = copipe_send(prt, buf, len);
+        retval = copipe_send(port, buf, len);
         break;
     default:
         errno = EINVAL;
@@ -261,7 +262,7 @@ cochannel_corecv(const coport_t *port, void *buf, size_t len)
         return (-1);
     }
     new_len = port_size - len;
-    if(acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED) != 0)
+    if(acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) && ((COPORT_CLOSING | COPORT_CLOSED) != 0))
         return (-1);
     
     event = port->info->event;
@@ -279,7 +280,7 @@ cochannel_corecv(const coport_t *port, void *buf, size_t len)
     if (old_start + len > port_size) {
         len_to_end = COPORT_BUF_LEN - old_start;
         memcpy(out_buffer, &port_buffer[old_start], len_to_end);
-        memcpy(out_buffer[len_to_end], port_buffer, new_start);
+        memcpy(&out_buffer[len_to_end], port_buffer, new_start);
     }
     else
         memcpy(buf, &port_buffer[old_start], len);
@@ -302,7 +303,7 @@ copipe_corecv(const coport_t *port, void *buf, size_t len)
 
     if (cheri_getlen(buf) < len)
         buf = cheri_setbounds(buf, len);
-    buf = cheri_andperm(buf, COPIPE_BUF_PERMS);
+    buf = cheri_andperm(buf, COPIPE_BUFFER_PERMS);
 
     acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
 
@@ -334,7 +335,7 @@ corecv(const coport_t *port, void **buf, size_t len)
         retval = cochannel_corecv(port, *buf, len);
         break;
     case COCARRIER:
-        msg = cocarrier_recv(port, buf, len);
+        msg = cocarrier_recv(port, len);
         if(msg == NULL)
             retval = -1;
         else {
@@ -343,7 +344,7 @@ corecv(const coport_t *port, void **buf, size_t len)
         }
         break;
     case COPIPE:
-        retval = copipe_corecv(port, len);
+        retval = copipe_corecv(port, buf, len);
         break;
     default:
         err(1, "corecv: invalid coport type");
@@ -358,19 +359,18 @@ coport_gettype(coport_t *port)
 {
     long port_otype;
     if(!cheri_getsealed(port))
-        return (INVALID);
+        return (INVALID_COPORT);
 
     port_otype = cheri_gettype(port);
-    switch (port_otype) {
-    case cocarrier_otype.otype:
+    if(port_otype == cocarrier_otype.otype)
         return (COCARRIER);
-    case copipe_otype.otype:
+    else if (port_otype == copipe_otype.otype)
         return (COPIPE);
-    case cochannel_otype.otype:
+    else if (port_otype == cochannel_otype.otype)
         return (COCHANNEL);
-    default:
-        return (INVALID);
-    }
+    else
+        return (INVALID_COPORT);
+    
 }
 
 pollcoport_t 
@@ -383,16 +383,6 @@ make_pollcoport(coport_t *port, coport_eventmask_t events)
     pcpt.revents = NOEVENT;
 
     return (pcpt);
-}
-
-int
-coclose(coport_t *port)
-{
-    //TODO-PBB: IMPLEMENT
-    //if we possess the CLOSE permission, we can unilaterally close the port for all users.
-    //otherwise, this operation decrements the ukernel refcount for the port
-    port = NULL;
-    return (0);
 }
 
 __attribute__ ((constructor)) static void 

@@ -1,8 +1,8 @@
 LIB := comsg
 
-SRCS :=	commap.c		\
-	coport_ipc.c		\
-	ukern_calls.c		
+SRCS := ukern_calls.c \
+	coport_ipc.c
+	
 
 DEP_LIBS := pthread cocall coproc
 

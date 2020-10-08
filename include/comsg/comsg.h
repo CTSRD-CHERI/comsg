@@ -29,12 +29,11 @@
 /*
  * Interface to libcomsg
  */
-
-#include "sys_comsg.h"
-#include "coport.h"
-#include "coproc.h"
+#if 0
 #include "commap.h"
+#endif
 #include "coport_ipc.h"
+#include "ukern_calls.h"
 
 
 #endif

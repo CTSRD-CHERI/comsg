@@ -31,6 +31,8 @@
 #ifndef _COCALL_TLS_H
 #define _COCALL_TLS_H
 
+#include <stddef.h>
+
 int cocall_tls(void *target, void *buffer, size_t len);
 int slocall_tls(void *target, void *buffer, size_t len);
 

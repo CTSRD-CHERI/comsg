@@ -33,6 +33,9 @@
 
 #include <cocall/cocall_args.h>
 #include <coproc/coport.h>
+#include <coproc/utils.h>
+
+#include <sys/errno.h>
 
 int 
 validate_coclose_args(coclose_args_t *cocall_args)
@@ -43,17 +46,17 @@ validate_coclose_args(coclose_args_t *cocall_args)
 void
 coport_close(coclose_args_t *cocall_args, void *token) 
 {
-	UNUSED(token)
+	UNUSED(token);
 	coport_t *coport;
 	coport_status_t status;
 	coport_eventmask_t events;
 
 	/* TODO-PBB: check permissions */
-	coport = unseal_coport(cocall_args->coport);
+	coport = unseal_coport(cocall_args->port);
 
 	/* TODO-PBB: We should account for closing from COPORT_DONE, or other states, some day*/
 	status = COPORT_OPEN;
-	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
+	while(!atomic_compare_exchange_weak_explicit(&coport->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
 		switch (status) {
 		case COPORT_CLOSED:
 		case COPORT_CLOSING:
@@ -64,12 +67,12 @@ coport_close(coclose_args_t *cocall_args, void *token)
 			break;
 		}
 	}
-	events = coport->info->events;
+	events = coport->info->event;
 	events &= ~(COPOLL_OUT);
 	events |= COPOLL_CLOSED;
-	coport->info->events = events;
+	coport->info->event = events;
 
-	atomic_store_explicit(&cocarrier->info->status, COPORT_CLOSING, memory_order_release);
+	atomic_store_explicit(&coport->info->status, COPORT_CLOSING, memory_order_release);
 
 	COCALL_RETURN(cocall_args, 0);
 }

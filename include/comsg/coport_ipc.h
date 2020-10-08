@@ -27,17 +27,16 @@
 #define _COPORT_IPC_H
 
 #include <cocall/cocall_args.h>
-#include <comsg/coport.h>
+#include <coproc/coport.h>
 
 #include <stddef.h>
 
-nsobject_t *open_named_coport(const char *coport_name, coport_type_t type);
+nsobject_t *open_named_coport(const char *coport_name, coport_type_t type, namespace_t *ns);
 coport_t *open_coport(coport_type_t type);
 
 int cosend(const coport_t *prt, const void *buf, size_t len);
 int corecv(const coport_t *port, void **buf, size_t len);
 coport_type_t coport_gettype(coport_t *port);
 pollcoport_t make_pollcoport(coport_t *port, coport_eventmask_t events);
-int coclose(coport_t *port);
 
 #endif

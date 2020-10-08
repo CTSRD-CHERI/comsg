@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,21 +28,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COOPEN_H
+#define _COOPEN_H
 
-//TODO-PBB: Implement.
-#ifndef _CCMALLOC_H
-#define _CCMALLOC_H
+#include <cocall/cocall_args.h>
 
-#include <stddef.h>
+int validate_coopen_args(coclose_args_t *cocall_args);
+void coport_open(coclose_args_t *cocall_args, void *token);
 
-typedef enum {PROMISCUOUS=1, FLEETING=2, NORESIZE=4, NEVERFREE=8} ccmalloc_flags_t;
-
-void ccmalloc_init(size_t*, size_t);
-void *cocall_malloc(size_t len);
-void *cocall_calloc(size_t num, size_t length);
-
-void cocall_free(void*);
-
-void *cocall_alloc(size_t, ccmalloc_flags_t, size_t hint);
-
-#endif //!defined(_CCMALLOC_H)
+#endif //!defined(_COOPEN_H)

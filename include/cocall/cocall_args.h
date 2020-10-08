@@ -26,104 +26,24 @@
 #ifndef _COCALL_ARGS_H
 #define _COCALL_ARGS_H
 
+#include <coproc/coport.h>
+#include <coproc/coservice.h>
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
+
+#ifndef COCALL_ERR
 #define COCALL_ERR(c, n) c->status = (-1);\
 	c->error = (n);\
 	return
+#endif
 
+#ifndef COCALL_RETURN
 #define COCALL_RETURN(c, n) c->status = (n);\
 	c->error = (0);\
 	return
+#endif
 
-struct coproc_init {
-	void *codiscover;
-	void *coinsert;
-	void *coselect;
-};
-
-struct cocreate 
-{
-	char name[NS_NAME_LEN];
-	nstype_t type;
-	namespace_t *child_ns_cap;
-};
-
-struct coupdate {
-	nsobject_t *nsobj;
-	nsobject_type_t type;
-	union {
-		void *obj;
-		coservice_t *coservice;
-		coport_t *coport;
-	};
-}
-
-struct codrop
-{
-	//Effectively empty, contents are ignored
-	char codrop_padding;
-};
-
-struct codelete 
-{
-	nsobject_t *nsobj;
-};
-
-struct coinsert
-{
-	char name[NS_NAME_LEN];
-	union {
-		void *obj;
-		coservice_t *coservice;
-		coport_t *coport;
-	};
-	nsobject_t *nsobj;
-	nsobject_type_t type;
-};
-
-struct coselect
-{
-	char name[NS_NAME_LEN];
-	nsobject_t *nsobj;
-	nsobject_type_t type;
-};
-
-struct codiscover
-{
-	nsobject_t *nsobj;
-	void *scb_cap;
-};
-
-struct coprovide
-{
-	void **worker_scbs;
-	int nworkers;
-	coservice_t *service;
-};
-
-struct coopen
-{
-	coport_type_t type;
-	coport_t *port; 
-};
-
-struct coclose
-{
-	coport_t *port;
-};
-
-struct cosend
-{
-	coport_t *cocarrier;
-	void *message;
-	size_t length;
-};
-
-struct corecv
-{
-	coport_t *cocarrier;
-	void *message;
-};
-
+#if 0
 struct commap 
 {
 	void *mapped;
@@ -135,7 +55,7 @@ struct comunmap
 {
 	token_t token;
 };
-
+#endif
 
 //There is an unsatisfying situation here which arises from the fact that
 //cocall/coaccept data lengths must (sort of) be symmetrical, so to pass a variable 
@@ -155,41 +75,70 @@ struct copoll
 	long timeout; 
 };
 
-struct cocall_args
+struct _cocall_args
 {
 	int status;
 	int error;
 	namespace_t *ns_cap;
 	union 
 	{
-		struct codelete;
-		struct coselect;
-		struct coinsert;
-		struct copoll;
-		struct cosend;
-		struct codiscover;
-		struct coprovide;
-		struct coopen;
-		struct coclose;
-		struct comunmap;
-		struct commap;
-		struct coproc_init;
+		struct {
+			void *codiscover;
+			void *coinsert;
+			void *coselect;	
+		}; //coproc_init
+		struct {
+			char ns_name[NS_NAME_LEN];
+			nstype_t ns_type;
+			namespace_t *child_ns_cap;
+		}; //cocreate, codrop
+		struct {
+			char nsobj_name[NS_NAME_LEN];
+			nsobject_t *nsobj;
+			nsobject_type_t nsobj_type;
+			union {
+				void *obj;	
+				coservice_t *coservice;
+				coport_t *coport;
+			};
+			void *scb_cap;
+		}; //coupdate, coinsert, codelete, coselect, codiscover
+		struct {
+			void **worker_scbs;
+			int nworkers;
+			coservice_t *service;
+		}; //coprovide
+		struct {
+			coport_type_t coport_type;
+			coport_t *port;
+		}; //coopen
+		struct {
+			pollcoport_t *coports;
+			uint ncoports;
+			long timeout; 
+		}; //copoll
+		struct {
+			coport_t *cocarrier;
+			void *message;
+			size_t length;
+		}; //cosend/corecv
 	};
 } __attribute__((__aligned__(16)));
 
-typedef struct cocall_args cocall_args_t;
-typedef struct cocall_args copoll_args_t;
-typedef struct cocall_args cosend_args_t;
-typedef struct cocall_args corecv_args_t;
-typedef struct cocall_args codiscover_args_t;
-typedef struct cocall_args coprovide_args_t;
-typedef struct cocall_args coopen_args_t;
-typedef struct cocall_args coclose_args_t;
-typedef struct cocall_args coselect_args_t;
-typedef struct cocall_args coinsert_args_t;
-typedef struct cocall_args coproc_init_args_t;
+typedef struct _cocall_args cocall_args_t;
+typedef struct _cocall_args copoll_args_t;
+typedef struct _cocall_args cosend_args_t;
+typedef struct _cocall_args corecv_args_t;
+typedef struct _cocall_args codiscover_args_t;
+typedef struct _cocall_args coprovide_args_t;
+typedef struct _cocall_args coopen_args_t;
+typedef struct _cocall_args coclose_args_t;
+typedef struct _cocall_args coselect_args_t;
+typedef struct _cocall_args coinsert_args_t;
+typedef struct _cocall_args coproc_init_args_t;
 
-typedef struct cocall_args comunmap_args_t;
-typedef struct cocall_args commap_args_t;
+typedef struct _cocall_args comunmap_args_t;
+typedef struct _cocall_args commap_args_t;
+
 
 #endif //!defined(_COCALL_ARGS_H)

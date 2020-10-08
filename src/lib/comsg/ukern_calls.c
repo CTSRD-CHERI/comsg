@@ -43,11 +43,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-union coinsert_subject {
-	void *object;
-	coserivce_t *coservice;
-	coport_t *coport;
-};
 
 __attribute__((constructor)) static void 
 init_ukern_calls(void)
@@ -65,21 +60,21 @@ discover_ukern_func(nsobject_t *service_obj, int function)
 	if (get_cocall_target(ukern_call_set, function) == NULL)
 		return;
 
-    service = codiscover(service_obj, &scb, global_ns);
+    service = codiscover(service_obj, &scb);
     set_cocall_target(ukern_call_set, function, scb);
 }
 
 nsobject_t *
-coinsert(const char *name, nsobject_type_t type, union coinsert_subject subject, namespace_t *ns)
+coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns)
 {
 	coinsert_args_t cocall_args;
 	int error;
 
 	if (strlen(name) > NS_NAME_LEN)
-		err(ENAMETOOLONG, "coinsert: name exceeds maximum supported length of %d", NS_NAME_LEN);
+		err(ENAMETOOLONG, "coinsert: name exceeds maximum supported length of %lu", NS_NAME_LEN);
 
-	strncpy(cocall_args.name, name, NS_NAME_LEN);
-	cocall_args.namespace = ns;
+	strncpy(cocall_args.nsobj_name, name, NS_NAME_LEN);
+	cocall_args.ns_cap = ns;
 	switch(type) {
 	case RESERVATION:
 		cocall_args.obj = NULL;
@@ -93,14 +88,14 @@ coinsert(const char *name, nsobject_type_t type, union coinsert_subject subject,
 	case COSERVICE:
 		cocall_args.coservice = subject;
 		break;
-	case INVALID:
+	case INVALID_NSOBJ:
 	default:
-		err(EINVAL, "coinsert: invalid object type %d for coinsert");
+		err(EINVAL, "coinsert: invalid object type %d for coinsert", type);
 		break;
 	}
-	cocall_args.type = type;
+	cocall_args.nsobj_type = type;
 
-	error = targeted_cocall(ukern_call_set, COCALL_COINSERT, cocall_args, sizeof(coinsert_args_t));
+	error = targeted_cocall(ukern_call_set, COCALL_COINSERT, &cocall_args, sizeof(coinsert_args_t));
 	if (error != 0) 
 		err(errno, "coinsert: error performing cocall");
 	else if (cocall_args.status == -1) {
@@ -115,13 +110,14 @@ coinsert(const char *name, nsobject_type_t type, union coinsert_subject subject,
 nsobject_t *
 coselect(const char *name, nsobject_type_t type, namespace_t *ns)
 {
+	int error;
 	coselect_args_t cocall_args;
 
 	if (strlen(name) > NS_NAME_LEN)
-		err(ENAMETOOLONG, "coselect: name exceeds maximum supported length of %d", NS_NAME_LEN);
-	strncpy(cocall_args.name, name, NS_NAME_LEN);
+		err(ENAMETOOLONG, "coselect: name exceeds maximum supported length of %lu", NS_NAME_LEN);
+	strncpy(cocall_args.nsobj_name, name, NS_NAME_LEN);
 
-	cocall_args.type = type;
+	cocall_args.nsobj_type = type;
 	cocall_args.nsobj = NULL;
 	cocall_args.ns_cap = ns;
 
@@ -143,11 +139,11 @@ codiscover(nsobject_t *nsobj, void **scb)
 	codiscover_args_t cocall_args;
 
 	cocall_args.nsobj = nsobj;
-	cocall_args.scb = NULL;
+	cocall_args.scb_cap = NULL;
 
 	error = targeted_cocall(ukern_call_set, COCALL_CODISCOVER, &cocall_args, sizeof(codiscover_args_t));
 	if (error == -1)
-		err("codiscover: error performing cocall to codiscover");
+		err(errno, "codiscover: error performing cocall to codiscover");
 	else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
@@ -197,25 +193,25 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 	
 	coproc_init_args_t cocall_args;
 
-	cocall_args->namespace = global_ns_cap;
-	cocall_args->coinsert = coinsert_scb;
-	cocall_args->coinsert = codiscover_scb;
-	cocall_args->coselect = coselect_scb;
+	cocall_args.ns_cap = global_ns_cap;
+	cocall_args.coinsert = coinsert_scb;
+	cocall_args.coinsert = codiscover_scb;
+	cocall_args.coselect = coselect_scb;
 
 	//the target of this varies based on whether caller is a microkernel compartment & which compartment
 	error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
 	if(error)
 		err(error, "coproc_init: cocall failed");
-	else if (cocall_args->status == -1) {
-		errno = cocall_args->error;
+	else if (cocall_args.status == -1) {
+		errno = cocall_args.error;
 		return (NULL);
 	}
 	
-	set_cocall_target(ukern_call_set, COCALL_COINSERT, cocall_args->coinsert);
-	set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args->codiscover);
-	set_cocall_target(ukern_call_set, COCALL_COSELECT, cocall_args->coselect);
+	set_cocall_target(ukern_call_set, COCALL_COINSERT, cocall_args.coinsert);
+	set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args.codiscover);
+	set_cocall_target(ukern_call_set, COCALL_COSELECT, cocall_args.coselect);
 	
-	return (cocall_args->namespace);
+	return (cocall_args.ns_cap);
 }
 
 int 
@@ -232,12 +228,32 @@ cocarrier_send(coport_t *port, void *buf, size_t len)
     if(error)
         err(error, "cocarrier_send: cocall failed");
 
-    if (call.status == -1) {
-        errno = call.error;
+    if (cocall_args.status == -1) {
+        errno = cocall_args.error;
         return (-1);
     }
 
-	return (call.status);
+	return (cocall_args.status);
+}
+
+coport_t *
+coopen(coport_type_t type)
+{
+	coopen_args_t cocall_args;
+	int error;
+
+	cocall_args.coport_type = type;
+    
+    error = targeted_cocall(ukern_call_set, COCALL_COOPEN, &cocall_args, sizeof(cosend_args_t));
+    if(error)
+        err(error, "coopen: cocall failed");
+
+    if (cocall_args.status == -1) {
+        errno = cocall_args.error;
+        return (NULL);
+    }
+
+	return (cocall_args.port);
 }
 
 void *
@@ -252,8 +268,8 @@ cocarrier_recv(coport_t *port, size_t len)
     if(error != 0)
         err(error, "cocarrier_recv: cocall failed");
 
-    if (call.status == -1) {
-        errno = call.error;
+    if (cocall_args.status == -1) {
+        errno = cocall_args.error;
         return (NULL);
     }
 

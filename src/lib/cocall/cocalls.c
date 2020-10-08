@@ -31,16 +31,19 @@
 #include <cocall/cocalls.h>
 #include <cocall/tls_cocall.h>
 
-#include <unistd.h>
+#include <err.h>
 #include <pthread.h>
+#include <stdlib.h>
+#include <sys/errno.h>
+#include <unistd.h>
 
 typedef struct call_set {
 	void **target_caps;
 	int ncalls;
-} call_set_t
+} call_set_t;
 
 static int default_ncalls = 13;
-static pthread_key_t last_key = NULL;
+static pthread_key_t last_key = -1;
 static int last_ncalls = 0;
 
 static call_set_t global_set;
@@ -93,7 +96,7 @@ void init_target_set(pthread_key_t set_key, int ncalls)
 
 void set_cocall_target(pthread_key_t set_key, int target_func, void *target_cap)
 {
-	call_set *set = pthread_getspecific(set_key);
+	call_set_t *set = pthread_getspecific(set_key);
 	if (set == NULL)
 		init_target_set(set_key, 0); //defaults to size of largest set
 	set->target_caps[target_func] = target_cap;
@@ -104,7 +107,7 @@ void set_cocall_target(pthread_key_t set_key, int target_func, void *target_cap)
 
 void *get_cocall_target(pthread_key_t set_key, int target_func)
 {
-	call_set *set = pthread_getspecific(set_key);
+	call_set_t *set = pthread_getspecific(set_key);
 	if (set->target_caps[target_func] != NULL)
 		return (set->target_caps[target_func]);
 	else
@@ -113,7 +116,7 @@ void *get_cocall_target(pthread_key_t set_key, int target_func)
 
 int targeted_cocall(pthread_key_t set_key, int target, void *buf, size_t len)
 {
-	void *target_cap = get_cocall_target(target);
+	void *target_cap = get_cocall_target(set_key, target);
 	if (target_cap == NULL)
 		return (-1);
 	return (cocall_tls(target_cap, buf, len));

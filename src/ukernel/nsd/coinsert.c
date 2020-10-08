@@ -55,12 +55,12 @@ void insert_namespace_object(coinsert_args_t *cocall_args, void *token)
 	ns = unseal_ns(cocall_args->ns_cap);
 	if (!NS_PERMITS_WRITE(cocall_args->ns_cap)) 
 		COCALL_ERR(cocall_args, EACCES);
-	else if(in_namespace(cocall_args->name, ns)) 
+	else if(in_namespace(cocall_args->nsobj_name, ns)) 
 		COCALL_ERR(cocall_args, EEXIST);
 
 	/* create object */
-	obj = create_nsobject(cocall_args->name, cocall_args->type, ns);
-	switch(cocall_args->type) {
+	obj = create_nsobject(cocall_args->nsobj_name, cocall_args->nsobj_type, ns);
+	switch(cocall_args->nsobj_type) {
 	case COMMAP:
 		obj->obj = cocall_args->obj;
 		obj = CLEAR_NSOBJ_STORE_PERM(obj);

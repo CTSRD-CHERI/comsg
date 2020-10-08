@@ -172,7 +172,7 @@ int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 			LIST_REMOVE(member, entries);
 			strnset(result->name, '\0', NS_NAME_LEN);
 			result->obj = NULL;
-			result->type = INVALID;
+			result->type = INVALID_NSOBJ;
 			nsobject_deleted();
 			cocall_free(member);
 			return (1);

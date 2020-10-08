@@ -34,13 +34,15 @@
 #include <ccmalloc.h>
 #include <cocall/cocall_args.h>
 #include <coproc/coport.h>
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
+#include <sys/errno.h>
 #include <sys/queue.h>
 
 int validate_coopen_args(coopen_args_t *cocall_args)
 {
-	if (cocall_args->type != COPIPE && cocall_args->type != COCARRIER && cocall_args->type != COCHANNEL)
+	if (cocall_args->coport_type != COPIPE && cocall_args->coport_type != COCARRIER && cocall_args->coport_type != COCHANNEL)
 		return (0);
 	else
 		return (1);
@@ -52,7 +54,7 @@ void init_coport(coport_type_t type, coport_t *port)
 	port->type = type;
 	
 	port->info = cocall_malloc(sizeof(coport_info_t));
-	port->info = cheri_andperm(port.info, COPORT_INFO_PERMS);
+	port->info = cheri_andperm(port->info, COPORT_INFO_PERMS);
 	port->info->start = 0;
 	port->info->end = 0;
 	port->info->status = COPORT_OPEN;
@@ -77,7 +79,6 @@ void init_coport(coport_type_t type, coport_t *port)
 			break;
 		default:
 			//should not be reached
-			COCALL_ERR(cocall_args, ENOSYS);
 			break;
 	}
 	atomic_thread_fence(memory_order_release);
@@ -100,16 +101,16 @@ void open_coport(coopen_args_t *cocall_args, void *token)
 	static _Thread_local coport_t *port_handle = NULL;
 
 	if (port_handle == NULL) {
-		if(!can_allocate_coport() && port_handle == NULL)
+		if(!can_allocate_coport(cocall_args->coport_type) && port_handle == NULL)
 			COCALL_ERR(cocall_args, ENOMEM);
-		port_handle = allocate_coport(cocall_args->type);
+		port_handle = allocate_coport(cocall_args->coport_type);
 	}
-	init_coport(cocall_args->type, port_handle);
+	init_coport(cocall_args->coport_type, port_handle);
 
 	port_handle = cheri_andperm(port_handle, COPORT_PERMS);
 	port_handle = seal_coport(port_handle);
 	cocall_args->port = port_handle;
 	port_handle = NULL;
 
-	COCALL_RETURN(cocall_args);
+	COCALL_RETURN(cocall_args, 0);
 }

@@ -37,7 +37,7 @@ int validate_coupdate_args(coupdate_args_t *cocall_args)
 		return (0);
 	else if (!cheri_getsealed(cocall_args->nsobj))
 		return (0);
-	else if ((cocall_args->type & (RESERVATION | INVALID)) == 0)
+	else if ((cocall_args->type & (RESERVATION | INVALID_NSOBJ)) == 0)
 		return (0);
 	else if (!cheri_getsealed(cocall_args->obj))
 		return (0);

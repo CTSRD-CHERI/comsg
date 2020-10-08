@@ -35,7 +35,6 @@
 #include <pthread.h>
 
 #include <coproc/namespace.h>
-#include <sys_comsg.h>
 
 #ifndef COPORT_NAME_LEN
 #ifdef NS_NAME_LEN
@@ -60,7 +59,7 @@
                 sender to copy data into
 */
 typedef enum {COSEND, CORECV} coport_op_t;
-typedef enum {INVALID=0, COPIPE=1, COCARRIER=2, COCHANNEL=3} coport_type_t;
+typedef enum {INVALID_COPORT=0, COPIPE=1, COCARRIER=2, COCHANNEL=3} coport_type_t;
 typedef enum {COPORT_CLOSED=0, COPORT_OPEN=1, COPORT_BUSY=2, COPORT_READY=4, COPORT_DONE=8, COPORT_CLOSING=16} coport_status_t;
 typedef enum {NOEVENT=0, COPOLL_CLOSED=1, COPOLL_IN=2, COPOLL_OUT=4, COPOLL_RERR=8, COPOLL_WERR=16} coport_eventmask_t;
 typedef enum {RECV=1, SEND=2, CREAT=4, EXCL=8, ONEWAY=16} coport_flags_t; //currently unimplemented
@@ -92,7 +91,7 @@ typedef struct __no_subobject_bounds _coport_listener
 } coport_listener_t;
 
 typedef union {
-    struct cocarrier_fields {
+    struct {
         LIST_HEAD(, _coport_listener) listeners;
     }; 
 } coport_typedep_t;
@@ -109,7 +108,7 @@ typedef struct {
     void *buf;
 } coport_buf_t;
 
-struct _coport_t
+struct _coport
 {
     coport_info_t *info; //Read and Write data only
     coport_type_t type; //Pointer to whole struct R/O + Load caps

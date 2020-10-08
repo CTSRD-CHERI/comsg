@@ -27,17 +27,19 @@
 #include <cocall/worker.h>
 
 #include <cheri/cheric.h>
+#include <err.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 
 static
 void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
 {
     pthread_attr_t thread_attrs;
     worker_args_t *worker_arr;
-    void *thread_args;
+    worker_args_t *thread_args;
 
     pthread_attr_init(&thread_attrs);
 
@@ -46,19 +48,19 @@ void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map
         worker_arr = calloc(nworkers, sizeof(worker_args_t));
     else
         worker_arr = realloc(func_worker_map->workers, (func_worker_map->nworkers * sizeof(worker_args_t)));
-    func_worker_map->workers = cheri_andperms(worker_arr, FUNC_MAP_PERMS);
+    func_worker_map->workers = cheri_andperm(worker_arr, FUNC_MAP_PERMS);
     
     for(int i = 0; i < nworkers; i++)
     {
         thread_args = cheri_setbounds(&worker_arr[i], sizeof(worker_args_t));
 #if 0
-        rand_string(&thread_args.name, THREAD_STRING_LEN);
+        rand_string(&thread_args.name, LOOKUP_STRING_LEN);
 #else
-        strnset(thread_args.name[0], '\0', THREAD_STRING_LEN);
+        memset(thread_args->name, '\0', LOOKUP_STRING_LEN);
 #endif
-        thread_args.worker_function = func;
+        thread_args->worker_function = func;
         
-        if(pthread_create(&thread_args.worker, &thread_attrs, coaccept_worker, thread_args))
+        if(pthread_create(&(thread_args->worker), &thread_attrs, coaccept_worker, thread_args))
             err(errno, "spawn_workers: could not spawn thread %d with name %s", i, worker_arr[i].name);
     }
 }
@@ -74,21 +76,21 @@ spawn_worker_thread(worker_args_t *worker, function_map_t *func_map)
 {
     pthread_attr_t thread_attrs;
     worker_args_t *worker_arr;
-    void *thread_args;
+    worker_args_t *thread_args;
 
     pthread_attr_init(&thread_attrs);
 
     int idx = atomic_fetch_add(&func_map->nworkers, 1);
     if(func_map->workers == NULL)
-        worker_arr = calloc(nworkers, sizeof(worker_args_t));
+        worker_arr = calloc(func_map->nworkers, sizeof(worker_args_t));
     else
         worker_arr = realloc(func_map->workers, (func_map->nworkers * sizeof(worker_args_t)));
     worker_arr[idx] = *worker;
-    func_map->workers = cheri_andperms(worker_arr, FUNC_MAP_PERMS);
+    func_map->workers = cheri_andperm(worker_arr, FUNC_MAP_PERMS);
 
     thread_args = cheri_setbounds(&worker_arr[idx], sizeof(worker_args_t));
-    if(pthread_create(&thread_args.worker, &thread_attrs, coaccept_worker, thread_args))
-        err(errno,"spawn_worker_thread: could not spawn thread %d with name %s", i, worker_arr[i].name);
+    if(pthread_create(&(thread_args->worker), &thread_attrs, coaccept_worker, thread_args))
+        err(errno,"spawn_worker_thread: could not spawn thread with name %s", worker_arr[idx].name);
 
     return;
 }
@@ -108,7 +110,7 @@ function_map_t *spawn_worker(const char *worker_name, void *func, void *valid)
 
 function_map_t *spawn_workers(void *func, void *arg_func, int nworkers)
 {
-    function_map_t *func_map = new_function_map(nworkers);
+    function_map_t *func_map = new_function_map();
    
     spawn_worker_threads(func, arg_func, nworkers, func_map);
 

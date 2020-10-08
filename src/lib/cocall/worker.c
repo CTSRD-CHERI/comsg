@@ -38,6 +38,9 @@
 #include <pthread.h>
 #include <unistd.h>
 
+
+cocall_args_t test_struct_ccargs;
+
 static
 void coaccept_init(
     void **code_cap,
@@ -65,24 +68,24 @@ void coaccept_init(
 void *coaccept_worker(void *worker_argp)
 {
 	void *sw, *scb, *cookie;
-	struct cocall_args cocall_args, *cocall_args_ptr;
+	struct _cocall_args cocall_args, *cocall_args_ptr;
     
     cocall_args_ptr = &cocall_args;
-    cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(struct cocall_args));
+    cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(struct _cocall_args));
     assert(cheri_local(cocall_args_ptr));
     assert(cheri_getperm(cocall_args_ptr) & CHERI_PERM_STORE_LOCAL_CAP);
 
 	worker_args_t *worker_args = worker_argp;
 	coaccept_init(&sw, &scb, worker_args->name, &worker_args->scb_cap);
 	for(;;) {
-		if(coaccept(sw, scb, &cookie, cocall_args_ptr, sizeof(struct cocall_args)) == 0) {
+		if(coaccept(sw, scb, &cookie, cocall_args_ptr, sizeof(struct _cocall_args)) == 0) {
             if(worker_args->validation_function != NULL) 
-                if(!worker_args->validation_function(&cocall_args, cookie)) {
-                    cocall_args->status = -1;
-                    cocall_args->error = EINVAL;
+                if(!worker_args->validation_function(cocall_args_ptr)) {
+                    cocall_args_ptr->status = -1;
+                    cocall_args_ptr->error = EINVAL;
                     continue;
                 }
-            worker_args->worker_func(&cocall_args);
+            worker_args->worker_function(cocall_args_ptr, cookie);
         } else
 			err(errno, "coaccept_worker: worker failed to coaccept");
 	}

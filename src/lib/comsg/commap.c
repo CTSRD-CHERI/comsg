@@ -25,9 +25,8 @@
  */
 #define COMMAP_C
 
-#include "commap.h"
-#include "sys_comsg.h"
-#include "coproc.h"
+#include <comsg/commap.h>
+#include <coproc.h>
 
 #include <sys/errno.h>
 #include <err.h>

@@ -39,7 +39,7 @@ pthread_key_t allocate_target_set(void);
 void init_target_set(pthread_key_t set_key, int ncalls);
 
 int targeted_cocall(pthread_key_t set_key, int target, void *buf, size_t len);
-void *get_cocall_target(pthread_key_t set_key, int target_func)
-void set_cocall_target(pthread_key_t set_key, int target_func, void *target_cap)
+void *get_cocall_target(pthread_key_t set_key, int target_func);
+void set_cocall_target(pthread_key_t set_key, int target_func, void *target_cap);
 
 #endif //!defined(_COCALLS_H)

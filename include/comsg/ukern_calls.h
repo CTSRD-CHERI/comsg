@@ -32,6 +32,14 @@
 #define _UKERN_CALLS_H
 
 #include <cocall/cocalls.h>
+#include <cocall/cocall_args.h>
+#include <coproc/coport.h>
+#include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
+
+#include <pthread.h>
+#include <stddef.h>
+
 
 #define COCALL_INVALID (0) //not used
 #define COCALL_CODISCOVER (1)
@@ -63,18 +71,23 @@
 #define U_COUPDATE "coupdate" 
 #define U_CODELETE "coupdate"
 
-const int n_ukern_calls = 13;
+#define n_ukern_calls 13
 
 extern pthread_key_t ukern_call_set;
 extern namespace_t *global_ns;
 
 namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb);
-nsobject_t *coinsert(const char *name, nsobject_type_t type, union coinsert_subject subject, namespace_t *ns);
+nsobject_t *coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns);
 nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);
 coservice_t *codiscover(nsobject_t *nsobj, void **scb);
 coservice_t *coprovide(void **worker_scbs, int nworkers);
 coport_t *coopen(coport_type_t type);
+void *cocarrier_recv(coport_t *port, size_t len);
+int cocarrier_send(coport_t *port, void *buf, size_t len);
+int copoll(pollcoport_t *coports, int ncoports, int timeout);
+int coclose(coport_t *coport);
 
+void discover_ukern_func(nsobject_t *service_obj, int function);
 void set_ukern_func(nsobject_t *service_obj, int function);
 
 #endif //!defined(_UKERN_CALLS_H)
