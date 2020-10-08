@@ -574,7 +574,7 @@ coport_type_t coport_gettype(coport_t port)
 {
 
     if(!cheri_getsealed(port))
-        return INVALID;
+        return (INVALID_COPORT);
     if(cheri_gettype(port)!=libcomsg_otype)
     {
         //XXX-PBB:this is bad. 

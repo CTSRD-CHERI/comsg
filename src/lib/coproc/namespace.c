@@ -35,7 +35,7 @@ int valid_ns_name(const char *name)
 	if(name[0]=='\0')
 		return (0);
 
-	for(i = 0; i < strnlen(name, NS_NAME_LEN)) {
+	for(i = 0; i < strnlen(name, NS_NAME_LEN); i++) {
 		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
 			return (0);
 	}
