@@ -7,5 +7,5 @@ SRCS :=	codiscover.c \
 	coserviced.c \
 	coserviced_setup.c
 
-include $(MK_DIR)/comsg.prog.mk
+include $(MK_DIR)/comesg.prog.mk
 

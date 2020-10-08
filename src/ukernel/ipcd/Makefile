@@ -13,5 +13,5 @@ SRCS :=	coclose.c \
 	ipcd_cap.c \
 	ipcd_startup.c 
 
-include $(MK_DIR)/comsg.prog.mk
+include $(MK_DIR)/comesg.prog.mk
 
