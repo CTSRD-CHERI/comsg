@@ -12,5 +12,5 @@ SRCS :=	cocreate.c \
 	nsd_lookup.c \
 	nsd_setup.c 
 
-include $(COMSG_DIR)/comsg.prog.mk
+include $(MK_DIR)/comsg.prog.mk
 

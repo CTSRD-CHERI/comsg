@@ -14,7 +14,7 @@ CFLAGS := -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
 
 export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS
 
-LIBS := $(addprefix lib,$(shell find $(SRC_DIR)/lib -type d))
+LIBS := $(addprefix lib,$(shell find $(SRC_DIR)/lib -mindepth 1 -type d -exec basename {} \;))
 UKERNEL_EXECS := $(shell find $(SRC_DIR)/ukernel -type d)
 
 

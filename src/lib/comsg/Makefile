@@ -8,5 +8,5 @@ DEP_LIBS := pthread cocall coproc
 
 SHLIB_MAJOR=	2
 
-include $(COMSG_DIR)/comsg.lib.mk
+include $(MK_DIR)/comsg.lib.mk
 
