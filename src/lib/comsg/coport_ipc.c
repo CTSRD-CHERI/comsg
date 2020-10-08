@@ -23,46 +23,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include <comsg/coport_ipc.h>
+
+#include <comsg/ukern_calls.h>
+#include <coproc/coport.h>
+#include <coproc/utils.h>
+
+#include <assert.h>
 #include <cheri/cheri.h>
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
-
-#include <assert.h>
-#include <unistd.h>
-#include <stdatomic.h>
 #include <err.h>
-#include <time.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/errno.h>
-#include <sched.h>
-#include <time.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <sys/cdefs.h>
-#include <sys/types.h>
 #include <machine/sysarch.h>
+#include <sched.h>
+#include <stdatomic.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/cdefs.h>
+#include <sys/errno.h>
 #include <sys/sysctl.h>
-
-#include "coproc.h"
-#include "coport.h"
-#include "comsg.h"
-
-#include <comsg/ukern_calls.h>
-#include <coproc/utils.h>
-
-#define COPIPE_BUF_PERMS (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_GLOBAL )
-#define COPORT_IPC_OTYPE 1
+#include <unistd.h>
 
 static bool multicore = 0;
 
-struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
+static struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
 
-struct object_type *otypes[] = {&copipe_otype, &cochannel_otype};
+static struct object_type *allocated_otypes[] = {&copipe_otype, &cochannel_otype};
 
-/* TODO-PBB: move global_ns so we only keep it in one place across all libs */
 static nsobject_t *cosend_obj = NULL;
 static nsobject_t *corecv_obj = NULL;
 
@@ -233,7 +222,7 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
 
 
 int
-coport_send(const coport_t *prt, const void *buf, size_t len)
+cosend(const coport_t *prt, const void *buf, size_t len)
 {
     int retval;
     coport_type_t type;
@@ -385,7 +374,7 @@ coport_gettype(coport_t *port)
 }
 
 pollcoport_t 
-make_pollcoport(coport_t port, coport_eventmask_t events)
+make_pollcoport(coport_t *port, coport_eventmask_t events)
 {
     pollcoport_t pcpt;
 
@@ -422,7 +411,7 @@ coport_ipc_init(void)
     /* TODO-PBB: simulate a divided otype space elsewhere */
     sealroot = cheri_incoffset(sealroot, 128);
 
-    sealroot = make_otypes(sealroot, 2, otypes);
+    sealroot = make_otypes(sealroot, 2, allocated_otypes);
     cocarrier_otype.otype = 0;
 
     /* get the number of CPUs to determine how we spin */

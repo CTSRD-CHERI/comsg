@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  */
 #include <cocall/cocalls.h>
-#include "ukern/tls_cocall.h"
+#include <cocall/tls_cocall.h>
 
 #include <unistd.h>
 #include <pthread.h>
