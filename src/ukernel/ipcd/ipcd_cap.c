@@ -28,24 +28,82 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "ipcd_cap.h"
+#include "coport_table.h"
 
-int valid_coport(coport_t *addr)
+#include <coproc/coport.h>
+#include <coproc/utils.h>
+
+#include <assert.h>
+#include <cheri/cheric.h>
+#include <machine/sysarch.h>
+#include <unistd.h>
+
+static struct object_type cocarrier_otype;
+static void *root_cap;
+
+static __attribute__((constructor)) void
+setup_ipcd_otypes(void)
 {
-    if(cheri_getlen(addr) < sizeof(sys_coport_t))
+    struct object_type *otypes[] = {&cocarrier_otype};
+    assert(sysarch(CHERI_GET_SEALCAP, &root_cap) != -1);
+
+    assert(cheri_gettag(root_cap) != 0);    
+    assert(cheri_getlen(root_cap) != 0);
+    assert((cheri_getperm(root_cap) & CHERI_PERM_SEAL) != 0);
+    /* TODO-PBB: simulate a divided otype space elsewhere */
+    root_cap = cheri_incoffset(root_cap, 32);
+
+    root_cap = make_otypes(root_cap, 1, otypes);
+}
+
+coport_type_t
+coport_gettype(coport_t *ptr)
+{
+    ptr = unseal_coport(ptr);
+    return (ptr->type);
+}
+
+int 
+valid_coport(coport_t *addr)
+{
+    if(cheri_getlen(addr) < sizeof(coport_t))
         return (0);
-    else if(!in_coport_table(addr))
+    else if(!in_coport_table(addr, coport_gettype(addr)))
         return (0);
     else 
         return (1);
-    
 }
 
-int valid_cocarrier(coport_t *addr)
+int 
+valid_cocarrier(coport_t *addr)
 {
-    if(cheri_gettype(addr)!=sealed_otype)
+    if(cheri_gettype(addr) != cocarrier_otype.otype)
         return (0);
     else if(!valid_coport(addr))
         return (0);
     else 
         return (1);
+}
+
+coport_t *
+seal_coport(coport_t *ptr)
+{
+    if (ptr->type != COCARRIER)
+        return (ptr);
+    else if (cheri_getsealed(ptr) == 1)
+        return (ptr);
+    else //TODO-PBB: seal
+        return (cheri_seal(ptr, cocarrier_otype.sc));
+}
+
+coport_t *
+unseal_coport(coport_t *ptr)
+{
+    if (cheri_getsealed(ptr) == 0)
+        return (ptr);
+    else if (cheri_gettype(ptr) == cocarrier_otype.otype)
+        return (cheri_unseal(ptr, cocarrier_otype.usc));
+    else 
+        return (ptr);
 }

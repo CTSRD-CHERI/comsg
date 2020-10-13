@@ -36,8 +36,15 @@
 #include <cocall/worker_map.h>
 #include <coproc/utils.h>
 
-#include <unistd.h>
+#include <err.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/errno.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+
+#include <unistd.h>
 
 
 //TODO-PBB: get path better than this
@@ -50,10 +57,12 @@ static _Atomic pid_t ipcd = 0;
 static _Atomic pid_t nsd = 0;
 static _Atomic pid_t coprocd = 0;
 
+extern char **environ;
+
 struct respawn_args {
-	_Atomic(pid_t) *initial_pid;
+	_Atomic(pid_t) *child_pid;
 	char *exec_path;
-	void *init_func;
+	char *init_str;
 };
 
 static 
@@ -63,7 +72,7 @@ void coexec_daemon(const char *path, const char *init_str)
 	coexecve_args[0] = strdup(path);
 	coexecve_args[1] = strdup(init_str);
 	coexecve_args[2] = NULL;
-	coexecve(atomic_load(&nsd), coexecve_args[0], coexecve_args, environ);
+	coexecve(atomic_load(&coprocd), coexecve_args[0], coexecve_args, environ);
 	err(errno, "coexec_daemon: coexecve failed");
 }
 
@@ -80,21 +89,31 @@ void monitor_child(pid_t child_pid)
 	return;
 }
 
-static 
-void respawn_daemon(_Atomic(pid_t) *pid, const char *exec_path, void *init_func)
+static void *
+respawn_daemon(void *argp)
 {
-	monitor_child(atomic_load(pid));
+	_Atomic(pid_t) *pidp;
+	pid_t child_pid; 
+	struct respawn_args *args = argp;
+	char *exec_path, *init_str;
+	
+	pidp = args->child_pid;
+	exec_path = args->exec_path;
+	init_str = args->init_str;
+
+	monitor_child(atomic_load(pidp));
 	for(;;) {
-		if (atomic_load(pid) == atomic_load(nsd))
+		if (atomic_load(pidp) == atomic_load(&nsd))
 			kill_daemons();
 		child_pid = fork();
 		if(!child_pid)
-			coexec_daemon(exec_path, init_name);
+			coexec_daemon(exec_path, init_str);
 		else {
-			atomic_store(pid, child_pid);
+			atomic_store(pidp, child_pid);
 			monitor_child(child_pid);
 		}
 	}
+	return (NULL);
 }
 
 static 
@@ -120,7 +139,7 @@ pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 		atomic_store(pidp, child_pid);
 		monitor_args->child_pid = pidp;
 		monitor_args->exec_path = exec_path;
-		monitor_args->init_func = init_func;
+		monitor_args->init_str = init_func;
 		pthread_create(&monitor_thread, NULL, respawn_daemon, monitor_args);
 	}
 	

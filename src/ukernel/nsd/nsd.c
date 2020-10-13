@@ -49,16 +49,23 @@
  * 		+ deletes coservices provided by dead threads
  */
 #include "nsd.h"
+#include "namespace_table.h"
 #include "nsd_crud.h"
 #include "nsd_setup.h"
+
 
 #include <ccmalloc.h>
 #include <comsg/ukern_calls.h>
 
 #include <err.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+coservice_provision_t coinsert_serv, coselect_serv, coupdate_serv, codelete_serv, cocreate_serv, codrop_serv;
 
 static 
 void usage(void)
@@ -66,18 +73,18 @@ void usage(void)
 	//todo
 	//should be called with lookup string
 	//e.g "coserviced lookup_string"
-	exit(1);
+	exit(EX_USAGE);
 }
 
 const size_t nbuckets = 2;
-size_t buckets[] = {sizeof(struct _ns_members), sizeof(struct _ns_member)}
+size_t buckets[] = {sizeof(struct _ns_members), sizeof(struct _ns_member)};
 
-int main(int argc, char const *argv[])
+int main(int argc, char *const argv[])
 {
 	int opt, error;
 	void *init_cap;
 	
-	while((opt == getopt(argc, argv, "")) != -1) {
+	while((opt = getopt(argc, argv, "")) != -1) {
 		switch (opt) {
 		case '?':
 		default: 
@@ -89,7 +96,7 @@ int main(int argc, char const *argv[])
 		error = colookup(argv[argc], &init_cap);
 		if(error)
 			err(error, "main: colookup of init %s failed", optarg);
-		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
+		set_ukern_target(COCALL_COPROC_INIT, init_cap);
 	} else {
 		printf("Missing lookup string for init\n");
 		usage();

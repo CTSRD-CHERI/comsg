@@ -26,6 +26,8 @@
 #ifndef _COSERVICE_TABLE_H
 #define _COSERVICE_TABLE_H
 
+#include <coproc/coservice.h>
+
 coservice_t *allocate_coservice(void);
 
 void *get_coservice_scb(coservice_t *service);

@@ -6,7 +6,6 @@ SRCS :=	coclose.c \
 	copoll_deliver.c \
 	copoll_utils.c \
 	coport_table.c \
-	coport_utils.c \
 	corecv.c \
 	cosend.c \
 	ipcd.c \

@@ -31,7 +31,9 @@
 #ifndef _CORECV_H
 #define _CORECV_H
 
+#include <cocall/cocall_args.h>
+
 int validate_corecv_args(corecv_args_t *cocall_args);
-void cocarrier_recv(corecv_args_t *cocall_args, void *token);
+void coport_recv(corecv_args_t *cocall_args, void *token);
 
 #endif //!defined(_CORECV_H)

@@ -28,6 +28,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "ipcd_startup.h"
+
 #include "coclose.h"
 #include "coopen.h"
 #include "copoll.h"
@@ -35,24 +37,27 @@
 #include "cosend.h"
 #include "corecv.h"
 #include "ipcd.h"
-#include "ipcd_startup.h"
+
 
 #include <cocall/worker_map.h>
 #include <cocall/cocall_args.h>
 #include <coproc/namespace.h>
 #include <comsg/ukern_calls.h>
 
+#include <assert.h>
 #include <err.h>
+#include <sys/errno.h>
+
 
 static namespace_t *global;
 
 static 
 void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
 {
-	function_map_t *service_map = spawn_workers(func, valid, nworkers);
+	function_map_t *service_map = spawn_workers(func, valid, IPCD_NWORKERS);
 
 	serv->function_map = service_map;
-	serv->service = coprovide(get_worker_scbs(service_map), nworkers);
+	serv->service = coprovide(get_worker_scbs(service_map), IPCD_NWORKERS);
 	serv->nsobj = coinsert(name, COSERVICE, serv->service, global);
 	if (serv->nsobj == NULL)
 		err(errno, "init_service: error inserting %s into global namespace", name);
@@ -62,12 +67,12 @@ void ipcd_startup(void)
 {
 	global = coproc_init(NULL, NULL, NULL, NULL);
 	if (global == NULL)
-		err(error, "coproc_init: cocall failed");
+		err(errno, "coproc_init: cocall failed");
 	//init own services
-	init_service(&coopen_serv, open_coport, validate_coopen_args, U_COOPEN);
-	init_service(&coclose_serv, close_coport, validate_coclose_args, U_COCLOSE);
-	init_service(&cosend_serv, cocarrier_send, validate_cosend_args, U_COSEND);
-	init_service(&corecv_serv, cocarrier_recv, validate_corecv_args, U_CORECV);
+	init_service(&coopen_serv, coport_open, validate_coopen_args, U_COOPEN);
+	init_service(&coclose_serv, coport_close, validate_coclose_args, U_COCLOSE);
+	init_service(&cosend_serv, coport_send, validate_cosend_args, U_COSEND);
+	init_service(&corecv_serv, coport_recv, validate_corecv_args, U_CORECV);
 	init_service(&copoll_serv, cocarrier_poll, validate_copoll_args, U_COPOLL);
 
 }

@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,10 +28,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include "coprovide.h"
 #include "coservice_table.h"
+#include "coservice_cap.h"
 
 #include <ccmalloc.h>
+#include <cheri/cherireg.h>
 #include <cocall/cocall_args.h>
 #include <coproc/namespace.h>
 #include <coproc/utils.h>
@@ -36,9 +43,9 @@
 #include <string.h>
 
 
-int validate_coprovide_args(coprovide_args_t *args)
+int validate_coprovide_args(coprovide_args_t *cocall_args)
 {
-
+	int i;
 	/* 
 	 * The point of this function is to ensure that the arguments passed from 
 	 * a userspace caller will not crash the microkernel program. If they will, 
@@ -46,40 +53,32 @@ int validate_coprovide_args(coprovide_args_t *args)
 	 * The only type of error return from failing these checks is EINVAL.
 	 * Other checks, e.g. for permissions, should happen elsewhere.
 	 */
-	if(!valid_ns_name(args->name))
-		return 0;
-	else if (!valid_ns_cap(args->ns_cap))
-		return 0;
-	else if(args->nworkers <= 0)
-		return 0;
-	else if(!valid_scb(args->handler_scb))
-		return 0;
-	else if(cheri_getlen(args->worker_scbs) < (CHERICAP_SIZE * args->nworkers))
-		return 0;
+	if(cocall_args->nworkers <= 0)
+		return (0);
+	else if(cheri_getlen(cocall_args->worker_scbs) < (CHERICAP_SIZE * cocall_args->nworkers))
+		return (0);
 	else {
-		for(int i = 0; i < args->nworkers; i++) 
-			if(!valid_scb(args->worker_scbs[i]))
+		for(i = 0; i < cocall_args->nworkers; i++) 
+			if(!valid_scb(cocall_args->worker_scbs[i]))
 				return (0);
 	}
 
-	return 1;
+	return (1);
 }
 
 void provide_coservice(coprovide_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
+	size_t service_len = CHERICAP_SIZE * cocall_args->nworkers;
 	coservice_t *coservice_ptr = allocate_coservice();
 
 	coservice_ptr->next_worker = 0;
 	coservice_ptr->nworkers = cocall_args->nworkers;
-	coservice_ptr->workers = cocall_calloc(cocall_args->nworkers, sizeof(worker_args_t));
-	memcpy(coservice_ptr->workers, cocall_args->workers, cheri_getlen(cocall_args->workers));
+	coservice_ptr->worker_scbs = cocall_calloc(cocall_args->nworkers, CHERICAP_SIZE);
+	memcpy(coservice_ptr->worker_scbs, cocall_args->worker_scbs, service_len);
 
 	cocall_args->service = create_coservice_handle(coservice_ptr);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
 
-	coservice_ptr = NULL;
-	return;
+	COCALL_RETURN(cocall_args, 0);
 }
 

@@ -43,6 +43,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+namespace_t *global_ns;
+
+static pthread_key_t ukern_call_set;
 
 __attribute__((constructor)) static void 
 init_ukern_calls(void)
@@ -62,6 +65,12 @@ discover_ukern_func(nsobject_t *service_obj, int function)
 
     service = codiscover(service_obj, &scb);
     set_cocall_target(ukern_call_set, function, scb);
+}
+
+void
+set_ukern_target(int function, void *target)
+{
+	set_cocall_target(ukern_call_set, function, target);
 }
 
 nsobject_t *
@@ -217,6 +226,7 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 int 
 cocarrier_send(coport_t *port, void *buf, size_t len)
 {
+	/* Currently only for cocarriers, likely to change soon */
 	cosend_args_t cocall_args;
 	int error;
 	
@@ -259,6 +269,7 @@ coopen(coport_type_t type)
 void *
 cocarrier_recv(coport_t *port, size_t len)
 {
+	/* Currently only for cocarriers, likely to change soon */
 	corecv_args_t cocall_args;
 	int error;
 

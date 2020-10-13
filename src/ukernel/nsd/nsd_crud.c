@@ -24,9 +24,13 @@
  * SUCH DAMAGE.
  */
 
-#include "ns_limits.h"
+#include "nsd_crud.h"
+#include "nsd_cap.h"
+#include "nsd_lookup.h"
+#include "namespace_table.h"
 
 #include <ccmalloc.h>
+#include <comsg/ukern_calls.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
 #include <coproc/utils.h>
@@ -39,20 +43,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/param.h>
+#include <sys/queue.h>
 #include <unistd.h>
-
-static __inline void
-validate_namespace_cap(namespace_t *ns_cap)
-{
-	vaddr_t cap_addr = cheri_getaddress(ns_cap);
-	assert(cheri_gettag(ns_cap));
-	assert(sizeof(namespace_t) <= cheri_getlen(ns_cap));
-
-	assert(cheri_is_address_inbounds(ns_cap, cap_addr));
-	assert(in_namespace_table(ns_cap));
-	
-	assert(valid_ns_otype(ns_cap) || !cheri_getsealed(ns_cap));
-}
 
 static __inline void 
 validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
@@ -60,7 +52,7 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 	assert(valid_ns_name(name));
 	assert(VALID_NS_TYPE(type));
 	if(type!=GLOBAL) {
-		validate_namespace_cap(parent);
+		valid_namespace_cap(parent);
 		assert(NS_PERMITS_WRITE(parent));
 		parent = unseal_ns(parent);
 	}
@@ -73,7 +65,7 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 		case PROCESS:
 		case LIBRARY:
 			assert(parent->type == GLOBAL);
-			assert(parent == global_namespace);
+			assert(is_global_namespace(parent));
 			break;
 		case THREAD:
 			assert(parent->type == PROCESS);
@@ -89,7 +81,7 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 static __inline void 
 validate_nsobjcreate_params(const char *name, nsobject_type_t type, namespace_t *parent)
 {
-	validate_namespace_cap(parent);
+	assert(valid_namespace_cap(parent));
 
 	assert(valid_nsobj_name(name));
 	assert(VALID_NSOBJ_TYPE(type));
@@ -129,7 +121,7 @@ namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *pare
 
 	if(type == GLOBAL) {
 		ns_ptr->parent = NULL;
-		global_namespace = ns_ptr;
+		global_ns = ns_ptr;
 	}
 	else {
 		parent_cap = cheri_andperm(parent, NS_PERMS_OBJ);
@@ -148,7 +140,7 @@ nsobject_t *create_nsobject(const char *name, nsobject_type_t type, namespace_t 
 	validate_nsobjcreate_params(name, type, parent);
 	
 	nsobject_t *obj_ptr = allocate_nsobject(parent);
-	if (obj == NULL)
+	if (obj_ptr == NULL)
 		return (NULL);
 
 	obj_ptr->type = type;
@@ -170,7 +162,7 @@ int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 		result = member->nsobj;
 		if(result == ns_obj) 
 			LIST_REMOVE(member, entries);
-			strnset(result->name, '\0', NS_NAME_LEN);
+			memset(result->name, '\0', NS_NAME_LEN);
 			result->obj = NULL;
 			result->type = INVALID_NSOBJ;
 			nsobject_deleted();
@@ -189,8 +181,8 @@ int delete_namespace(namespace_t *ns_cap)
 	parent_ns = unseal_ns(ns_cap->parent);
 
 	LIST_FOREACH_SAFE(member, &ns_cap->members->namespaces, entries, member_temp) {
-		ns = member->ns;
-		if (ns_cap == ns) {
+		parent_ns = member->ns;
+		if (ns_cap == parent_ns) {
 			LIST_REMOVE(member, entries);
 			//TODO-PBB: oh boy we gotta do big work now
 			//Are all child namespaces now invalid?
@@ -199,7 +191,7 @@ int delete_namespace(namespace_t *ns_cap)
 			//Should these simply "merge up?" - this could be problematic, I think
 			//This could represent a substantial amount of work; should we make the cocalling thread do it for us?
 			//There are large concurrency issues around this whole thing.
-			return (1)
+			return (1);
 		}
 	}
 

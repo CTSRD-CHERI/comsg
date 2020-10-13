@@ -28,9 +28,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _DANCE_H
+#define _DANCE_H
+
+#include <cocall/cocall_args.h>
 
 void nsd_init(cocall_args_t *cocall_args, void *token);
 void coserviced_init(cocall_args_t * cocall_args, void *token);
 void ipcd_init(cocall_args_t * cocall_args, void *token);
 void coproc_user_init(cocall_args_t *cocall_args, void *token);
-void invalidate_values(void);
+void invalidate_startup_info(void);
+
+#endif

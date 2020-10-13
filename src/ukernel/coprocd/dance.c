@@ -102,7 +102,7 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) */
 	atomic_store(&coinsert_scb, cocall_args->coinsert);
 	atomic_store(&coselect_scb, cocall_args->coselect);
-	atomic_store(&global_namespace, cocall_args->namespace);
+	atomic_store(&global_namespace, cocall_args->ns_cap);
 	/* clear old codiscover; whether valid or not it refers to the old universe */
 	atomic_store(&codiscover_scb, NULL);
 	/* Wait until coserviced is (re) ininitalized */
@@ -131,7 +131,7 @@ void coserviced_init(cocall_args_t *cocall_args, void *token)
 		/* nsd has not yet started */
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
-	cocall_args->namespace = atomic_load(&global_namespace);
+	cocall_args->ns_cap = atomic_load(&global_namespace);
 	cocall_args->coinsert = atomic_load(&coinsert_scb);
 	cocall_args->coselect = atomic_load(&coselect_scb);
 	atomic_store(&codiscover_scb, cocall_args->codiscover);
@@ -150,7 +150,7 @@ void ipcd_init(cocall_args_t *cocall_args, void *token)
 		/* nsd has not yet started */
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
-	cocall_args->namespace = atomic_load(&global_namespace);
+	cocall_args->ns_cap = atomic_load(&global_namespace);
 	cocall_args->codiscover = atomic_load(&codiscover_scb);
 	cocall_args->coinsert = atomic_load(&coinsert_scb);
 	cocall_args->coselect = atomic_load(&coselect_scb);
@@ -165,7 +165,7 @@ void coproc_user_init(cocall_args_t *cocall_args, void *token)
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
 
-	cocall_args->namespace = atomic_load(&global_namespace);
+	cocall_args->ns_cap = atomic_load(&global_namespace);
 	cocall_args->codiscover = atomic_load(&codiscover_scb);
 	cocall_args->coinsert = atomic_load(&coinsert_scb);
 	cocall_args->coselect = atomic_load(&coselect_scb);

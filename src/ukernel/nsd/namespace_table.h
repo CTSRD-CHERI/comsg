@@ -40,19 +40,19 @@
 //not finding that it's coming to me right now.
 
 struct _ns_member {
-	LIST_ENTRY(_member) entries;
+	LIST_ENTRY(_ns_member) entries;
 	union {
 		namespace_t *ns;
 		nsobject_t *nsobj;
 	};
-}
+};
 
 struct _ns_members {
-	LIST_HEAD(, _member) objects;
+	LIST_HEAD(, _ns_member) objects;
 	_Atomic size_t nobjects;
 	size_t max_objects;
 
-	LIST_HEAD(, _member) namespaces;
+	LIST_HEAD(, _ns_member) namespaces;
 	_Atomic size_t nspaces;
 	size_t max_namespaces;
 };

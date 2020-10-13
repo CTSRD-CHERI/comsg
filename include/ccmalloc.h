@@ -37,7 +37,7 @@ void *cocall_malloc(size_t len);
 void *cocall_calloc(size_t num, size_t length);
 
 void cocall_free(void*);
-
+void *cocall_flexible_malloc(size_t len);
 void *cocall_alloc(size_t, ccmalloc_flags_t, size_t hint);
 
 #endif //!defined(_CCMALLOC_H)

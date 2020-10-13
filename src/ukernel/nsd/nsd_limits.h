@@ -27,7 +27,6 @@
 #define _NSD_LIMITS_H
 //XXX: policy choices, should be controlled via sysctl
 //TODO-PBB: define initial reservations/resource limits for each namespace type
-static const size_t max_nsobjects; //cap for whole system
 
 /* Per-namespace caps for number of nsobjects */
 /*
@@ -45,7 +44,7 @@ static const size_t process_max_objlen;
 static const size_t thread_max_objlen;
 static const size_t explicit_max_objlen;
 static const size_t library_max_objlen;
-static const size_t global_max_objlen = (global_max_objects * sizeof(nsobject_t));
+static const size_t global_max_objlen;
 
 /* Set by namespace_table.c:setup_table */
 /* Determines how many child namespaces may be assigned per type */

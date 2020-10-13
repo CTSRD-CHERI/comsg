@@ -24,11 +24,13 @@
  * SUCH DAMAGE.
  */
 #include "nsd.h"
+#include "nsd_cap.h"
 
 #include <cocall/cocall_args.h>
 #include <coproc/utils.h>
 
 #include <cheri/cheric.h>
+#include <sys/errno.h>
 
 int validate_coupdate_args(coupdate_args_t *cocall_args)
 {
@@ -37,7 +39,7 @@ int validate_coupdate_args(coupdate_args_t *cocall_args)
 		return (0);
 	else if (!cheri_getsealed(cocall_args->nsobj))
 		return (0);
-	else if ((cocall_args->type & (RESERVATION | INVALID_NSOBJ)) == 0)
+	else if ((cocall_args->nsobj_type & (RESERVATION | INVALID_NSOBJ)) == 0)
 		return (0);
 	else if (!cheri_getsealed(cocall_args->obj))
 		return (0);
@@ -47,7 +49,7 @@ int validate_coupdate_args(coupdate_args_t *cocall_args)
 		return (1);
 }
 
-void update_namespace_object(coupdate_args_t *cocall_args, void *token)
+void namespace_object_update(coupdate_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	nsobject_t *nsobj, *parent_obj;
@@ -61,8 +63,8 @@ void update_namespace_object(coupdate_args_t *cocall_args, void *token)
 	else if (nsobj->type != RESERVATION) /* Not reached(?). Could be in races? */
 		COCALL_ERR(cocall_args, ENODEV);
 
-	nsobj->type = cocall_args->type;
-	switch(cocall_args->type) {
+	nsobj->type = cocall_args->nsobj_type;
+	switch(cocall_args->nsobj_type) {
 		case COMMAP:
 			nsobj->obj = cocall_args->obj;
 			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
@@ -79,5 +81,5 @@ void update_namespace_object(coupdate_args_t *cocall_args, void *token)
 			break;
 	}
 	cocall_args->nsobj = nsobj;
-	COCALL_RETURN(cocall_args);
+	COCALL_RETURN(cocall_args, 0);
 }	

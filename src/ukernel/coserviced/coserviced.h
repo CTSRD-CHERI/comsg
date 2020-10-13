@@ -37,9 +37,9 @@
 
 #include <cocall/worker_map.h>
 
-coservice_provision_t codiscover_serv, coprovide_serv;
+extern coservice_provision_t codiscover_serv, coprovide_serv;
 
 //TODO-PBB: Revisit
-const int nworkers = 12;
+#define COSERVICED_NWORKERS 12
 
 #endif

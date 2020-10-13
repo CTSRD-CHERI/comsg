@@ -1,4 +1,4 @@
-PROG := coserviced
+PROG := nsd
 
 SRCS :=	cocreate.c \
 	codelete.c \
@@ -8,6 +8,7 @@ SRCS :=	cocreate.c \
 	coupdate.c \
 	namespace_table.c \
 	nsd.c \
+	nsd_cap.c \
 	nsd_crud.c \
 	nsd_lookup.c \
 	nsd_setup.c 

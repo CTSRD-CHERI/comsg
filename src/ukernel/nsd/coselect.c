@@ -32,7 +32,7 @@
 
 #include <sys/errno.h>
 
-int validate_coselect_args(coselect_args_t*)
+int validate_coselect_args(coselect_args_t* cocall_args)
 {
 	/*
 	 *
@@ -40,11 +40,11 @@ int validate_coselect_args(coselect_args_t*)
 	return (1);
 }
 
-void select_namespace_object(coselect_args_t *cocall_args, void *token)
+void namespace_object_select(coselect_args_t *cocall_args, void *token)
 {
 	nsobject_t *obj;
 
-	obj = lookup_nsobject(cocall_args->nsobj_name, cocall_args->ns_cap, cocall_args->nsobj_type);
+	obj = lookup_nsobject(cocall_args->nsobj_name, cocall_args->nsobj_type, cocall_args->ns_cap);
 	if(obj == NULL) 
 		COCALL_ERR(cocall_args, ENOENT);
 

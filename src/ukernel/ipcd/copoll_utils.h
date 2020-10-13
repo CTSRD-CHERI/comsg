@@ -31,6 +31,8 @@
 #ifndef _COPOLL_UTILS_H
 #define _COPOLL_UTILS_H
 
+#include <coproc/coport.h>
+
 #include <pthread.h>
 
 void acquire_copoll_mutex(void);
@@ -38,6 +40,6 @@ void release_copoll_mutex(void);
 void await_copoll_events(void);
 
 void copoll_wait(pthread_cond_t *wait_cond, long timeout);
-void copoll_notify(coport_t *cocarrier)
+void copoll_notify(coport_t *cocarrier);
 
 #endif

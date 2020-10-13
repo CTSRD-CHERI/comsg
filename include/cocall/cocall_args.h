@@ -32,15 +32,15 @@
 #include <coproc/namespace_object.h>
 
 #ifndef COCALL_ERR
-#define COCALL_ERR(c, n) c->status = (-1);\
+#define COCALL_ERR(c, n) do { c->status = (-1);\
 	c->error = (n);\
-	return
+	return; } while(0)
 #endif
 
 #ifndef COCALL_RETURN
-#define COCALL_RETURN(c, n) c->status = (n);\
+#define COCALL_RETURN(c, n) do { c->status = (n);\
 	c->error = (0);\
-	return
+	return; } while(0)
 #endif
 
 #if 0
@@ -136,9 +136,10 @@ typedef struct _cocall_args coclose_args_t;
 typedef struct _cocall_args coselect_args_t;
 typedef struct _cocall_args coinsert_args_t;
 typedef struct _cocall_args coproc_init_args_t;
-
-typedef struct _cocall_args comunmap_args_t;
-typedef struct _cocall_args commap_args_t;
+typedef struct _cocall_args codrop_args_t;
+typedef struct _cocall_args codelete_args_t;
+typedef struct _cocall_args coupdate_args_t;
+typedef struct _cocall_args cocreate_args_t;
 
 
 #endif //!defined(_COCALL_ARGS_H)

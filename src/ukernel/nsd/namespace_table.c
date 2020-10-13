@@ -23,8 +23,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#include "ns_limits.h"
+#include "namespace_table.h"
+#include "nsd_limits.h"
+#include "nsd_cap.h"
 
 #include <ccmalloc.h>
 #include <coproc/namespace.h>
@@ -43,14 +44,11 @@
 #include <unistd.h>
 
 /* Constants */
-static const int namespace_table_prot = ( PROT_READ | PROT_WRTE );
+static const int namespace_table_prot = ( PROT_READ | PROT_WRITE );
 static const int namespace_table_flags = ( MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_SUPER );
 
-#if MACHINE == "mips"
-#define ALLOC_UNIT PDRSIZE
-#else 
+/* TODO-PBB: needs refining. we shouldn't be quite so scared of using more memory than this */
 #define ALLOC_UNIT ( 1024 * 1024 ) 
-#endif
 
 static size_t namespace_table_len = ALLOC_UNIT; //should get from OS and relate to process limits
 static size_t max_namespaces;
@@ -78,18 +76,18 @@ void setup_namespace_table(void)
 	namespace_table_len += (((maxprocs * sizeof(namespace_t)) / ALLOC_UNIT) + 1) * ALLOC_UNIT;
 	/* Allocate namespace table */
 	namespace_table.namespaces = mmap(NULL, namespace_table_len, namespace_table_prot, namespace_table_flags, -1, 0);
-	max_namespaces = cheri_getlen(namespace_table.namespaces) / sizeof(struct namespace_t);
+	max_namespaces = cheri_getlen(namespace_table.namespaces) / sizeof(namespace_t);
 	namespace_table.next_namespace = max_namespaces - 1;
 	namespace_table.namespace_count = 0lu;
 	/* Allocate namespace object table */
 	nsobject_table.nsobjects = mmap(NULL, namespace_table_len, namespace_table_prot, namespace_table_flags, -1, 0);
-	max_nsobjects = cheri_getlen(nsobject_table.nsobjects) / sizeof(struct nsobject_t);
+	max_nsobjects = cheri_getlen(nsobject_table.nsobjects) / sizeof(nsobject_t);
 	nsobject_table.next_nsobject = max_nsobjects - 1;
 	nsobject_table.nsobject_count = 0lu;
 
 	/* Determine limits - not fully used yet.*/
 	if(max_namespaces < maxprocs)
-		warn("setup_namespace_table: table allocation too small! (kern.maxproc=%d, max_namespaces=%d)", maxproc, max_namespaces);
+		warn("setup_namespace_table: table allocation too small! (kern.maxproc=%d, max_namespaces=%lu)", maxprocs, max_namespaces);
 }
 
 static __inline namespace_t*
@@ -122,9 +120,10 @@ new_namespace_entry(void)
 	return (ptr);
 }
 
-static __inline namespace_t*
+static __inline nsobject_t *
 new_nsobject_entry(void)
 {
+	static int full = 0;
 	nsobject_t *ptr;
 	size_t index;
 
@@ -140,7 +139,7 @@ new_nsobject_entry(void)
 		}
 	}
 	
-	ptr = &nsobject_table.next_nsobject[index];
+	ptr = &nsobject_table.nsobjects[index];
 	ptr = cheri_setboundsexact(ptr, sizeof(nsobject_t));
 	memset(ptr, 0, sizeof(nsobject_t));
 
@@ -149,7 +148,8 @@ new_nsobject_entry(void)
 	return (ptr);
 }
 
-nsobject_t *allocate_nsobject(namespace_t *parent)
+nsobject_t *
+allocate_nsobject(namespace_t *parent)
 {
 	struct _ns_member *obj_cap;
 	assert(NS_PERMITS_WRITE(parent));
@@ -157,12 +157,13 @@ nsobject_t *allocate_nsobject(namespace_t *parent)
 	obj_cap = cocall_malloc(sizeof(struct _ns_member));
 	obj_cap->nsobj = new_nsobject_entry();
 	parent = unseal_ns(parent);
-	LIST_INSERT_HEAD(&parent->members.objects, obj_cap, entries);
+	LIST_INSERT_HEAD(&parent->members->objects, obj_cap, entries);
 
 	return (obj_cap->nsobj);
 }
 
-namespace_t *allocate_namespace(namespace_t *parent, nstype_t type)
+namespace_t *
+allocate_namespace(namespace_t *parent, nstype_t type)
 {
 	struct _ns_member *obj_cap;
 	if(type == GLOBAL) {
@@ -177,7 +178,7 @@ namespace_t *allocate_namespace(namespace_t *parent, nstype_t type)
 	obj_cap = cocall_malloc(sizeof(struct _ns_member));
 	obj_cap->ns = new_namespace_entry();
 	parent = unseal_ns(parent);
-	LIST_INSERT_HEAD(&parent->members.namespaces, obj_cap, entries);
+	LIST_INSERT_HEAD(&parent->members->namespaces, obj_cap, entries);
 
 	return (obj_cap->ns);
 }

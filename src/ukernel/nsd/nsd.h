@@ -30,27 +30,30 @@
 #define COPROC_UKERN 1
 #endif
 
-#include <coproc/coservice.h>
+#include <cocall/cocall_args.h>
 #include <cocall/worker_map.h>
+#include <coproc/coservice.h>
+
 
 extern coservice_provision_t coinsert_serv, coselect_serv, coupdate_serv, codelete_serv, cocreate_serv, codrop_serv;
 
 
-void update_namespace_object(coupdate_args_t *cocall_args, void *token);
-void delete_namespace_object(codelete_args_t *cocall_args, void *token);
-void create_namespace(cocreate_args_t *cocall_args, void *token);
-void drop_namespace(codrop_args_t *cocall_args, void *token);
-void insert_namespace_object(coinsert_args_t *cocall_args, void *token);
-void select_namespace_object(coselect_args_t * cocall_args, void *token);
+void namespace_object_update(coupdate_args_t *cocall_args, void *token);
+void namespace_object_delete(codelete_args_t *cocall_args, void *token);
+void namespace_create(cocreate_args_t *cocall_args, void *token);
+void namespace_drop(codrop_args_t *cocall_args, void *token);
+void namespace_object_insert(coinsert_args_t *cocall_args, void *token);
+void namespace_object_select(coselect_args_t * cocall_args, void *token);
 
-int validate_coselect_args(coselect_args_t*);
+int validate_coselect_args(coselect_args_t *cocall_args);
 int validate_coupdate_args(coupdate_args_t *cocall_args);
 int validate_codelete_args(codelete_args_t *cocall_args);
 int validate_cocreate_args(cocreate_args_t *cocall_args);
 int validate_codrop_args(codrop_args_t *cocall_args);
+int validate_coinsert_args(coinsert_args_t *cocall_args);
 
 
 //TODO-PBB: revisit
-extern const int nworkers = 12;
+#define NSD_NWORKERS 12
 
 #endif //!defined(_NSD_H)

@@ -39,7 +39,7 @@
 static struct object_type global_nscap, proc_nscap, thread_nscap, explicit_nscap, library_nscap;
 static struct object_type coservice_nsobj, coport_nsobj, commap_nsobj, reservation_nsobj;
 
-static const struct object_type *global_object_types[] = {&global_nscap, &proc_nscap, &thread_nscap, &explicit_nscap, &library_nscap, &reservation_nsobj, &coservice_nsobj, &coport_nsobj, &commap_nsobj};
+static struct object_type *global_object_types[] = {&global_nscap, &proc_nscap, &thread_nscap, &explicit_nscap, &library_nscap, &reservation_nsobj, &coservice_nsobj, &coport_nsobj, &commap_nsobj};
 static const int required_otypes = 9;
 
 __attribute__ ((constructor)) static void 
@@ -57,13 +57,13 @@ get_ns_sealcap(nstype_t type)
 {
 	switch(type) {
 	case GLOBAL:
-		return (global_ns.sc);
+		return (global_nscap.sc);
 	case PROCESS:
-		return (proc_ns.sc);
+		return (proc_nscap.sc);
 	case THREAD:
-		return (thread_ns.sc);
+		return (thread_nscap.sc);
 	case EXPLICIT:
-		return (explicit_ns.sc);
+		return (explicit_nscap.sc);
 	default:
 		err(EINVAL, "get_ns_sealcap: invalid nstype value %d supplied", type);
 	}
@@ -75,13 +75,13 @@ get_ns_unsealcap(nstype_t type)
 {
 	switch(type) {
 	case GLOBAL:
-		return (global_ns.usc);
+		return (global_nscap.usc);
 	case PROCESS:
-		return (proc_ns.usc);
+		return (proc_nscap.usc);
 	case THREAD:
-		return (thread_ns.usc);
+		return (thread_nscap.usc);
 	case EXPLICIT:
-		return (explicit_ns.usc);
+		return (explicit_nscap.usc);
 	default:
 		err(EINVAL, "get_ns_unsealcap: invalid nstype value %d supplied", type);
 	}
@@ -125,6 +125,37 @@ get_nsobj_unsealcap(nsobject_type_t type)
 }
 
 static nsobject_type_t 
+nsobj_otype_to_type(long otype)
+{
+	if (otype == coport_nsobj.otype)
+		return (COPORT);
+	else if (otype == coservice_nsobj.otype)
+		return (COSERVICE);
+	else if (otype == commap_nsobj.otype)
+		return (COMMAP);
+	else if (otype == reservation_nsobj.otype)
+		return (RESERVATION);
+	else
+		return (INVALID_NSOBJ);
+}
+
+static nstype_t 
+ns_otype_to_type(long otype)
+{
+	if (otype == global_nscap.otype)
+		return (GLOBAL);
+	else if (otype == proc_nscap.otype)
+		return (PROCESS);
+	else if (otype ==  thread_nscap.otype)
+		return (THREAD);
+	else if (otype ==  explicit_nscap.otype)
+		return (EXPLICIT);
+	else
+		return (INVALID_NS);
+	
+}
+
+static nsobject_type_t 
 get_nsobject_type(nsobject_t *nsobj)
 {
 	long otype;
@@ -134,22 +165,7 @@ get_nsobject_type(nsobject_t *nsobj)
 	return (nsobj_otype_to_type(otype));
 }
 
-static nsobject_type_t 
-nsobj_otype_to_type(long otype)
-{
-	switch(otype) {
-	case coport_nsobj.otype:
-		return (COPORT);
-	case coservice_nsobj.otype:
-		return (COSERVICE);
-	case commap_nsobj.otype:
-		return (COMMAP);
-	case reservation_nsobj.otype:
-		return (RESERVATION);
-	default:
-		return (INVALID_NSOBJ);
-	}
-}
+
 
 static nstype_t 
 get_ns_type(namespace_t *ns)
@@ -158,22 +174,7 @@ get_ns_type(namespace_t *ns)
 	return (ns_otype_to_type(otype));
 }
 
-static nstype_t 
-ns_otype_to_type(long otype)
-{
-	switch(otype) {
-	case global_nscap.otype:
-		return (GLOBAL);
-	case proc_nscap.otype:
-		return (PROCESS);
-	case thread_nscap.otype:
-		return (THREAD);
-	case explicit_nscap.otype:
-		return (EXPLICIT);
-	default:
-		return (INVALID_NS);
-	}
-}
+
 
 namespace_t *
 unseal_ns(namespace_t *ns_cap)
@@ -186,7 +187,7 @@ unseal_ns(namespace_t *ns_cap)
 }
 
 namespace_t *
-seal_ns(namespace_t *ns_cap);
+seal_ns(namespace_t *ns_cap)
 {
 	if (cheri_getsealed(ns_cap))
 		return (ns_cap);
@@ -227,9 +228,9 @@ valid_namespace_cap(namespace_t *ns_cap)
 		return (0);
 	else if (!cheri_is_address_inbounds(ns_cap, cap_addr))
 		return (0);
-	else if (!in_namespace_table(ns_cap))
+	else if (!in_ns_table(ns_cap))
 		return (0);
-	else if (!(valid_ns_otype(ns_cap) || !cheri_getsealed(ns_cap)))
+	else if (get_ns_type(ns_cap) == INVALID_NS)
 		return (0);
 	else
 		return (1);
@@ -240,15 +241,15 @@ int
 valid_nsobject_cap(nsobject_t *obj_cap)
 {
 	vaddr_t cap_addr = cheri_getaddress(obj_cap);
-	if (!cheri_gettag(ns_cap))
+	if (!cheri_gettag(obj_cap))
 		return (0);
-	else if (sizeof(namespace_t) <= cheri_getlen(ns_cap))
+	else if (sizeof(namespace_t) <= cheri_getlen(obj_cap))
 		return (0);
-	else if (!cheri_is_address_inbounds(ns_cap, cap_addr))
+	else if (!cheri_is_address_inbounds(obj_cap, cap_addr))
 		return (0);
-	else if (!in_nsobject_table(ns_cap))
+	else if (!in_nsobject_table(obj_cap))
 		return (0);
-	else if (!((get_nsobject_type(ns_cap) != INVALID_NSOBJ) || !cheri_getsealed(ns_cap)))
+	else if (!((get_nsobject_type(obj_cap) != INVALID_NSOBJ) || !cheri_getsealed(obj_cap)))
 		return (0);
 	else
 		return (1);
@@ -260,7 +261,7 @@ valid_reservation_cap(nsobject_t *obj_cap)
 	if (!cheri_getsealed(obj_cap))
 		return (0);
 	else if (get_nsobject_type(obj_cap) != RESERVATION)
-		return (0)
+		return (0);
 	else
 		return (valid_nsobject_cap(obj_cap));
 }

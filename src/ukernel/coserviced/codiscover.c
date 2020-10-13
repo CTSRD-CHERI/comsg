@@ -23,6 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "codiscover.h"
 #include "coservice_cap.h"
 #include "coservice_table.h"
 
@@ -32,18 +33,23 @@
 
 #include <sys/errno.h>
 
-int validate_codiscover_args(codiscover_args_t *args)
+int validate_codiscover_args(codiscover_args_t *cocall_args)
 {
 	nsobject_t *obj = cocall_args->nsobj;
+	coservice_t *service_handle = obj->coservice;
 	if(obj == NULL)
 		return (0);
-	else if (!cheri_getsealed(obj))
+	else if (cheri_getsealed(obj))
 		return (0);
-	else if ((cheri_getperm(obj) & (COSERVICE_CODISCOVER_PERMS)) == 0)
+	else if (!cheri_getsealed(service_handle))
 		return (0);
-	else if (cheri_getlen(obj) < sizeof(coservice_t))
+	else if ((cheri_getperm(service_handle) & (COSERVICE_CODISCOVER_PERMS)) == 0)
 		return (0);
-	else if (!in_table(obj))
+	else if (cheri_getlen(obj) < sizeof(nsobject_t))
+		return (0);
+	else if (cheri_getlen(service_handle) < sizeof(coservice_t))
+		return (0);
+	else if (!in_table(service_handle))
 		return (0);
 	else
 		return (1);

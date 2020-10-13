@@ -116,7 +116,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 
 	pthread_condattr_init(&wake_attr);
 	pthread_condattr_setclock(&wake_attr, CLOCK_MONOTONIC);
-	pthread_cond_init(&wake, wake_attr);
+	pthread_cond_init(&wake, &wake_attr);
 
 	listen_entries = init_listeners(coports, ncoports, &wake);
 

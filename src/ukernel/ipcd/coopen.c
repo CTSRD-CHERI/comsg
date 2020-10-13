@@ -28,8 +28,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coopen.h"
 #include "coport_table.h"
 
+#include "ipcd_cap.h"
 
 #include <ccmalloc.h>
 #include <cocall/cocall_args.h>
@@ -85,16 +87,7 @@ void init_coport(coport_type_t type, coport_t *port)
 	/* To synchronise with acquires in send/recv operations */
 }
 
-static 
-coport_t *seal_coport(coport_t *ptr)
-{
-	if (ptr->type != COCARRIER)
-		return (ptr);
-	else //TODO-PBB: seal
-		return (ptr);
-}
-
-void open_coport(coopen_args_t *cocall_args, void *token)
+void coport_open(coopen_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	//Brain-sludge is making me forget whether static is redundant here

@@ -28,7 +28,7 @@
 
 #include <cocall/cocall_args.h>
 
-int valid_coprovide_args(coprovide_args_t *args);
+int validate_coprovide_args(coprovide_args_t *args);
 void provide_coservice(coprovide_args_t *cocall_args, void *token);
 
 #endif //!defined(_COPROVIDE_H)

@@ -6,7 +6,7 @@ SRC_DIR := $(COMSG_DIR)/src
 MK_DIR := $(COMSG_DIR)
 
 INC_DIRS += $(COMSG_DIR)/include
-INC_FLAGS := $(addprefix -I,$(INC_DIRS))
+INC_FLAGS := $(addprefix -isystem,$(INC_DIRS))
 
 LDFLAGS :=-fuse-ld=lld -Wl,-znow -L $(OUT_DIR)
 CFLAGS := -g -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \

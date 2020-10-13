@@ -32,6 +32,8 @@
 #ifndef _COPOLL_DELIVER_H
 #define _COPOLL_DELIVER_H
 
+#include <stddef.h>
+
 struct copoll_delivery_args {
 	size_t modulo;
 	size_t remainder;

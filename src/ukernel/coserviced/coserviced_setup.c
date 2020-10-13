@@ -28,22 +28,29 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coserviced_setup.h"
+
+#include "codiscover.h"
+#include "coprovide.h"
+#include "coserviced.h"
 #include "coservice_table.h"
+#include "coservice_cap.h"
 
 #include <coproc/coservice.h>
 #include <coproc/namespace.h>
 #include <cocall/worker_map.h>
 #include <cocall/cocall_args.h>
 #include <comsg/ukern_calls.h>
+
 #include <err.h>
+#include <sys/errno.h>
 
-static namespace_t *global;
 
-static 
-void init_service(coservice_provision_t *serv, void *func, void *valid)
+static void 
+init_service(coservice_provision_t *serv, void *func, void *valid)
 {
 	coservice_t *service = allocate_coservice();
-	function_map_t *service_map = spawn_workers(func, valid, nworkers);
+	function_map_t *service_map = spawn_workers(func, valid, COSERVICED_NWORKERS);
 	
 	service->worker_scbs = get_worker_scbs(service_map);
 	
@@ -52,23 +59,25 @@ void init_service(coservice_provision_t *serv, void *func, void *valid)
 	return;
 }
 
-void coserviced_startup(void)
+void 
+coserviced_startup(void)
 {
+	void *codiscover_scb;
 	coservice_t *coservice_cap;
 	//init own services
 	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args);
-	init_service(&coprovide_serv, provide_coservice, valid_coprovide_args);
+	init_service(&coprovide_serv, provide_coservice, validate_coprovide_args);
 	
 	codiscover_scb = get_coservice_scb(codiscover_serv.service);
 	//connect to process daemon and do the startup dance (we can dance if we want to)
-	global = coproc_init(NULL, NULL, NULL, codiscover_scb);
-	if (global == NULL)
-		err(error, "coproc_init: cocall failed");
+	global_ns = coproc_init(NULL, NULL, NULL, codiscover_scb);
+	if (global_ns == NULL)
+		err(errno, "coproc_init: cocall failed");
 
-	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, create_coservice_handle(codiscover_serv.service), global);
+	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, create_coservice_handle(codiscover_serv.service), global_ns);
 	if (codiscover_serv.nsobj == NULL)
 		err(errno, "coserviced_startup: error coinserting codiscover into global namespace");
-	coprovide_serv.nsobj = coinsert(U_COPROVIDE, COSERVICE, create_coservice_handle(coprovide_serv.service), global);
+	coprovide_serv.nsobj = coinsert(U_COPROVIDE, COSERVICE, create_coservice_handle(coprovide_serv.service), global_ns);
 	if (coprovide_serv.nsobj == NULL)
 		err(errno, "coserviced_startup: error coinserting coprovide into global namespace");
 }

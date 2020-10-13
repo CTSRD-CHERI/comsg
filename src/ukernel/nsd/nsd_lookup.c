@@ -23,15 +23,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include "nsd_lookup.h"
 #include "nsd_cap.h"
+#include "namespace_table.h"
+
 #include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 
 #include <cheri/cheric.h>
+#include <string.h>
+#include <sys/queue.h>
 
 coservice_t *lookup_coservice(char *name, namespace_t *ns_cap)
 {
-	nsobject_t *ns_obj = lookup_nsobject(name, ns_cap, COSERVICE);
+	nsobject_t *ns_obj = lookup_nsobject(name, COSERVICE, ns_cap);
 	if(ns_obj != NULL)
 		return (ns_obj->coservice);
 	else
@@ -40,7 +45,7 @@ coservice_t *lookup_coservice(char *name, namespace_t *ns_cap)
 
 coport_t *lookup_coport(char *name, namespace_t *ns_cap)
 {
-	nsobject_t *ns_obj = lookup_nsobject(name, ns_cap, COPORT);
+	nsobject_t *ns_obj = lookup_nsobject(name, COPORT, ns_cap);
 	if(ns_obj != NULL)
 		return (ns_obj->coport);
 	else
@@ -49,14 +54,14 @@ coport_t *lookup_coport(char *name, namespace_t *ns_cap)
 
 void *lookup_commap(char *name, namespace_t *ns_cap)
 {
-	nsobject_t *ns_obj = lookup_nsobject(name, ns_cap, COMMAP);
+	nsobject_t *ns_obj = lookup_nsobject(name, COMMAP, ns_cap);
 	if(ns_obj != NULL)
 		return (ns_obj->obj);
 	else
 		return (NULL);
 }
 
-nsobject_t *lookup_nsobject(const char *name, nsotype_t nsobject_type, namespace_t *ns_cap)
+nsobject_t *lookup_nsobject(const char *name, nsobject_type_t nsobject_type, namespace_t *ns_cap)
 {
 	nsobject_t *result;
 	struct _ns_member *member, *member_temp;

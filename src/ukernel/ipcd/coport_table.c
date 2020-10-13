@@ -28,16 +28,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include "coport_table.h"
 #include <coproc/coport.h>
 
+#include <assert.h>
+#include <cheri/cheric.h>
 #include <stdatomic.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/queue.h>
 
 typedef struct {
 	coport_t port;
-	size_t ref_count;
+	_Atomic size_t ref_count;
 } coport_tbl_entry_t;
 
 static struct _coport_table {
@@ -47,7 +51,9 @@ static struct _coport_table {
 	coport_tbl_entry_t *coports;
 } cocarrier_table, copipe_table, cochannel_table;
 
-static size_t max_coports = 256;
+
+/* TODO-PBB: convert to sysctl or similar configurable value */
+static const size_t max_coports = 256;
 static size_t coport_table_len = max_coports * sizeof(coport_tbl_entry_t);
 static int coport_table_prot = (PROT_READ | PROT_WRITE);
 static int coport_table_flags = (MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_CHERI);
@@ -58,19 +64,19 @@ void setup_table(void)
 	size_t top_of_table;
 
 	cocarrier_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	top_of_table = (cheri_getlen(cocarrier_table.coports) / sizeof(struct coport_t)) - 1;
+	top_of_table = (cheri_getlen(cocarrier_table.coports) / sizeof(coport_t)) - 1;
 	cocarrier_table.next_coport = top_of_table;
 	cocarrier_table.first_coport = top_of_table;
 	cocarrier_table.ncoports = 0;
 
 	copipe_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	top_of_table = (cheri_getlen(copipe_table.coports) / sizeof(struct coport_t)) - 1;
+	top_of_table = (cheri_getlen(copipe_table.coports) / sizeof(coport_t)) - 1;
 	copipe_table.next_coport = top_of_table;
 	copipe_table.first_coport = top_of_table;
 	copipe_table.ncoports = 0;
 
 	cochannel_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	top_of_table = (cheri_getlen(cochannel_table.coports) / sizeof(struct coport_t)) - 1;
+	top_of_table = (cheri_getlen(cochannel_table.coports) / sizeof(coport_t)) - 1;
 	cochannel_table.next_coport = top_of_table;
 	cochannel_table.first_coport = top_of_table;
 	cochannel_table.ncoports = 0;
@@ -91,22 +97,27 @@ struct _coport_table *get_coport_table(coport_type_t type)
 		case COCHANNEL:
 			table = &cochannel_table;
 			break;
+		default:
+			table = NULL;
+			break;
 	}
 	return (table);
 }
 
 coport_t *allocate_coport(coport_type_t type)
 {
+	coport_tbl_entry_t *entry;
 	coport_t *ptr;
 
 	struct _coport_table *coport_table = get_coport_table(type);
 	size_t index = atomic_fetch_sub(&coport_table->next_coport, 1);
 
-	ptr = &coport_table->coports[index];
-	ptr = cheri_setbounds_exact(ptr, sizeof(coport_t));
+	entry = &coport_table->coports[index];
+	ptr = cheri_setboundsexact(&entry->port, sizeof(coport_t));
 	memset(ptr, 0, sizeof(coport_t));
 
 	atomic_fetch_add(&coport_table->ncoports, 1);
+	atomic_store_explicit(&entry->ref_count, 1, memory_order_release);
 	return (ptr);
 }
 
@@ -132,14 +143,14 @@ int can_allocate_coport(coport_type_t type)
  * listening for events.
  */
 coport_t **
-get_cocarriers(size_t mod, size_t r)
+get_cocarrier_events(size_t mod, size_t r)
 {
 	coport_t **cocarriers, *cocarrier;
 	size_t idx, end, start, expected_max_len, i;
 	coport_status_t status;
 	
 	idx = 0;
-	end = atomic_load(cocarrier_table.next_coport)
+	end = atomic_load(&cocarrier_table.next_coport);
 	start = cocarrier_table.first_coport;
 	expected_max_len = ((start - end) / mod) + 1;
 
@@ -164,3 +175,4 @@ get_cocarriers(size_t mod, size_t r)
 		return (NULL);
 	}
 }
+

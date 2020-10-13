@@ -54,8 +54,8 @@ init_copoll_lock(void)
 
 	pthread_mutexattr_settype(&global_mtx_attr, PTHREAD_MUTEX_ERRORCHECK);
 
-	pthread_mutex_init(&global_copoll_lock, global_mtx_attr);
-	pthread_cond_init(&global_cosend_cond, global_cond_attr);
+	pthread_mutex_init(&global_copoll_lock, &global_mtx_attr);
+	pthread_cond_init(&global_cosend_cond, &global_cond_attr);
 }
 
 /*

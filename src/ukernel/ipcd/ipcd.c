@@ -31,9 +31,12 @@
 #include "ipcd.h"
 #include "ipcd_startup.h"
 
+#include <ccmalloc.h>
 #include <cocall/cocalls.h>
+#include <comsg/ukern_calls.h>
 #include <coproc/coport.h>
 
+#include <assert.h>
 #include <err.h>
 #include <sys/errno.h>
 #include <pthread.h>
@@ -41,6 +44,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+
+coservice_provision_t coopen_serv, coclose_serv, copoll_serv, cosend_serv, corecv_serv;
 
 static 
 void usage(void)
@@ -54,12 +59,13 @@ void usage(void)
 static size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(coport_typedep_t), COCARRIER_MAX_MSG_LEN};
 static size_t nbuckets = 5;
 
-int main(int argc, char const *argv[])
+
+int main(int argc, char *const argv[])
 {
 	int opt, error;
 	void *init_cap;
 	
-	while((opt == getopt(argc, argv, "")) != -1) {
+	while((opt = getopt(argc, argv, "")) != -1) {
 		switch (opt) {
 		case '?':
 		default: 
@@ -71,7 +77,7 @@ int main(int argc, char const *argv[])
 		error = colookup(argv[argc], &init_cap);
 		if(error)
 			err(error, "main: colookup of init %s failed", argv[argc]);
-		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
+		set_ukern_target(COCALL_COPROC_INIT, init_cap);
 	} else {
 		printf("Missing lookup string for init\n");
 		usage();

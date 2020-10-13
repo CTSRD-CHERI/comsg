@@ -23,9 +23,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coservice_table.h"
+
 
 #include <coproc/coservice.h>
 
+#include <cheri/cheric.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -34,7 +37,7 @@
 #include <sys/param.h>
 #include <unistd.h>
 
-static const int coservice_table_prot = ( PROT_READ | PROT_WRTE );
+static const int coservice_table_prot = ( PROT_READ | PROT_WRITE );
 static const int coservice_table_flags = ( MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_CHERI );
 static const int coservice_table_len = 1024 * 1024;
 
@@ -50,7 +53,7 @@ __attribute__ ((constructor)) static
 void setup_table(void)
 {
 	coservice_table.services = mmap(NULL, coservice_table_len, coservice_table_prot, coservice_table_flags, -1, 0);
-	max_services = cheri_getlen(coservice_table.services) / sizeof(struct coservice_t);
+	max_services = cheri_getlen(coservice_table.services) / sizeof(coservice_t);
 	coservice_table.next_service = max_services - 1;
 	coservice_table.active_services = 0UL;
 }

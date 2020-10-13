@@ -80,12 +80,14 @@ typedef enum {RECV=1, SEND=2, CREAT=4, EXCL=8, ONEWAY=16} coport_flags_t; //curr
 #define COCARRIER_MAX_MSG_LEN (1024 * 1024)
 #define COPORT_BUF_LEN (4096)
 
+#define COCARRIER_SIZE (COPORT_BUF_LEN / CHERICAP_SIZE)
+
 #if 1
 
 typedef struct __no_subobject_bounds _coport_listener 
 {
     LIST_ENTRY(_coport_listener) entries;
-    pthread_cond_t wakeup;
+    pthread_cond_t *wakeup;
     coport_eventmask_t events; 
     coport_eventmask_t revent;
 } coport_listener_t;
@@ -108,10 +110,10 @@ typedef struct {
     void *buf;
 } coport_buf_t;
 
-struct _coport
+struct _coport //Pointer to whole struct has Load + Load caps, but no store
 {
     coport_info_t *info; //Read and Write data only
-    coport_type_t type; //Pointer to whole struct R/O + Load caps
+    coport_type_t type; 
     coport_buf_t *buffer;  //Permissions vary on type
     coport_typedep_t *cd; //Read and Write + R/W Caps
 };

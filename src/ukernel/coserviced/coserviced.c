@@ -23,20 +23,28 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coserviced.h"
+
+#include "coserviced_setup.h"
 #include "coservice_table.h"
 
 #include <cocall/cocall_args.h>
 #include <coproc/coservice.h>
 #include <cocall/worker.h>
 #include <cocall/worker_map.h>
+#include <comsg/ukern_calls.h>
 
+#include <err.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/errno.h>
+#include <unistd.h>
+
+coservice_provision_t codiscover_serv, coprovide_serv;
 
 static const int nworkers = 16;
-static coservice_t *codiscover, *coprovide;
-static nsobject_t *codiscover_obj, *coprovide_obj;
-static namespace_t *global_ns;
 
 static 
 void usage(void)
@@ -44,16 +52,16 @@ void usage(void)
 	//todo
 	//should be called with lookup string
 	//e.g "coserviced lookup_string"
-	return;
+	exit(0);
 }
 
 
-int main(int argc, char const *argv[])
+int main(int argc, char *const argv[])
 {
 	int opt, error;
 	void *init_cap;
 	
-	while((opt == getopt(argc, argv, "")) != -1) {
+	while((opt = getopt(argc, argv, "")) != -1) {
 		switch (opt) {
 		case '?':
 		default: 
@@ -64,8 +72,8 @@ int main(int argc, char const *argv[])
 	if(argc >= 2) {
 		error = colookup(argv[argc], &init_cap);
 		if(error)
-			err(error, "main: colookup of init %s failed", optarg);
-		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT, init_cap);
+			err(errno, "main: colookup of init %s failed", optarg);
+		set_ukern_target(COCALL_COPROC_INIT, init_cap);
 	}
 	else {
 		printf("Missing lookup string for init\n");

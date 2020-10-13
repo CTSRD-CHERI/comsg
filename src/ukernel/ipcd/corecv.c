@@ -28,6 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "corecv.h"
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
@@ -35,6 +36,7 @@
 #include <coproc/coport.h>
 #include <coproc/utils.h>
 
+#include <sys/errno.h>
 #include <stdatomic.h>
 #include <stddef.h>
 
@@ -48,7 +50,7 @@ validate_corecv_args(corecv_args_t *cocall_args)
 }
 
 void 
-cocarrier_recv(corecv_args_t *cocall_args, void *token) 
+coport_recv(corecv_args_t *cocall_args, void *token) 
 {
 	UNUSED(token);
 	coport_t *cocarrier;
@@ -78,7 +80,7 @@ cocarrier_recv(corecv_args_t *cocall_args, void *token)
 
 	if(port_len == 0 || ((event & COPOLL_IN) == 0)) {
 		cocarrier->info->event = (event | COPOLL_RERR);
-		atomic_store_explicit(&cocarrier->status, COPORT_OPEN, memory_order_release);
+		atomic_store_explicit(&cocarrier->info->status, COPORT_OPEN, memory_order_release);
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
 

@@ -368,13 +368,14 @@ void *get_mem(size_t len)
 	return (cap);
 }
 
-static
-void *cocall_alloc_noresize(size_t len)
+static void *
+cocall_alloc_noresize(size_t len)
 {
 	return (get_mem(len));
 }
 
-void *cocall_flexible_malloc(size_t len)
+void *
+cocall_flexible_malloc(size_t len)
 {
 	struct bucket *bucket;
 	struct _bucket_entry *entry, *new_next;

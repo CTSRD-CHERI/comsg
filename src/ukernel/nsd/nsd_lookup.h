@@ -33,8 +33,7 @@
 
 coservice_t *lookup_coservice(char * name, namespace_t *ns_cap);
 coport_t *lookup_coport(char * name, namespace_t *ns_cap);
-void *lookup_coservice(char * name, namespace_t *ns_cap);
-nsobject_t *lookup_nsobject(const char * name, nsotype_t nsobject_type, namespace_t *ns_cap);
+nsobject_t *lookup_nsobject(const char * name, nsobject_type_t nsobject_type, namespace_t *ns_cap);
 int in_namespace(const char * name, namespace_t *ns_cap);
 int is_child_namespace(const char *name, namespace_t *ns_cap);
 #endif //!defined(_NSD_LOOKUP_H)

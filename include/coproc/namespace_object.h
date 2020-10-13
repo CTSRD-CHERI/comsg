@@ -56,9 +56,9 @@
 #define NSOBJ_PERM_W ( CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_STORE_LOCAL_CAP )
 #define NSOBJ_PERM_D ( CHERI_PERM_SW3 )
 
-#define NSOBJ_PERMITS_WRITE(c) ( cheri_getperm(c) & NS_PERM_W ) 
-#define NSOBJ_PERMITS_READ(c) ( cheri_getperm(c) & NS_PERM_R )
-#define NSOBJ_PERMITS_DELETE(c) ( cheri_getperm(c) & NS_PERM_D )
+#define NSOBJ_PERMITS_WRITE(c) ( cheri_getperm(c) & NSOBJ_PERM_W ) 
+#define NSOBJ_PERMITS_READ(c) ( cheri_getperm(c) & NSOBJ_PERM_R )
+#define NSOBJ_PERMITS_DELETE(c) ( cheri_getperm(c) & NSOBJ_PERM_D )
 
 #define NSOBJ_PERMS_OWN_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
 	CHERI_PERM_LOAD_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 | CHERI_PERM_SW2 | \

@@ -73,7 +73,6 @@
 
 #define n_ukern_calls 13
 
-extern pthread_key_t ukern_call_set;
 extern namespace_t *global_ns;
 
 namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb);
@@ -88,6 +87,7 @@ int copoll(pollcoport_t *coports, int ncoports, int timeout);
 int coclose(coport_t *coport);
 
 void discover_ukern_func(nsobject_t *service_obj, int function);
+void set_ukern_target(int function, void *target);
 void set_ukern_func(nsobject_t *service_obj, int function);
 
 #endif //!defined(_UKERN_CALLS_H)

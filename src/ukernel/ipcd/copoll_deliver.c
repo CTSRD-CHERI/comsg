@@ -28,6 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "copoll_deliver.h"
 #include "copoll_utils.h"
 #include "coport_table.h"
 
@@ -36,6 +37,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 void *
@@ -68,11 +70,11 @@ copoll_deliver(void *raw_args)
 			}
 			LIST_FOREACH(listener, &cocarrier->cd->listeners, entries) {
 				revents = (event & listener->events);
-				listener->revents = revents;
+				listener->revent = revents;
 				if(revents == NOEVENT) 
 					continue;
 				//TODO-PBB: replace with copoll_utils variant (?)
-				pthread_cond_signal(&listener->wakeup);
+				pthread_cond_signal(listener->wakeup);
 			}
 			cocarrier = cocarrier_array[++idx];
 		}

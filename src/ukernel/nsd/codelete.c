@@ -23,17 +23,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "namespace_table.h"
 #include "nsd.h"
+#include "namespace_table.h"
 #include "nsd_cap.h"
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
 #include <cocall/cocall_args.h>
+#include <coproc/namespace_object.h>
 #include <coproc/utils.h>
 
 #include <assert.h>
 #include <string.h>
+#include <sys/errno.h>
 
 int validate_codelete_args(codelete_args_t *cocall_args)
 {
@@ -47,13 +49,13 @@ int validate_codelete_args(codelete_args_t *cocall_args)
 		return (1);
 }
 
-void delete_namespace_object(codelete_args_t *cocall_args, void *token)
+void namespace_object_delete(codelete_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	nsobject_t *nsobj, *parent_obj;
 
 	if (!NSOBJ_PERMITS_DELETE(cocall_args->nsobj)) 
-		COCALL_ERR(EACCES);
+		COCALL_ERR(cocall_args, EACCES);
 	
 	nsobj = unseal_nsobj(cocall_args->nsobj);
 	//Check that the supplied namespace authorises actions on this namespace object
@@ -67,9 +69,9 @@ void delete_namespace_object(codelete_args_t *cocall_args, void *token)
 	if(!delete_nsobject(parent_obj, cocall_args->ns_cap)) {
 		//Someone beat us to it
 		//Or there's a bug
-		assert(lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap) != nsobj) 
+		assert(lookup_nsobject(nsobj->name, nsobj->type, cocall_args->ns_cap) != nsobj);
 		COCALL_ERR(cocall_args, ENOENT);
 	}
 	
-	COCALL_RETURN(cocall_args);
+	COCALL_RETURN(cocall_args, 0);
 }

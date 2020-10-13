@@ -31,6 +31,8 @@
 #ifndef _COSERVICE_CAP_H
 #define _COSERVICE_CAP_H
 
+#include <coproc/coservice.h>
+
 coservice_t *seal_coservice(coservice_t *);
 coservice_t *unseal_coservice(coservice_t *);
 

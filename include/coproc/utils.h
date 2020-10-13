@@ -47,7 +47,7 @@ struct object_type
 int generate_id(void);
 int rand_string(char * buf, size_t len);
 int valid_scb(void * scb);
-void *make_otypes(void * rootcap, int n_otypes, struct object_type **results);
+void *make_otypes(void *rootcap, int n_otypes, struct object_type **results);
 int get_maxprocs(void);
 
 //Handy for working with mmap(2) prot values vs CHERI permissions

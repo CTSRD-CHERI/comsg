@@ -24,10 +24,12 @@
  * SUCH DAMAGE.
  */
 #include "nsd.h"
+#include "nsd_cap.h"
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
 #include <cocall/cocall_args.h>
+#include <coproc/namespace.h>
 #include <coproc/utils.h>
 
 #include <sys/errno.h>
@@ -45,16 +47,16 @@ int validate_cocreate_args(cocreate_args_t *cocall_args)
 		return (1);
 }
 
-void create_namespace(cocreate_args_t *cocall_args, void *token)
+void namespace_create(cocreate_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 
-	if(!NS_PERMITS_WRITE(cocall_args->ns_cap))
+	if(!NS_PERMITS_WRITE(cocall_args->ns_cap)) 
 		COCALL_ERR(cocall_args, EACCES);
-	else if (in_namespace(cocall_args->ns_name, cocall_args->ns_cap)) 
+	else if(in_namespace(cocall_args->ns_name, cocall_args->ns_cap))
 		COCALL_ERR(cocall_args, EEXIST);
 
 	cocall_args->child_ns_cap = create_namespace(cocall_args->ns_name, cocall_args->ns_type, cocall_args->ns_cap);
 	
-	COCALL_RETURN(cocall_args);
+	COCALL_RETURN(cocall_args, 0);
 }

@@ -28,15 +28,17 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "nsd.h"
 #include "nsd_cap.h"
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
 #include <cocall/cocall_args.h>
+#include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
 #include <coproc/utils.h>
 
-
+#include <sys/errno.h>
 
 int validate_coinsert_args(coinsert_args_t *cocall_args)
 {
@@ -47,7 +49,7 @@ int validate_coinsert_args(coinsert_args_t *cocall_args)
 		return (1);
 }
 
-void insert_namespace_object(coinsert_args_t *cocall_args, void *token)
+void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 {
 	nsobject_t *obj;
 	namespace_t *ns;
@@ -93,5 +95,5 @@ void insert_namespace_object(coinsert_args_t *cocall_args, void *token)
 	 */
 	cocall_args->nsobj = seal_nsobj(obj);
 
-	COCALL_RETURN(cocall_args);
+	COCALL_RETURN(cocall_args, 0);
 }

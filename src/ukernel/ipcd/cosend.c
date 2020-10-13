@@ -28,7 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "cosend.h"
 #include "ipcd_cap.h"
+#include "copoll_utils.h"
 
 #include <ccmalloc.h>
 #include <cocall/cocall_args.h>
@@ -39,7 +41,10 @@
 #include <cheri/cherireg.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <string.h>
+#include <sys/errno.h>
 #include <sys/queue.h>
+
 
 
 
@@ -57,7 +62,7 @@ int validate_cosend_args(coopen_args_t *cocall_args)
 		return (1);
 }
 
-void cocarrier_send(coopen_args_t *cocall_args, void *token)
+void coport_send(coopen_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	coport_t *cocarrier;
