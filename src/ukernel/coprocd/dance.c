@@ -69,8 +69,7 @@ int authenticate_dance(cocall_args_t *cocall_args, int selector)
 	int error;
 
 	error = cogetpid(&caller_pid);
-	switch (selector)
-	{
+	switch (selector) {
 		case NSD_SELECTOR:
 			daemon_pid = get_nsd_pid();
 			break;
@@ -99,22 +98,21 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
 		return;
-	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) */
-	atomic_store(&coinsert_scb, cocall_args->coinsert);
-	atomic_store(&coselect_scb, cocall_args->coselect);
-	atomic_store(&global_namespace, cocall_args->ns_cap);
 	/* clear old codiscover; whether valid or not it refers to the old universe */
-	atomic_store(&codiscover_scb, NULL);
+	codiscover_scb =  NULL;
+	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) and lookup nsobj (coselect) */
+	coinsert_scb = cocall_args->coinsert;
+	coselect_scb = cocall_args->coselect;
+	atomic_store_explicit(&global_namespace, cocall_args->ns_cap, memory_order_release);
+	
 	/* Wait until coserviced is (re) ininitalized */
-	while(atomic_load(&codiscover_scb) == NULL) {
+	/* You give me: scb capabilities for codiscover and coprovide */
+	while((cocall_args->codiscover = atomic_load_explicit(&codiscover_scb, memory_order_acquire)) == NULL) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
 		// this implementation may not do what we want (priority inversion?)
 		sched_yield();
 	}
-
-	/* You give me: scb capabilities for codiscover and coprovide */
-	cocall_args->codiscover = atomic_load(&codiscover_scb);
-
+	
 	COCALL_RETURN(cocall_args, 0);
 }
 
@@ -123,18 +121,19 @@ void coserviced_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, COSERVICED_SELECTOR))
 		return;
-	/* 
-	 * You give me: a capability for the global namespace, and a scb capability for create nsobj 
-	 * I give you: scb capabilities for codiscover and coprovide
-	 */
-	if (atomic_load(&global_namespace) == NULL) {
-		/* nsd has not yet started */
-		COCALL_ERR(cocall_args, EAGAIN);
+
+	while((cocall_args->ns_cap = atomic_load_explicit(&global_namespace, memory_order_acquire)) == NULL) {
+		/* TODO-PBB: should consider returning and having two calls here instead */
+		// this implementation may not do what we want (priority inversion?)
+		sched_yield();
 	}
-	cocall_args->ns_cap = atomic_load(&global_namespace);
-	cocall_args->coinsert = atomic_load(&coinsert_scb);
-	cocall_args->coselect = atomic_load(&coselect_scb);
-	atomic_store(&codiscover_scb, cocall_args->codiscover);
+	/* 
+	 * You give me: a capability for the global namespace, and scbs for coinsert and coselect 
+	 * I give you: scb capability for codiscover 
+	 */
+	cocall_args->coinsert = coinsert_scb;
+	cocall_args->coselect = coselect_scb;
+	atomic_store_explicit(&codiscover_scb, cocall_args->codiscover, memory_order_release);
 
 	COCALL_RETURN(cocall_args, 0);
 }
@@ -143,32 +142,34 @@ void ipcd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
 		return;
-	/* 
-	 * You give me: a capability for the global namespace, scb capabilities for codiscover and coprovide
-	 */ 
-	if (atomic_load(&global_namespace) == NULL) {
-		/* nsd has not yet started */
-		COCALL_ERR(cocall_args, EAGAIN);
+
+	while(atomic_load_explicit(&codiscover_scb, memory_order_acquire) == NULL) {
+		/* TODO-PBB: should consider returning and having two calls here instead */
+		// this implementation may not do what we want (priority inversion?)
+		sched_yield();
 	}
-	cocall_args->ns_cap = atomic_load(&global_namespace);
-	cocall_args->codiscover = atomic_load(&codiscover_scb);
-	cocall_args->coinsert = atomic_load(&coinsert_scb);
-	cocall_args->coselect = atomic_load(&coselect_scb);
+	/* 
+	 * You give me: a capability for the global namespace, scb capabilities for codiscover, coinsert and coselect
+	 */ 
+	cocall_args->ns_cap = global_namespace;
+	cocall_args->codiscover = codiscover_scb;
+	cocall_args->coinsert = coinsert_scb;
+	cocall_args->coselect = coselect_scb;
 	
 	COCALL_RETURN(cocall_args, 0);
 }
 
 void coproc_user_init(cocall_args_t *cocall_args, void *token)
 {
-	if (atomic_load(&global_namespace) == NULL) {
+	if (atomic_load_explicit(&codiscover_scb, memory_order_acquire) == NULL) {
 		/* nsd has not yet started */
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
 
-	cocall_args->ns_cap = atomic_load(&global_namespace);
-	cocall_args->codiscover = atomic_load(&codiscover_scb);
-	cocall_args->coinsert = atomic_load(&coinsert_scb);
-	cocall_args->coselect = atomic_load(&coselect_scb);
+	cocall_args->ns_cap = global_namespace;
+	cocall_args->codiscover = codiscover_scb;
+	cocall_args->coinsert = coinsert_scb;
+	cocall_args->coselect = coselect_scb;
 	
 	COCALL_RETURN(cocall_args, 0);
 }

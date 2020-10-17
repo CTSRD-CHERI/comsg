@@ -45,7 +45,7 @@
 
 /* Constants */
 static const int namespace_table_prot = ( PROT_READ | PROT_WRITE );
-static const int namespace_table_flags = ( MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_SUPER );
+static const int namespace_table_flags = ( MAP_ANON | MAP_PRIVATE | MAP_STACK | MAP_ALIGNED_SUPER );
 
 /* TODO-PBB: needs refining. we shouldn't be quite so scared of using more memory than this */
 #define ALLOC_UNIT ( 1024 * 1024 ) 

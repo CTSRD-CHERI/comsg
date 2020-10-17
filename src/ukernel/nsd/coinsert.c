@@ -33,6 +33,7 @@
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
+#include <cheri/cheric.h>
 #include <cocall/cocall_args.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
@@ -45,14 +46,22 @@ int validate_coinsert_args(coinsert_args_t *cocall_args)
 	namespace_t *ns = unseal_ns(cocall_args->ns_cap);
 	if (!valid_namespace_cap(cocall_args->ns_cap))
 		return (0);
-	else
-		return (1);
+	if (cocall_args->obj != NULL) {
+		if (cheri_getsealed(cocall_args->obj))
+			return (0);
+		else if (!cheri_local(cocall_args->obj))
+			return (0);
+	}
+	else if (cocall_args->nsobj_type != RESERVATION)
+		return (0);
+	return (1);
 }
 
 void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 {
 	nsobject_t *obj;
 	namespace_t *ns;
+	nsobject_type_t type;
 
 	ns = unseal_ns(cocall_args->ns_cap);
 	if (!NS_PERMITS_WRITE(cocall_args->ns_cap)) 
@@ -60,9 +69,10 @@ void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 	else if(in_namespace(cocall_args->nsobj_name, ns)) 
 		COCALL_ERR(cocall_args, EEXIST);
 
+	type = cocall_args->nsobj_type;
 	/* create object */
-	obj = create_nsobject(cocall_args->nsobj_name, cocall_args->nsobj_type, ns);
-	switch(cocall_args->nsobj_type) {
+	obj = create_nsobject(cocall_args->nsobj_name, type, ns);
+	switch(type) {
 	case COMMAP:
 		obj->obj = cocall_args->obj;
 		obj = CLEAR_NSOBJ_STORE_PERM(obj);
@@ -77,6 +87,7 @@ void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 		break;
 	case RESERVATION:
 		obj->obj = NULL;
+		obj = seal_nsobj(obj);
 		break;
 	default:
 		break;
@@ -93,7 +104,7 @@ void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 	 * It also requires the cocall_args to be allocated with PERMIT_STORE_LOCAL_CAPABILITY
 	 * which should be fine so long as we make it a local variable everywhere.
 	 */
-	cocall_args->nsobj = seal_nsobj(obj);
-
+	cocall_args->nsobj = obj;
+	
 	COCALL_RETURN(cocall_args, 0);
 }

@@ -32,6 +32,7 @@
 
 #include <err.h>
 #include <sys/errno.h>
+#include <stdio.h>
 #include <cheri/cheric.h>
 #include <machine/sysarch.h>
 #include <unistd.h>
@@ -170,7 +171,10 @@ get_nsobject_type(nsobject_t *nsobj)
 static nstype_t 
 get_ns_type(namespace_t *ns)
 {
-	long otype = cheri_gettype(ns);
+	long otype;
+	if (!cheri_getsealed(ns))
+		return (ns->type);
+	otype = cheri_gettype(ns);
 	return (ns_otype_to_type(otype));
 }
 
@@ -222,16 +226,26 @@ int
 valid_namespace_cap(namespace_t *ns_cap)
 {
 	vaddr_t cap_addr = cheri_getaddress(ns_cap);
-	if (!cheri_gettag(ns_cap))
+	if (!cheri_gettag(ns_cap)) {
+		printf("untagged ns cap\n");
 		return (0);
-	else if (sizeof(namespace_t) <= cheri_getlen(ns_cap))
+	}
+	else if (sizeof(namespace_t) > cheri_getlen(ns_cap)) {
+		printf("ns cap too small\n");
 		return (0);
-	else if (!cheri_is_address_inbounds(ns_cap, cap_addr))
+	}
+	else if (!cheri_is_address_inbounds(ns_cap, cap_addr)) {
+		printf("cap address out of bounds\n");
 		return (0);
-	else if (!in_ns_table(ns_cap))
+	}
+	else if (!in_ns_table(ns_cap)) {
+		printf("ns cap not in ns table\n");
 		return (0);
-	else if (get_ns_type(ns_cap) == INVALID_NS)
+	}
+	else if (get_ns_type(ns_cap) == INVALID_NS) {
+		printf("cap has invalid type\n");
 		return (0);
+	}
 	else
 		return (1);
 }

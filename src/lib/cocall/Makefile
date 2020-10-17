@@ -5,7 +5,7 @@ SRCS :=	cocalls.c		\
 	worker.c		\
 	worker_map.c
 
-DEP_LIBS := pthread
+DEP_LIBS := pthread coproc
 
 SHLIB_MAJOR=	1
 

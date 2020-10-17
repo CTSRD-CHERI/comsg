@@ -37,6 +37,7 @@
 #include <coproc/utils.h>
 
 #include <err.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,13 +50,13 @@
 
 //TODO-PBB: get path better than this
 static const char *coserviced_path = "/usr/bin/coserviced";
-static const char *ipcd_path = "/usr/bin/coserviced";
+static const char *ipcd_path = "/usr/bin/ipcd";
 static const char *nsd_path = "/usr/bin/nsd";
 
 static _Atomic pid_t coserviced = 0;
 static _Atomic pid_t ipcd = 0;
 static _Atomic pid_t nsd = 0;
-static _Atomic pid_t coprocd = 0;
+static pid_t coprocd = 0;
 
 extern char **environ;
 
@@ -68,25 +69,46 @@ struct respawn_args {
 static 
 void coexec_daemon(const char *path, const char *init_str)
 {
+	int error;
 	char *coexecve_args[3];
 	coexecve_args[0] = strdup(path);
 	coexecve_args[1] = strdup(init_str);
 	coexecve_args[2] = NULL;
-	coexecve(atomic_load(&coprocd), coexecve_args[0], coexecve_args, environ);
-	err(errno, "coexec_daemon: coexecve failed");
+	error = coexecve(coprocd, coexecve_args[0], coexecve_args, environ);
+	if (error != 0)
+		err(errno, "coexec_daemon: coexecve failed");
 }
 
 static 
 void monitor_child(pid_t child_pid)
 {
-	pid_t daemon_pid = child_pid;
 	int status, opt;
+	status = 0;
 	opt = WEXITED; //implicit
-	daemon_pid = waitpid(child_pid, &status, opt);
-	/* if (daemon_pid == -1) {
-		//handle error
-	} */
+
+	do {
+		child_pid = waitpid(child_pid, &status, opt);
+		if (child_pid == -1 ) {
+			if (errno == ECHILD)
+				return;
+			err(errno, "monitor_child: monitoring child process failed");
+		} 
+	} while(status != WEXITED);
+
 	return;
+}
+
+static void 
+coredump_daemons(void)
+{
+	invalidate_startup_info();
+	if (coserviced != 0)
+		kill(coserviced, SIGSEGV);
+	if (ipcd != 0)
+		kill(ipcd, SIGSEGV);
+	if (nsd != 0)
+		kill(nsd, SIGSEGV);
+	kill(coprocd, SIGSEGV);
 }
 
 static void *
@@ -103,8 +125,10 @@ respawn_daemon(void *argp)
 
 	monitor_child(atomic_load(pidp));
 	for(;;) {
+		#if 0
 		if (atomic_load(pidp) == atomic_load(&nsd))
 			kill_daemons();
+		
 		child_pid = fork();
 		if(!child_pid)
 			coexec_daemon(exec_path, init_str);
@@ -112,6 +136,10 @@ respawn_daemon(void *argp)
 			atomic_store(pidp, child_pid);
 			monitor_child(child_pid);
 		}
+		#else 
+		coredump_daemons();
+		exit(0);
+		#endif
 	}
 	return (NULL);
 }
@@ -119,18 +147,19 @@ respawn_daemon(void *argp)
 static 
 pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 {
-	char init_name[NS_NAME_LEN];
+	char * init_name;
 	worker_args_t wargs;
 	function_map_t *init_func_map;
 	pthread_t monitor_thread;
 	struct respawn_args *monitor_args;
 	pid_t child_pid;
 
+	init_name = malloc(NS_NAME_LEN);
 	monitor_args = calloc(1, sizeof(struct respawn_args));
 	rand_string(init_name, NS_NAME_LEN);
 	//TODO-PBB: Revisit lack of validation if needed
 	//Pid is not supplied as a thread argument because it can change.
-	init_func_map = spawn_worker(init_name, init_func, NULL);
+	init_func_map = spawn_slow_worker(init_name, init_func, NULL);
 
 	child_pid = fork();
 	if(!child_pid)
@@ -139,7 +168,7 @@ pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 		atomic_store(pidp, child_pid);
 		monitor_args->child_pid = pidp;
 		monitor_args->exec_path = exec_path;
-		monitor_args->init_str = init_func;
+		monitor_args->init_str = init_name;
 		pthread_create(&monitor_thread, NULL, respawn_daemon, monitor_args);
 	}
 	
@@ -157,9 +186,11 @@ void kill_daemons(void)
 		kill(nsd, SIGTERM);
 }
 
+
+
 void spawn_daemons(void)
 {
-	atomic_store(&coprocd, getpid());
+	coprocd = getpid();
 	spawn_daemon(&nsd, nsd_path, nsd_init);
 	spawn_daemon(&coserviced, coserviced_path, coserviced_init);
 	spawn_daemon(&ipcd, ipcd_path, ipcd_init);

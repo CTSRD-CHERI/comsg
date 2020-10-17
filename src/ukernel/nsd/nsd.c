@@ -60,6 +60,7 @@
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/types.h>
@@ -82,6 +83,7 @@ size_t buckets[] = {sizeof(struct _ns_members), sizeof(struct _ns_member)};
 int main(int argc, char *const argv[])
 {
 	int opt, error;
+	char *lookup_string;
 	void *init_cap;
 	
 	while((opt = getopt(argc, argv, "")) != -1) {
@@ -93,18 +95,19 @@ int main(int argc, char *const argv[])
 		}
 	}
 	if(argc >= 2) {
-		error = colookup(argv[argc], &init_cap);
+		lookup_string = strdup(argv[argc - 1]);
+		error = colookup(lookup_string, &init_cap);
 		if(error)
-			err(error, "main: colookup of init %s failed", optarg);
+			err(errno, "main: colookup of init %s failed", lookup_string);
 		set_ukern_target(COCALL_COPROC_INIT, init_cap);
 	} else {
 		printf("Missing lookup string for init\n");
 		usage();
 	}
-
+	ccmalloc_init(buckets, nbuckets);
 	//we can dance if we want to
 	global_ns = create_namespace("coproc", GLOBAL, NULL);
-	ccmalloc_init(buckets, nbuckets);
+	
 	
 	init_services();
 

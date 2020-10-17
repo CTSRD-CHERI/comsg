@@ -33,6 +33,8 @@
 namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *parent);
 nsobject_t *create_nsobject(const char *name, nsobject_type_t type, namespace_t *parent);
 
+int update_nsobject(nsobject_t *nsobj, void *handle, nsobject_type_t new_type);
+
 int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap);
 int delete_namespace(namespace_t *ns_cap);
 

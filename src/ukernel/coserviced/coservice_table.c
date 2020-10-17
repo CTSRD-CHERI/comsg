@@ -74,13 +74,14 @@ coservice_t *allocate_coservice(void)
 
 void *get_coservice_scb(coservice_t *service)
 {
-	int new_index;
-	int index = atomic_load(&service->next_worker);
-	for(;;)
-	{
-		new_index = (index + 1) % service->nworkers;
-		atomic_compare_exchange_weak(&service->next_worker, &index, new_index);
-	}
+	int new_index, index, nworkers;
+
+	nworkers = service->nworkers;
+	index = atomic_load_explicit(&service->next_worker, memory_order_acquire);
+	do {
+		new_index = (index + 1) % nworkers;
+	} while(atomic_compare_exchange_strong_explicit(&service->next_worker, &index, new_index, memory_order_acq_rel, memory_order_acquire) == 0);
+	
 	return (service->worker_scbs[new_index]);
 }
 

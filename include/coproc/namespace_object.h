@@ -74,9 +74,9 @@ typedef struct _nsobject
 	nsobject_type_t	type;
 	union
 	{
-		void 		*obj;
-		coservice_t	*coservice;
-		coport_t	*coport;
+		_Atomic(void *)			obj;
+		_Atomic(coservice_t	*)	coservice;
+		_Atomic(coport_t	*)	coport;
 	};
 } nsobject_t;
 

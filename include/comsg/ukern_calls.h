@@ -69,7 +69,7 @@
 #define U_COINSERT "coinsert"
 #define U_COSELECT "coselect"
 #define U_COUPDATE "coupdate" 
-#define U_CODELETE "coupdate"
+#define U_CODELETE "codelete"
 
 #define n_ukern_calls 13
 

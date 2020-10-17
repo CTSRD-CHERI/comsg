@@ -31,10 +31,15 @@
 #include <sys/sysctl.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+static const char alphanum[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
 
 int
 generate_id(void)
@@ -47,24 +52,22 @@ generate_id(void)
 int
 rand_string(char *buf, size_t len)
 {
-    char c;
+    size_t i;
     int rand_no;
+    char c;
+    
     //last character should contain a NULL
     len = MIN(len + 1, cheri_getlen(buf) - 1);
     srandomdev();
-    for (size_t i = 0; i < len; i++)
+    for (i = 0; i < len; i++)
     {
-        rand_no=random() % KEYSPACE;
-        if (rand_no<10)
-            c = (char)rand_no + '0';
-        else if (rand_no<36)
-            c = (char)(rand_no % 26) + 'A';
-        else 
-            c = (char)(rand_no % 26) + 'a';
+        rand_no = random() % KEYSPACE;
+        c = alphanum[rand_no];
         buf[i] = c;
     }
     buf[len] = '\0';
-    return len;
+    
+    return (len);
 }
 
 int
@@ -107,7 +110,7 @@ make_otypes(void *rootcap, int n_otypes, struct object_type **results)
     void *seal_root;
     int i;
 
-    assert(cheri_getlen(rootcap) <= n_otypes);
+    assert(cheri_getlen(rootcap) >= n_otypes);
     assert(cheri_getperm(rootcap) & ( CHERI_PERM_SEAL | CHERI_PERM_UNSEAL ));
 
     seal_root = cheri_setboundsexact(rootcap, n_otypes);

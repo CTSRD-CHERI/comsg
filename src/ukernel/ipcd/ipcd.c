@@ -74,9 +74,9 @@ int main(int argc, char *const argv[])
 		}
 	}
 	if(argc >= 2) {
-		error = colookup(argv[argc], &init_cap);
+		error = colookup(argv[argc-1], &init_cap);
 		if(error)
-			err(error, "main: colookup of init %s failed", argv[argc]);
+			err(error, "main: colookup of init %s failed", argv[argc-1]);
 		set_ukern_target(COCALL_COPROC_INIT, init_cap);
 	} else {
 		printf("Missing lookup string for init\n");

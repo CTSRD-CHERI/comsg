@@ -42,14 +42,12 @@
 #include <cocall/worker_map.h>
 #include <cocall/cocall_args.h>
 #include <coproc/namespace.h>
+#include <coproc/namespace_object.h>
 #include <comsg/ukern_calls.h>
 
 #include <assert.h>
 #include <err.h>
 #include <sys/errno.h>
-
-
-static namespace_t *global;
 
 static 
 void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
@@ -58,16 +56,31 @@ void init_service(coservice_provision_t *serv, void *func, void *valid, const ch
 
 	serv->function_map = service_map;
 	serv->service = coprovide(get_worker_scbs(service_map), IPCD_NWORKERS);
-	serv->nsobj = coinsert(name, COSERVICE, serv->service, global);
+	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
 	if (serv->nsobj == NULL)
 		err(errno, "init_service: error inserting %s into global namespace", name);
 }
 
 void ipcd_startup(void)
 {
-	global = coproc_init(NULL, NULL, NULL, NULL);
-	if (global == NULL)
-		err(errno, "coproc_init: cocall failed");
+	nsobject_t *coprovide_nsobj;
+	void *coprovide_scb;
+	global_ns = coproc_init(NULL, NULL, NULL, NULL);
+	if (global_ns == NULL)
+		err(errno, "ipcd_startup: cocall failed");
+
+	do {
+		coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, global_ns);
+		if(coprovide_nsobj == NULL)
+			continue;
+		else if (cheri_getsealed(coprovide_nsobj))
+			continue;
+		else if (coprovide_nsobj->obj == NULL)
+			continue;
+	} while (0);
+	
+	codiscover(coprovide_nsobj, &coprovide_scb);
+	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
 	//init own services
 	init_service(&coopen_serv, coport_open, validate_coopen_args, U_COOPEN);
 	init_service(&coclose_serv, coport_close, validate_coclose_args, U_COCLOSE);
