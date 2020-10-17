@@ -55,6 +55,8 @@ int validate_coprovide_args(coprovide_args_t *cocall_args)
 	 */
 	if(cocall_args->nworkers <= 0)
 		return (0);
+	else if (cocall_args->nworkers > COSERVICE_MAX_WORKERS)
+		return (0);
 	else if(cheri_getlen(cocall_args->worker_scbs) < (CHERICAP_SIZE * cocall_args->nworkers))
 		return (0);
 	else {
@@ -74,7 +76,7 @@ void provide_coservice(coprovide_args_t *cocall_args, void *token)
 
 	coservice_ptr->next_worker = 0;
 	coservice_ptr->nworkers = cocall_args->nworkers;
-	coservice_ptr->worker_scbs = cocall_calloc(cocall_args->nworkers, CHERICAP_SIZE);
+	coservice_ptr->worker_scbs = cocall_flexible_malloc(service_len);
 	memcpy(coservice_ptr->worker_scbs, cocall_args->worker_scbs, service_len);
 
 	cocall_args->service = create_coservice_handle(coservice_ptr);

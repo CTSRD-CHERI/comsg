@@ -27,6 +27,8 @@
 
 #include "nsd_cap.h"
 #include "nsd_lookup.h"
+
+#include <cheri/cherireg.h>
 #include <cocall/cocall_args.h>
 #include <coproc/namespace_object.h>
 
@@ -37,6 +39,12 @@ int validate_coselect_args(coselect_args_t* cocall_args)
 	/*
 	 *
 	 */
+	if (!valid_namespace_cap(cocall_args->ns_cap))
+		return (0);
+	else if (!valid_nsobj_name(cocall_args->nsobj_name))
+		return (0);
+	else if (!VALID_NSOBJ_TYPE(cocall_args->nsobj_type))
+		return (0);
 	return (1);
 }
 
@@ -47,9 +55,15 @@ void namespace_object_select(coselect_args_t *cocall_args, void *token)
 	obj = lookup_nsobject(cocall_args->nsobj_name, cocall_args->nsobj_type, cocall_args->ns_cap);
 	if(obj == NULL) 
 		COCALL_ERR(cocall_args, ENOENT);
+	else if (obj->obj == NULL && obj->type != RESERVATION)
+		COCALL_ERR(cocall_args, ENOENT); /* Is currently being inserted/updated */
 
-	obj = CLEAR_NSOBJ_STORE_PERM(obj);
-	cocall_args->nsobj = seal_nsobj(obj);
+	if (obj->type == RESERVATION)
+		obj = seal_nsobj(obj);
+	else 
+		obj = CLEAR_NSOBJ_STORE_PERM(obj);
+	
+	cocall_args->nsobj = obj;
 	
 	COCALL_RETURN(cocall_args, 0);
 }

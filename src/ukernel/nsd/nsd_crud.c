@@ -151,6 +151,23 @@ nsobject_t *create_nsobject(const char *name, nsobject_type_t type, namespace_t 
 	return (obj_ptr);
 }
 
+int 
+update_nsobject(nsobject_t *nsobj, void *handle, nsobject_type_t new_type)
+{
+	void *expected;
+	nsobj = unseal_nsobj(nsobj);
+	if (nsobj->type != RESERVATION)
+		return (-1);
+	expected = NULL;
+	if (atomic_compare_exchange_strong_explicit(&nsobj->obj, &expected, handle, memory_order_acq_rel, memory_order_acquire)) {
+		nsobj->type = new_type;
+		return (0);
+	}
+	else 
+		return (-1);
+
+}
+
 int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 {
 	nsobject_t *result;
@@ -194,5 +211,6 @@ int delete_namespace(namespace_t *ns_cap)
 			return (1);
 		}
 	}
+	return (0);
 
 }

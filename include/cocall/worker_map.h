@@ -50,6 +50,8 @@ typedef struct coservice_prov {
 
 #endif 
 
+function_map_t *spawn_slow_worker(const char *worker_name, void *func, void *valid);
+void spawn_slow_worker_thread(worker_args_t *worker, function_map_t *func_map);
 function_map_t *new_function_map(void);
 function_map_t *spawn_worker(const char *worker_name, void *func, void *valid);
 function_map_t *spawn_workers(void *func, void *arg_func, int nworkers);

@@ -32,14 +32,11 @@
 #define _UKERN_WORKER_H
 
 #include <cocall/cocall_args.h>
+#include <coproc/namespace.h>
 
 #include <cheri/cherireg.h>
 #include <pthread.h>
 #include <stdatomic.h>
-
-#define LOOKUP_STRING_LEN 16
-
-
 
 typedef struct _worker_args
 {
@@ -60,13 +57,16 @@ typedef struct _worker_args
 	 */
 	int (*validation_function)(cocall_args_t *);
 	/* name to coregister under */
-	char name[LOOKUP_STRING_LEN];
+	char name[NS_NAME_LEN];
 	/* result of coregister */
 	void *scb_cap;
 } worker_args_t;
 
 typedef struct _worker_args handler_args_t;
 
+void start_coaccept_worker(worker_args_t *thread_args);
 void *coaccept_worker(void *worker_argp);
+void start_sloaccept_worker(worker_args_t *thread_args);
+void *sloaccept_worker(void *worker_argp);
 
 #endif

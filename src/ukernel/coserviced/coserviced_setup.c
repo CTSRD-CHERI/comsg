@@ -53,6 +53,8 @@ init_service(coservice_provision_t *serv, void *func, void *valid)
 	function_map_t *service_map = spawn_workers(func, valid, COSERVICED_NWORKERS);
 	
 	service->worker_scbs = get_worker_scbs(service_map);
+	service->nworkers = COSERVICED_NWORKERS;
+	service->next_worker = 0;
 	
 	serv->service = service;
 	serv->function_map = service_map;
@@ -72,7 +74,7 @@ coserviced_startup(void)
 	//connect to process daemon and do the startup dance (we can dance if we want to)
 	global_ns = coproc_init(NULL, NULL, NULL, codiscover_scb);
 	if (global_ns == NULL)
-		err(errno, "coproc_init: cocall failed");
+		err(errno, "coserviced_startup: cocall failed");
 
 	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, create_coservice_handle(codiscover_serv.service), global_ns);
 	if (codiscover_serv.nsobj == NULL)

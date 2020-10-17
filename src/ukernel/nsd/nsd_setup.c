@@ -59,66 +59,65 @@ static
 void startup_dance(void)
 {
 	//init own services
-	void **coinsert_scbs, **coselect_scbs, *coprovide_scb;
-	coservice_t *coprovide_service;
-	nsobject_t *obj;
+	void **coinsert_scbs, **coselect_scbs;
+	nsobject_t *coprovide_nsobj;
 	namespace_t *unsealed_global_ns;
 	
 	unsealed_global_ns  = get_global_namespace();
 	
-	global_ns = seal_ns(global_ns);
+	global_ns = seal_ns(unsealed_global_ns);
 	
 	coinsert_scbs = get_worker_scbs(coinsert_serv.function_map);
 	coselect_scbs = get_worker_scbs(coselect_serv.function_map);
+	
 	//connect to process daemon and do the startup dance (we can dance if we want to)
 	if (coproc_init(global_ns, coinsert_scbs[0], coselect_scbs[0], NULL) == NULL)
-		err(errno, "coproc_init: cocall failed");
+		err(errno, "startup_dance: cocall failed");
 
 	/* Once coprovide has been inserted into the global namespace, we can make progress */
 	while(lookup_coservice(U_COPROVIDE, global_ns) == NULL)
 		sched_yield();
 
-	obj = lookup_nsobject(U_COPROVIDE, COSERVICE, global_ns);
-	discover_ukern_func(obj, COCALL_COPROVIDE);
-	
-	coinsert_serv.service = coprovide(coinsert_scbs, NSD_NWORKERS);
-	coinsert_serv.nsobj = create_nsobject(U_COINSERT, COSERVICE, global_ns);
-	coinsert_serv.nsobj->coservice = coinsert_serv.service;
+	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, global_ns);
+	discover_ukern_func(coprovide_nsobj, COCALL_COPROVIDE);
 
-	coselect_serv.service = coprovide(coselect_scbs, NSD_NWORKERS);
-	coselect_serv.nsobj = create_nsobject(U_COSELECT, COSERVICE, global_ns);
-	coselect_serv.nsobj->coservice = coselect_serv.service;
 }
 
 static
-void init_global_service(const char * name, coservice_provision_t *service_prov)
+void start_global_service(coservice_provision_t *service_prov)
 {
 	void **scbs;
 	
 	scbs = get_worker_scbs(service_prov->function_map);
 	service_prov->service = coprovide(scbs, NSD_NWORKERS);
 
-	nsobject_t *obj = create_nsobject(name, COSERVICE, global_ns);
-	obj->coservice = service_prov->service;
-	service_prov->nsobj = obj;
-	return;
+	update_nsobject(service_prov->nsobj, service_prov->service, COSERVICE);
+}
+
+static void 
+init_service(coservice_provision_t *service_prov, const char * name,  void *func, void *validate)
+{
+	service_prov->function_map = spawn_workers(func, validate, NSD_NWORKERS);
+	service_prov->nsobj = create_nsobject(name, RESERVATION, global_ns);
 }
 
 void init_services(void)
 {
-	coinsert_serv.function_map = spawn_workers(namespace_object_insert, validate_coinsert_args, NSD_NWORKERS);
-	coupdate_serv.function_map = spawn_workers(namespace_object_update, validate_coupdate_args, NSD_NWORKERS);
-	coselect_serv.function_map = spawn_workers(namespace_object_select, validate_coselect_args, NSD_NWORKERS);
-	codelete_serv.function_map = spawn_workers(namespace_object_delete, validate_codelete_args, NSD_NWORKERS);
-	cocreate_serv.function_map = spawn_workers(namespace_create, validate_cocreate_args, NSD_NWORKERS);
-	codrop_serv.function_map = spawn_workers(namespace_drop, validate_codrop_args, NSD_NWORKERS);
+	init_service(&coinsert_serv, U_COINSERT, namespace_object_insert, validate_coinsert_args);
+	init_service(&coupdate_serv, U_COUPDATE, namespace_object_update, validate_coupdate_args);
+	init_service(&codelete_serv, U_CODELETE, namespace_object_delete, validate_codelete_args);
+	init_service(&coselect_serv, U_COSELECT, namespace_object_select, validate_coselect_args);
+	init_service(&cocreate_serv, U_COCREATE, namespace_create, validate_cocreate_args);
+	init_service(&codrop_serv, U_CODROP, namespace_drop, validate_codrop_args);
 
 	startup_dance();
 	/* COINSERT and COSELECT inited by safety_dance */
-	init_global_service(U_COUPDATE, &coupdate_serv);
-	init_global_service(U_CODELETE, &codelete_serv);
-	init_global_service(U_COCREATE, &cocreate_serv);
-	init_global_service(U_CODROP, &codrop_serv);
+	start_global_service(&coinsert_serv);
+	start_global_service(&coselect_serv);
+	start_global_service(&coupdate_serv);
+	start_global_service(&codelete_serv);
+	start_global_service(&cocreate_serv);
+	start_global_service(&codrop_serv);
 
 	return;
 }

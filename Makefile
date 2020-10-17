@@ -20,24 +20,33 @@ UKERNEL_EXECS := $(shell find $(SRC_DIR)/ukernel -mindepth 1 -type d -exec basen
 libcoproc:
 	$(MAKE) -C $(SRC_DIR)/lib/$(subst lib,,$@) $@
 	cp $(OUT_DIR)/$@.so.* $(OUT_DIR)/$@.so
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib/$@.so
 
 libcocall: libcoproc
 	$(MAKE) -C $(SRC_DIR)/lib/$(subst lib,,$@) $@
 	cp $(OUT_DIR)/$@.so.* $(OUT_DIR)/$@.so
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib/$@.so
 
 libcomsg: libcoproc libcocall
 	$(MAKE) -C $(SRC_DIR)/lib/$(subst lib,,$@) $@
 	cp $(OUT_DIR)/$@.so.* $(OUT_DIR)/$@.so
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib/$@.so
 
 libccmalloc: 
 	$(MAKE) -C $(SRC_DIR)/lib/$(subst lib,,$@) $@
 	cp $(OUT_DIR)/$@.so.* $(OUT_DIR)/$@.so
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib
+	cp $(OUT_DIR)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib/$@.so
 
 .PHONY: libs
 libs: $(LIBS) 
 
 $(UKERNEL_EXECS): libs
 	$(MAKE) -C $(SRC_DIR)/ukernel/$@ $@
+	cp $(OUT_DIR)/$@ $(CHERI_ROOT)/extra-files/usr/bin
 
 .PHONY: ukernel
 ukernel : libs $(UKERNEL_EXECS)

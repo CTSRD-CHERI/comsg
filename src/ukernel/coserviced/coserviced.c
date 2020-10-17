@@ -28,6 +28,7 @@
 #include "coserviced_setup.h"
 #include "coservice_table.h"
 
+#include <ccmalloc.h>
 #include <cocall/cocall_args.h>
 #include <coproc/coservice.h>
 #include <cocall/worker.h>
@@ -43,6 +44,9 @@
 #include <unistd.h>
 
 coservice_provision_t codiscover_serv, coprovide_serv;
+
+size_t buckets[] = {CHERICAP_SIZE * COSERVICE_MAX_WORKERS};
+size_t nbuckets = 1;
 
 static const int nworkers = 16;
 
@@ -70,16 +74,16 @@ int main(int argc, char *const argv[])
 		}
 	}
 	if(argc >= 2) {
-		error = colookup(argv[argc], &init_cap);
+		error = colookup(argv[argc-1], &init_cap);
 		if(error)
-			err(errno, "main: colookup of init %s failed", optarg);
+			err(errno, "main: colookup of init %s failed", argv[argc-1]);
 		set_ukern_target(COCALL_COPROC_INIT, init_cap);
 	}
 	else {
 		printf("Missing lookup string for init\n");
 		usage();
 	}
-
+	ccmalloc_init(buckets, nbuckets);
 	coserviced_startup();
 	
 	//TODO-PBB: revise?
