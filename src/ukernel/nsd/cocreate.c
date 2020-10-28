@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -50,11 +55,21 @@ int validate_cocreate_args(cocreate_args_t *cocall_args)
 void namespace_create(cocreate_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
+	namespace_t *ns;
 
 	if(!NS_PERMITS_WRITE(cocall_args->ns_cap)) 
 		COCALL_ERR(cocall_args, EACCES);
-	else if(in_namespace(cocall_args->ns_name, cocall_args->ns_cap))
-		COCALL_ERR(cocall_args, EEXIST);
+	ns = lookup_namespace(cocall_args->ns_name, cocall_args->ns_cap);
+	if (ns != NULL) {
+		if (!NS_PERMITS_READ(cocall_args->ns_cap))
+			COCALL_ERR(cocall_args, EACCES);
+		else if (ns->type != PUBLIC)
+			COCALL_ERR(cocall_args, EEXIST);
+		else {
+			cocall_args->child_ns_cap = ns;
+			COCALL_RETURN(cocall_args, 0);
+		}
+	}
 
 	cocall_args->child_ns_cap = create_namespace(cocall_args->ns_name, cocall_args->ns_type, cocall_args->ns_cap);
 	

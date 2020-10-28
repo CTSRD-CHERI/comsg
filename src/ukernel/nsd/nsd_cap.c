@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -37,10 +42,10 @@
 #include <machine/sysarch.h>
 #include <unistd.h>
 
-static struct object_type global_nscap, proc_nscap, thread_nscap, explicit_nscap, library_nscap;
+static struct object_type global_nscap, app_nscap, private_nscap, public_nscap, library_nscap;
 static struct object_type coservice_nsobj, coport_nsobj, commap_nsobj, reservation_nsobj;
 
-static struct object_type *global_object_types[] = {&global_nscap, &proc_nscap, &thread_nscap, &explicit_nscap, &library_nscap, &reservation_nsobj, &coservice_nsobj, &coport_nsobj, &commap_nsobj};
+static struct object_type *global_object_types[] = {&global_nscap, &app_nscap, &private_nscap, &public_nscap, &library_nscap, &reservation_nsobj, &coservice_nsobj, &coport_nsobj, &commap_nsobj};
 static const int required_otypes = 9;
 
 __attribute__ ((constructor)) static void 
@@ -59,12 +64,14 @@ get_ns_sealcap(nstype_t type)
 	switch(type) {
 	case GLOBAL:
 		return (global_nscap.sc);
-	case PROCESS:
-		return (proc_nscap.sc);
-	case THREAD:
-		return (thread_nscap.sc);
-	case EXPLICIT:
-		return (explicit_nscap.sc);
+	case APPLICATION:
+		return (app_nscap.sc);
+	case PRIVATE:
+		return (private_nscap.sc);
+	case PUBLIC:
+		return (public_nscap.sc);
+	case LIBRARY:
+		return (library_nscap.sc);
 	default:
 		err(EINVAL, "get_ns_sealcap: invalid nstype value %d supplied", type);
 	}
@@ -77,12 +84,14 @@ get_ns_unsealcap(nstype_t type)
 	switch(type) {
 	case GLOBAL:
 		return (global_nscap.usc);
-	case PROCESS:
-		return (proc_nscap.usc);
-	case THREAD:
-		return (thread_nscap.usc);
-	case EXPLICIT:
-		return (explicit_nscap.usc);
+	case APPLICATION:
+		return (app_nscap.usc);
+	case PRIVATE:
+		return (private_nscap.usc);
+	case PUBLIC:
+		return (public_nscap.usc);
+	case LIBRARY:
+		return (library_nscap.usc);
 	default:
 		err(EINVAL, "get_ns_unsealcap: invalid nstype value %d supplied", type);
 	}
@@ -145,12 +154,14 @@ ns_otype_to_type(long otype)
 {
 	if (otype == global_nscap.otype)
 		return (GLOBAL);
-	else if (otype == proc_nscap.otype)
-		return (PROCESS);
-	else if (otype ==  thread_nscap.otype)
-		return (THREAD);
-	else if (otype ==  explicit_nscap.otype)
-		return (EXPLICIT);
+	else if (otype == app_nscap.otype)
+		return (APPLICATION);
+	else if (otype ==  private_nscap.otype)
+		return (PRIVATE);
+	else if (otype ==  public_nscap.otype)
+		return (PUBLIC);
+	else if (otype == library_nscap.otype)
+		return (LIBRARY);
 	else
 		return (INVALID_NS);
 	

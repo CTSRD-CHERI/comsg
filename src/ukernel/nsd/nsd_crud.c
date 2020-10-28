@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -62,15 +67,13 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 		case GLOBAL:
 			assert(parent == NULL);
 			break;
-		case PROCESS:
+		case APPLICATION:
 		case LIBRARY:
 			assert(parent->type == GLOBAL);
 			assert(is_global_namespace(parent));
 			break;
-		case THREAD:
-			assert(parent->type == PROCESS);
-			break;
-		case EXPLICIT:
+		case PRIVATE:
+		case PUBLIC:
 			break;
 		default:
 			err(EINVAL, "create_namespace: invalid type supplied");

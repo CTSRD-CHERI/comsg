@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -78,6 +83,21 @@ nsobject_t *lookup_nsobject(const char *name, nsobject_type_t nsobject_type, nam
 	return (NULL);
 }
 
+namespace_t *lookup_namespace(const char *name, namespace_t *parent)
+{
+	namespace_t *ns;
+	struct _ns_member *member, *member_temp;
+	parent = unseal_ns(parent);
+
+	LIST_FOREACH_SAFE(member, &parent->members->namespaces, entries, member_temp) {
+		ns = member->ns;
+		if(strncmp(ns->name, name, NS_NAME_LEN) == 0) 
+			return (ns);	
+	}
+
+	return (NULL);
+}
+
 int in_namespace(const char *name, namespace_t *ns_cap)
 {
 	nsobject_t *obj;
@@ -94,8 +114,7 @@ int in_namespace(const char *name, namespace_t *ns_cap)
 	LIST_FOREACH_SAFE(member, &ns_cap->members->namespaces, entries, member_temp) {
 		ns = member->ns;
 		if(strncmp(ns->name, name, NS_NAME_LEN) == 0) 
-			return (1);
-		
+			return (1);	
 	}
 	return (0);
 }
