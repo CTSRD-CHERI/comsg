@@ -28,42 +28,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COPORT_CINVOKE_H
+#define _COPORT_CINVOKE_H
 
-.set noreorder
-.set noat
+#include <coproc/coport.h>
+#include <stddef.h>
 
-#include <machine/asm.h>
+int cosend_cinvoke(coport_t *port, void *buf, size_t len);
+int corecv_cinvoke(coport_t *port, void **buf, size_t len);
+int cosend_impl(coport_t *port, void *buf, size_t len);
+int corecv_impl(coport_t *port, void **buf, size_t len);
 
-.text
-.globl _C_LABEL(_cosend)
-_C_LABEL(_cosend):
-	clc		$c3, zero, 0($idc) /* first arg is unsealed port cap */
-	clcbi	$c12, %capcall20(cosend)($cgp)
-	cjalr	$c12, $c17
-	nop
-	cjr		$c13 /* return from cinvoke */
-	nop
-.globl _C_LABEL(_ecosend)
-_C_LABEL(_ecosend):
-
-.text
-.globl _C_LABEL(_corecv)
-_C_LABEL(_corecv):
-	clc		$c3, zero, 0($idc) /* first arg to _corecv_impl is unsealed data cap */
-	clcbi	$c12, %capcall20(corecv)($cgp)
-	cjalr	$c12, $c17
-	nop
-	cjr		$c13 /* return from cinvoke */
-	nop
-.globl _C_LABEL(_ecorecv)
-_C_LABEL(_ecorecv):
-
-.data
-
-.global szcorecv
-szcorecv:
-.long _ecorecv-_corecv
-
-.global szcosend
-szcosend:
-.long _ecosend-_cosend
+#endif

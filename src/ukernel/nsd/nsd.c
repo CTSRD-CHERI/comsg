@@ -80,6 +80,8 @@ void usage(void)
 const size_t nbuckets = 2;
 size_t buckets[] = {sizeof(struct _ns_members), sizeof(struct _ns_member)};
 
+//TODO-PBB: add config file system for pre-registered reservations
+
 int main(int argc, char *const argv[])
 {
 	int opt, error;

@@ -29,30 +29,69 @@
  * SUCH DAMAGE.
  */
 
+#include "coport_cinvoke.h"
+
+#include "coport_ipc_utils.h"
+#include <comsg/ukern_calls.h>
+#include <comsg/coport_ipc.h>
+#include <coproc/coport.h>
+
+#include <assert.h>
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
+#include <err.h>
+#include <stddef.h>
+#include <sys/errno.h>
 
-#define CINVOKE(code, data, retval) \
+#define COPORT_CINVOKE(func, port, retval, buffer, length) \
 	__asm__ volatile inline ( \
-	"cinvoke\t%0, %1\n\t" \
-	"nop\n\t" \
+    "move $a0, %2\n" \
+    "cmove $c4, %1\n" \
+	"ccall %3, %4, 1\n" \
+	"nop\n" \
+    "move %0, $v0\n"\
 	: "=r" (retval) \
-	: "C" (code), "C" (data));
+	: "C" (buffer), "r" (length), "C" (func), "C" (port));
 
 static void *cosend_codecap;
 static void *corecv_codecap;
 
-int cosend(coport_t *port, void *buf, size_t len)
+extern void* _cosend;
+extern void* _corecv;
+
+int cosend_cinvoke(coport_t *port, void *buf, size_t len)
 {
 	int result;
-	CINVOKE(cosend_codecap, port, result);
+	if (coport_gettype(port) == COCARRIER)
+        result = cocarrier_send(port, buf, len);
+    else
+       COPORT_CINVOKE(corecv_codecap, port, result, buf, len);
+   if (result == -1) {
+        if (errno == EINVAL)
+            err(EINVAL, "corecv_cinvoke: invalid coport type");
+    }
 	return (result);
 }
 
-int corecv(coport_t *port, void *buf, size_t len)
+int corecv_cinvoke(coport_t *port, void **buf, size_t len)
 {
+    void *msg;
 	int result;
-	CINVOKE(corecv_codecap, port, result);
+    if (coport_gettype(port) == COCARRIER) {
+        msg = cocarrier_recv(port, len);
+        if(msg == NULL)
+            result = -1;
+        else {
+            *buf = msg;
+            result = cheri_getlen(buf);
+        }
+    }
+    else
+	   COPORT_CINVOKE(corecv_codecap, port, result, buf, len);
+    if (result == -1) {
+        if (errno == EINVAL)
+            err(EINVAL, "corecv_cinvoke: invalid coport type");
+    }
 	return (result);
 }
 
@@ -68,18 +107,15 @@ int cosend_impl(coport_t *port, void *buf, size_t len)
     switch(type) {
     case COCHANNEL:
         return (cochannel_send(port, buf, len));
-    case COCARRIER:
-        return (cocarrier_send(port, buf, len));
     case COPIPE:
         return (copipe_send(port, buf, len));
     default:
         errno = EINVAL;
         return (-1);
     }
-
 }
 
-int corecv_impl(coport_t *port, void *buf, size_t len)
+int corecv_impl(coport_t *port, void **buf, size_t len)
 {
 	void *msg;
     coport_type_t type;
