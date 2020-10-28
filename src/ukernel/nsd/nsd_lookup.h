@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -35,5 +40,7 @@ coservice_t *lookup_coservice(char * name, namespace_t *ns_cap);
 coport_t *lookup_coport(char * name, namespace_t *ns_cap);
 nsobject_t *lookup_nsobject(const char * name, nsobject_type_t nsobject_type, namespace_t *ns_cap);
 int in_namespace(const char * name, namespace_t *ns_cap);
+namespace_t *lookup_namespace(const char *name, namespace_t *parent);
 int is_child_namespace(const char *name, namespace_t *ns_cap);
+
 #endif //!defined(_NSD_LOOKUP_H)

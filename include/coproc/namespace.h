@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -80,7 +85,7 @@
  * Library namespaces are not yet fully thought out.
  */
 
-typedef enum {INVALID_NS = -1, GLOBAL = 1, PROCESS = 2, THREAD = 4, EXPLICIT = 8, LIBRARY = 16} nstype_t;
+typedef enum {INVALID_NS = -1, GLOBAL = 1, APPLICATION = 2, PRIVATE = 4, PUBLIC = 8, LIBRARY = 16} nstype_t;
 
 #ifndef NS_NAME_LEN
 #define NS_NAME_LEN ( (CHERICAP_SIZE * 2) + ( CHERICAP_SIZE - sizeof(nstype_t) ) )
@@ -96,7 +101,7 @@ struct _namespace {
 	struct _ns_members *members;
 };
 
-#define VALID_NS_TYPE(type) ( type == GLOBAL || type == GLOBAL || type == PROCESS || type == THREAD || type == EXPLICIT || type == LIBRARY )
+#define VALID_NS_TYPE(type) ( type == GLOBAL || type == APPLICATION || type == PRIVATE || type == PUBLIC || type == LIBRARY )
 
 __BEGIN_DECLS
 

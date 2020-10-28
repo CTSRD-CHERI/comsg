@@ -37,7 +37,7 @@
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
 
-#include <pthread.h>
+
 #include <stddef.h>
 
 
@@ -71,7 +71,7 @@
 #define U_COUPDATE "coupdate" 
 #define U_CODELETE "codelete"
 
-#define n_ukern_calls 13
+#define n_ukern_calls (13)
 
 extern namespace_t *global_ns;
 

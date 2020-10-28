@@ -28,75 +28,26 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coserviced.h"
-
-#include "coserviced_setup.h"
-#include "coservice_table.h"
-
-#include <ccmalloc.h>
-#include <cocall/cocall_args.h>
-#include <coproc/coservice.h>
-#include <cocall/worker.h>
-#include <cocall/worker_map.h>
-#include <comsg/ukern_calls.h>
 
 #include <err.h>
-#include <pthread.h>
-#include <stdatomic.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <machine/sysarch.h>
 #include <sys/errno.h>
 #include <unistd.h>
 
-coservice_provision_t codiscover_serv, coprovide_serv;
-
-size_t buckets[] = {CHERICAP_SIZE * COSERVICE_MAX_WORKERS};
-size_t nbuckets = 1;
-
-static const int nworkers = 16;
-
-static 
-void usage(void)
-{
-	//todo
-	//should be called with lookup string
-	//e.g "coserviced lookup_string"
-	exit(0);
-}
-
+static char *coprocd_args[] = {"/usr/bin/coprocd", NULL};
+extern char **environ;
+static void *sealroot;
 
 int main(int argc, char *const argv[])
 {
-	int opt, error;
-	void *init_cap;
-	
-	while((opt = getopt(argc, argv, "")) != -1) {
-		switch (opt) {
-		case '?':
-		default: 
-			usage();
-			break;
-		}
-	}
-	if(argc >= 2) {
-		error = colookup(argv[argc-1], &init_cap);
-		if(error)
-			err(errno, "main: colookup of init %s failed", argv[argc-1]);
-		set_ukern_target(COCALL_COPROC_INIT, init_cap);
-	}
-	else {
-		printf("Missing lookup string for init\n");
-		usage();
-	}
-	ccmalloc_init(buckets, nbuckets);
-	coserviced_startup();
-	
-	//TODO-PBB: revise?
-	for (int i = 0; i < coprovide_serv.function_map->nworkers; i++)
-		pthread_join(coprovide_serv.function_map->workers[i].worker, NULL);
-	for (int i = 0; i < codiscover_serv.function_map->nworkers; i++)
-		pthread_join(codiscover_serv.function_map->workers[i].worker, NULL);
+	pid_t test_pid, coprocd_pid;
 
+    if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0)
+    	err(errno, "setup_otypes: error in sysarch - could not get sealroot");
 
+    test_pid = getpid();
+    coprocd_pid = fork();
+    if (coprocd_pid != 0)
+    	coexecve(test_pid, coprocd_args[0], coprocd_args, environ);
 	return (0);
 }
