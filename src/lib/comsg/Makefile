@@ -1,7 +1,10 @@
 LIB := comsg
 
 SRCS := ukern_calls.c \
-	coport_ipc.c
+	coport_ipc.c \
+	coport_ipc_utils.c \
+	coport_cinvoke_stubs.S \
+	coport_cinvoke.c
 	
 
 DEP_LIBS := pthread cocall coproc

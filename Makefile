@@ -10,7 +10,7 @@ INC_FLAGS := $(addprefix -isystem,$(INC_DIRS))
 
 LDFLAGS :=-fuse-ld=lld -Wl,-znow -L $(OUT_DIR)
 CFLAGS := -g -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
-	-mabi=purecap -fPIE -mstack-alignment=16 -fPIC
+	-mabi=purecap -fPIE -mstack-alignment=16 -fPIC -v
 
 export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS
 

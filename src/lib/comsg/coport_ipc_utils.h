@@ -29,41 +29,18 @@
  * SUCH DAMAGE.
  */
 
-.set noreorder
-.set noat
+#ifndef _COPORT_IPC_UTILS_H
+#define _COPORT_IPC_UTILS_H
 
-#include <machine/asm.h>
+#include <coproc/coport.h>
+#include <stddef.h>
 
-.text
-.globl _C_LABEL(_cosend)
-_C_LABEL(_cosend):
-	clc		$c3, zero, 0($idc) /* first arg is unsealed port cap */
-	clcbi	$c12, %capcall20(cosend)($cgp)
-	cjalr	$c12, $c17
-	nop
-	cjr		$c13 /* return from cinvoke */
-	nop
-.globl _C_LABEL(_ecosend)
-_C_LABEL(_ecosend):
+coport_status_t acquire_coport_status(coport_t *port, coport_status_t expected, coport_status_t desired);
+void release_coport_status(coport_t *port, coport_status_t desired);
+int copipe_send(const coport_t *port, const void *buf, size_t len);
+int cochannel_send(const coport_t *port, const void *buf, size_t len);
+int copipe_corecv(const coport_t *port, void *buf, size_t len);
+int cochannel_corecv(const coport_t *port, void *buf, size_t len);
+coport_t *process_coport_handle(coport_t *port, coport_type_t type);
 
-.text
-.globl _C_LABEL(_corecv)
-_C_LABEL(_corecv):
-	clc		$c3, zero, 0($idc) /* first arg to _corecv_impl is unsealed data cap */
-	clcbi	$c12, %capcall20(corecv)($cgp)
-	cjalr	$c12, $c17
-	nop
-	cjr		$c13 /* return from cinvoke */
-	nop
-.globl _C_LABEL(_ecorecv)
-_C_LABEL(_ecorecv):
-
-.data
-
-.global szcorecv
-szcorecv:
-.long _ecorecv-_corecv
-
-.global szcosend
-szcosend:
-.long _ecosend-_cosend
+#endif
