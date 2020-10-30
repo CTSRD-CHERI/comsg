@@ -41,7 +41,7 @@ int validate_codiscover_args(codiscover_args_t *cocall_args)
 		return (0);
 	else if (cheri_getsealed(obj))
 		return (0);
-	else if (!cheri_getsealed(service_handle))
+	else if (obj->type != COSERVICE)
 		return (0);
 	else if ((cheri_getperm(service_handle) & (COSERVICE_CODISCOVER_PERMS)) == 0)
 		return (0);
@@ -59,12 +59,13 @@ void discover_coservice(codiscover_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 
-	nsobject_t *service_obj = cocall_args->nsobj;
-	coservice_t *service = unseal_coservice(service_obj->coservice);
+	coservice_t *service;
+
+	service = cocall_args->nsobj->coservice;
+	cocall_args->coservice = service;
+	service = unseal_coservice(service);
 
 	cocall_args->scb_cap = get_coservice_scb(service);
-	cocall_args->status = 0;
-	cocall_args->error = 0;
-
-	return;
+	
+	COCALL_RETURN(cocall_args, 0);
 }

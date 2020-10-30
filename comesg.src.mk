@@ -18,6 +18,6 @@ $(BUILD_PATH)/%.S.o: %.S | $(BUILD_PATH)
 	$(CC) $(INC_FLAGS) $(CFLAGS) -c $< -o $@
 
 $(TGT): $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) -o $(OUT_DIR)/$(OUT_FILE) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $(OUT_DIR)/$(OUT_FILE) 
 
 -include $(DEPS)

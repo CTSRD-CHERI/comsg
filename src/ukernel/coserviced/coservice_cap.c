@@ -51,6 +51,7 @@ void setup_otypes(void)
     if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0) {
         err(errno, "setup_otypes: error in sysarch - could not get sealroot");
     }
+    sealroot = cheri_incoffset(sealroot, 64);
     sealroot = make_otypes(sealroot, required_otypes, global_object_types);
 }
 
@@ -70,6 +71,8 @@ coservice_t *unseal_coservice(coservice_t *service_handle)
 
 coservice_t *create_coservice_handle(coservice_t *service)
 {
+	if (cheri_getsealed(service))
+		return (service);
 	service = cheri_clearperm(service, CHERI_PERM_GLOBAL);
 	return (seal_coservice(service));
 }

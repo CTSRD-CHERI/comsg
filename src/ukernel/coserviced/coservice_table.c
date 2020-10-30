@@ -70,7 +70,7 @@ coservice_t *allocate_coservice(void)
 	
 	ptr = &coservice_table.services[index];
 	ptr = cheri_setboundsexact(ptr, sizeof(coservice_t));
-	memset(ptr, 0, sizeof(coservice_t));
+	memset(ptr, '\0', sizeof(coservice_t));
 
 	atomic_fetch_add(&coservice_table.active_services, 1);
 

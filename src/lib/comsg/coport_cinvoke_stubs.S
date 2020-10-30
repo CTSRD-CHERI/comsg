@@ -32,38 +32,146 @@
 .set noreorder
 .set noat
 
+#define _MIPS_REGDEF_H
 #include <machine/asm.h>
+
+#include <cheri/cherireg.h>
+
+/* CCall-and-link-register */
+#define CCALLALR(cb, cd)						\
+	.set push;						\
+	.set noreorder;						\
+	cgetpcc $c17;						\
+	cincoffset $c17, $c17, 12;			\
+	ccall cb, cd, 1;					\
+	nop; 	\
+	.set pop;
+
+
+#define CINVOKE_FRAME_SIZE (11*CHERICAP_SIZE + 96)
+
+
+/* XXX-PBB: temporary  */
+.text 
+.option pic0
+NESTED(coport_cinvoke, CINVOKE_FRAME_SIZE, _FRAME_RETURN_REG)
+	cgetoffset $t0, $csp
+	cincoffset	$csp, $csp, -96
+	csd	$s0, $zero, 0($csp)
+	csd	$s1, $zero, 8($csp)
+	csd	$s2, $zero, 16($csp)
+	csd	$s3, $zero, 24($csp)
+	csd	$s4, $zero, 32($csp)
+	csd	$s5, $zero, 40($csp)
+	csd	$s6, $zero, 48($csp)
+	csd	$s7, $zero, 56($csp)
+	csd	$gp, $zero, 64($csp)
+	csd	$fp, $zero, 72($csp)
+	csd	$ra, $zero, 80($csp)
+
+	cgetdefault	$c12
+	cincoffset	$csp, $csp, -11*CHERICAP_SIZE
+	cgetoffset $t1, $csp
+	csc	$c17, $zero, 0($csp)
+	csc	$c18, $zero, CHERICAP_SIZE($csp)
+	csc	$c19, $zero, 2*CHERICAP_SIZE($csp)
+	csc	$c20, $zero, 3*CHERICAP_SIZE($csp)
+	csc	$c21, $zero, 4*CHERICAP_SIZE($csp)
+	csc	$c22, $zero, 5*CHERICAP_SIZE($csp)
+	csc	$c23, $zero, 6*CHERICAP_SIZE($csp)
+	csc	$c24, $zero, 7*CHERICAP_SIZE($csp)
+	csc	$c25, $zero, 8*CHERICAP_SIZE($csp)
+	csc	$c26, $zero, 9*CHERICAP_SIZE($csp)
+	csc	$c12, $zero, 10*CHERICAP_SIZE($csp)
+
+	cseal $c7, $csp, $c7
+	csetoffset $csp, $csp, $zero
+	csetbounds $csp, $csp, $t0
+	csetoffset $csp, $csp, $t1
+
+	/* Load argument registers */
+	cmove $c1, $c3
+	cmove $c2, $c4
+	cmove $c4, $c5
+	/* 
+	 * $c3 is currently restored by inline assembly 
+	 * future abi ought to handle this for us
+	 */
+	cmove $c3, $cnull
+	cmove $c5, $cnull
+
+	/* Load ccall-return registers */
+	cmove $c21, $c6
+	cmove $c22, $c7
+	cmove $c6, $cnull
+	cmove $c7, $cnull
+
+	ccall $c1, $c2, 1
+	nop
+
+XNESTED(cinvoke_return)
+	cmove $csp, $idc
+
+	clc	$c17, $zero, 0($csp)
+	clc	$c18, $zero, CHERICAP_SIZE($csp)
+	clc	$c19, $zero, 2*CHERICAP_SIZE($csp)
+	clc	$c20, $zero, 3*CHERICAP_SIZE($csp)
+	clc	$c21, $zero, 4*CHERICAP_SIZE($csp)
+	clc	$c22, $zero, 5*CHERICAP_SIZE($csp)
+	clc	$c23, $zero, 6*CHERICAP_SIZE($csp)
+	clc	$c24, $zero, 7*CHERICAP_SIZE($csp)
+	clc	$c25, $zero, 8*CHERICAP_SIZE($csp)
+	clc	$c26, $zero, 9*CHERICAP_SIZE($csp)
+	clc	$c12, $zero, 10*CHERICAP_SIZE($csp)
+	csetdefault	$c12
+	cincoffset	$csp, $csp, 11*CHERICAP_SIZE
+
+	cld	$s0, $zero, 0($csp)
+	cld	$s1, $zero, 8($csp)
+	cld	$s2, $zero, 16($csp)
+	cld	$s3, $zero, 24($csp)
+	cld	$s4, $zero, 32($csp)
+	cld	$s5, $zero, 40($csp)
+	cld	$s6, $zero, 48($csp)
+	cld	$s7, $zero, 56($csp)
+	cld	$gp, $zero, 64($csp)
+	cld	$fp, $zero, 72($csp)
+	cld	$ra, $zero, 80($csp)
+	cincoffset	$csp, $csp, 96
+
+	cjr	$c17
+	nop
+END(coport_cinvoke)
+
+#if 0
 
 .text
 .globl _C_LABEL(_cosend)
 _C_LABEL(_cosend):
-	clc		$c3, zero, 0($idc) /* first arg is unsealed port cap */
-	clcbi	$c12, %capcall20(cosend)($cgp)
+	cmove	$c3, $idc /* first arg is unsealed port cap */
+	lui		t9, %pcrel_hi(_CHERI_CAPABILITY_TABLE_ - 8)
+	daddiu		t9, t9, %pcrel_lo(_CHERI_CAPABILITY_TABLE_ - 4)
+	cgetpcc		$cgp				
+	cincoffset	$cgp, $cgp, t9
+	clcbi		$c12, %capcall20(cosend_impl)($cgp)
 	cjalr	$c12, $c17
 	nop
-	cjr		$c13 /* return from cinvoke */
+	cjr		$c18 /* return from cinvoke */
 	nop
-.globl _C_LABEL(_ecosend)
-_C_LABEL(_ecosend):
 
 .text
 .globl _C_LABEL(_corecv)
 _C_LABEL(_corecv):
-	clc		$c3, zero, 0($idc) /* first arg to _corecv_impl is unsealed data cap */
-	clcbi	$c12, %capcall20(corecv)($cgp)
+	cmove	$c3, $idc /* first arg to _corecv_impl is unsealed data cap */
+	lui		t9, %pcrel_hi(_CHERI_CAPABILITY_TABLE_ - 8)
+	daddiu		t9, t9, %pcrel_lo(_CHERI_CAPABILITY_TABLE_ - 4)
+	cgetpcc		$cgp				
+	cincoffset	$cgp, $cgp, t9
+	clcbi		$c12, %capcall20(corecv_impl)($cgp)
 	cjalr	$c12, $c17
 	nop
-	cjr		$c13 /* return from cinvoke */
+	cjr		$c18 /* return from cinvoke */
 	nop
-.globl _C_LABEL(_ecorecv)
-_C_LABEL(_ecorecv):
 
-.data
+#endif
 
-.global szcorecv
-szcorecv:
-.long _ecorecv-_corecv
-
-.global szcosend
-szcosend:
-.long _ecosend-_cosend

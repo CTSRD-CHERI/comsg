@@ -33,12 +33,14 @@
 
 #include "ipcd_cap.h"
 
+#include <assert.h>
 #include <ccmalloc.h>
 #include <cocall/cocall_args.h>
 #include <coproc/coport.h>
 #include <coproc/utils.h>
 
 #include <cheri/cheric.h>
+#include <cheri/cherireg.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
 
@@ -98,10 +100,12 @@ void coport_open(coopen_args_t *cocall_args, void *token)
 			COCALL_ERR(cocall_args, ENOMEM);
 		port_handle = allocate_coport(cocall_args->coport_type);
 	}
+	assert(cheri_getperm(port_handle) & CHERI_PERM_CCALL);
 	init_coport(cocall_args->coport_type, port_handle);
 
 	port_handle = cheri_andperm(port_handle, COPORT_PERMS);
 	port_handle = seal_coport(port_handle);
+	assert(cheri_getperm(port_handle) & CHERI_PERM_CCALL);
 	cocall_args->port = port_handle;
 	port_handle = NULL;
 

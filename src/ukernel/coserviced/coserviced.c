@@ -70,6 +70,8 @@ int main(int argc, char *const argv[])
 	int opt, error;
 	void *init_cap;
 	
+	is_ukernel = true;
+
 	while((opt = getopt(argc, argv, "")) != -1) {
 		switch (opt) {
 		case '?':

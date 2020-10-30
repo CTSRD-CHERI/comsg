@@ -34,6 +34,7 @@
 #include "coport_ipc_utils.h"
 #include <comsg/ukern_calls.h>
 #include <comsg/coport_ipc.h>
+#include <comsg/coport_ipc_cinvoke.h>
 #include <coproc/coport.h>
 
 #include <assert.h>
@@ -42,23 +43,43 @@
 #include <err.h>
 #include <stddef.h>
 #include <sys/errno.h>
+#include <machine/sysarch.h>
 
+#ifndef CINVOKE_IMPLEMENTED
 #define COPORT_CINVOKE(func, port, retval, buffer, length) \
 	__asm__ volatile inline ( \
     "move $a0, %2\n" \
     "cmove $c4, %1\n" \
+    "cgetpcc $c18\n" \
+    "cincoffset $c18, $c18, 16\n" \
 	"ccall %3, %4, 1\n" \
 	"nop\n" \
     "move %0, $v0\n"\
 	: "=r" (retval) \
 	: "C" (buffer), "r" (length), "C" (func), "C" (port));
+#else
+#define COPORT_CINVOKE(func, port, retval, buffer, length) \
+    __asm__ volatile inline ( \
+    "move $a0, %2\n" \
+    "cmove $c4, %1\n" \
+    "cgetpcc $c18\n" \
+    "cincoffset $c18, $c18, 16\n" \
+    "cinvoke %3, %4\n" \
+    "nop\n" \
+    "move %0, $v0\n"\
+    : "=r" (retval) \
+    : "C" (buffer), "r" (length), "C" (func), "C" (port));
+#endif
 
-static void *cosend_codecap;
-static void *corecv_codecap;
+static coport_func_ptr _cosend_codecap = NULL;
+static coport_func_ptr _corecv_codecap = NULL;
+static void *_coport_invoke_return = NULL;
+static void *_stack_sealcap = NULL;
 
-extern void* _cosend;
-extern void* _corecv;
+extern void *cinvoke_return;
 
+#if 0
+__attribute__((cheri_ccall))
 int cosend_cinvoke(coport_t *port, void *buf, size_t len)
 {
 	int result;
@@ -68,11 +89,12 @@ int cosend_cinvoke(coport_t *port, void *buf, size_t len)
        COPORT_CINVOKE(corecv_codecap, port, result, buf, len);
    if (result == -1) {
         if (errno == EINVAL)
-            err(EINVAL, "corecv_cinvoke: invalid coport type");
+            err(EINVAL, "cosend_cinvoke: invalid coport type");
     }
 	return (result);
 }
 
+__attribute__((cheri_ccall))
 int corecv_cinvoke(coport_t *port, void **buf, size_t len)
 {
     void *msg;
@@ -95,10 +117,33 @@ int corecv_cinvoke(coport_t *port, void **buf, size_t len)
 	return (result);
 }
 
+#elif 0
+
+inline int cosend_cinvoke(coport_t *port, void *buf, size_t len)
+{
+    return (coport_cinvoke(cosend_codecap, port, buf, len));
+}
+
+inline int corecv_cinvoke(coport_t *port, void **buf, size_t len)
+{
+    return (coport_cinvoke(corecv_codecap, port, buf, len));
+}
+
+#else
+
+const coport_func_ptr *cosend_codecap = &_cosend_codecap;
+const coport_func_ptr *corecv_codecap = &_corecv_codecap;
+const void **return_stack_sealcap = &_stack_sealcap;
+const void **cinvoke_return_cap = &_coport_invoke_return;
+
+#endif
+
+static __attribute__((cheri_ccallee))
 int cosend_impl(coport_t *port, void *buf, size_t len)
 {
 	coport_type_t type;
     int retval;
+    __asm__("cmove %0, $idc" : "=C" (port)); 
   
     if(len == 0)
         return (0);
@@ -106,20 +151,33 @@ int cosend_impl(coport_t *port, void *buf, size_t len)
     type = port->type;
     switch(type) {
     case COCHANNEL:
-        return (cochannel_send(port, buf, len));
+        retval =  (cochannel_send(port, buf, len));
+        break;
     case COPIPE:
-        return (copipe_send(port, buf, len));
+        retval = (copipe_send(port, buf, len));
+        break;
     default:
         errno = EINVAL;
-        return (-1);
+        retval = (-1);
+        break;
     }
+    /* XXX-PBB: absent a working calling convention that uses my method, this will do */
+    /* TODO-PBB: clear registers etc */
+    __asm__ ( 
+        "move $v0, %[result]\n"
+        "ccall $c21, $c22, 1\n"
+        "nop"
+        : : [result] "r" (retval));
+    return (retval);
 }
 
+static __attribute__((cheri_ccallee))
 int corecv_impl(coport_t *port, void **buf, size_t len)
 {
 	void *msg;
     coport_type_t type;
     int retval;
+    __asm__("cmove %0, $idc" : "=C" (port));
 
     if(len == 0)
         return (0);
@@ -144,19 +202,50 @@ int corecv_impl(coport_t *port, void **buf, size_t len)
         err(1, "corecv: invalid coport type");
         break;
     }
+    __asm__ ( 
+        "move $v0, %[result]\n"
+        "ccall $c21, $c22, 1\n"
+        "nop"
+        : : [result] "r" (retval));
     return (retval);
 }
 
-__attribute__ ((constructor)) static void 
-init_library_cinvoke(void)
+void
+setup_cinvoke_targets(void *coport_sealcap)
 {
-	void *coport_sealcap;
-	/* TODO-PBB: get sealing capability via type manager and/or rtld */
-	cosend_codecap = cheri_seal(_cosend, coport_sealcap);
-	corecv_codecap = cheri_seal(_corecv, coport_sealcap);
+    /* TODO-PBB: get sealing capability via type manager and/or rtld */
+    _cosend_codecap = cheri_getpcc();
+    _cosend_codecap = cheri_setaddress(_cosend_codecap, (vaddr_t)&cosend_impl);
+    _cosend_codecap = cheri_seal(_cosend_codecap, coport_sealcap);
 
-	assert(cheri_getperm(cosend_codecap) & CHERI_PERM_CCALL);
-	assert(cheri_getperm(corecv_codecap) & CHERI_PERM_CCALL);
+    _corecv_codecap = cheri_getpcc();
+    _corecv_codecap = cheri_setaddress(_corecv_codecap, (vaddr_t)&corecv_impl);
+    _corecv_codecap = cheri_seal(_corecv_codecap, coport_sealcap);
+
+    assert(cheri_getperm(_cosend_codecap) & CHERI_PERM_CCALL);
+    assert(cheri_getperm(_corecv_codecap) & CHERI_PERM_CCALL);
+}
+
+__attribute__ ((constructor)) static void
+coport_cinvoke_init(void)
+{
+    int mib[4];
+    size_t len;
+    int cores;
+    void *r_sealroot;
+
+    assert(sysarch(CHERI_GET_SEALCAP, &r_sealroot) != -1);
+
+    assert((cheri_gettag(r_sealroot) != 0));    
+    assert(cheri_getlen(r_sealroot) != 0);
+    assert((cheri_getperm(r_sealroot) & CHERI_PERM_SEAL) != 0);
+    /* TODO-PBB: simulate a divided otype space, pending type manager */
+    r_sealroot = cheri_incoffset(r_sealroot, cheri_getlen(r_sealroot)-1);
+
+    _stack_sealcap = cheri_setbounds(r_sealroot, 1);
+    _coport_invoke_return = cheri_getpcc();
+    _coport_invoke_return = cheri_setaddress(_coport_invoke_return, (vaddr_t)&cinvoke_return);
+    _coport_invoke_return = cheri_seal(_coport_invoke_return, _stack_sealcap);
 }
 
 

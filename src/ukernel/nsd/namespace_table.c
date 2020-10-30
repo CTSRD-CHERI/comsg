@@ -158,6 +158,7 @@ allocate_nsobject(namespace_t *parent)
 	obj_cap->nsobj = new_nsobject_entry();
 	parent = unseal_ns(parent);
 	LIST_INSERT_HEAD(&parent->members->objects, obj_cap, entries);
+	parent->members->nobjects++;
 
 	return (obj_cap->nsobj);
 }
@@ -179,6 +180,7 @@ allocate_namespace(namespace_t *parent, nstype_t type)
 	obj_cap->ns = new_namespace_entry();
 	parent = unseal_ns(parent);
 	LIST_INSERT_HEAD(&parent->members->namespaces, obj_cap, entries);
+	parent->members->nspaces++;
 
 	return (obj_cap->ns);
 }

@@ -87,6 +87,8 @@ int main(int argc, char *const argv[])
 	int opt, error;
 	char *lookup_string;
 	void *init_cap;
+
+	is_ukernel = true;
 	
 	while((opt = getopt(argc, argv, "")) != -1) {
 		switch (opt) {

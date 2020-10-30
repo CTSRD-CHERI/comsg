@@ -34,6 +34,7 @@
 #include "nsd_lookup.h"
 
 #include <cheri/cheric.h>
+#include <cheri/cherireg.h>
 #include <cocall/cocall_args.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
@@ -47,9 +48,7 @@ int validate_coinsert_args(coinsert_args_t *cocall_args)
 	if (!valid_namespace_cap(cocall_args->ns_cap))
 		return (0);
 	if (cocall_args->obj != NULL) {
-		if (cheri_getsealed(cocall_args->obj))
-			return (0);
-		else if (!cheri_local(cocall_args->obj))
+		if ((cheri_getperm(cocall_args->obj) & CHERI_PERM_GLOBAL) == 1)
 			return (0);
 	}
 	else if (cocall_args->nsobj_type != RESERVATION)

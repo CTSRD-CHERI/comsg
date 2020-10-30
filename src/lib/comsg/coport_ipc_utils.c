@@ -30,6 +30,7 @@
  */
 
 #include "coport_ipc_utils.h"
+#include "coport_cinvoke.h"
 
 #include <coproc/coport.h>
 #include <coproc/utils.h>
@@ -54,7 +55,7 @@ static nsobject_t *cosend_obj = NULL;
 static nsobject_t *corecv_obj = NULL;
 
 static struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
-static struct object_type *allocated_otypes[] = {&copipe_otype, &cochannel_otype};
+static struct object_type *allocated_otypes[] = {&copipe_otype};
 
 coport_type_t 
 coport_gettype(coport_t *port)
@@ -66,10 +67,10 @@ coport_gettype(coport_t *port)
     port_otype = cheri_gettype(port);
     if(port_otype == cocarrier_otype.otype)
         return (COCARRIER);
+     else if (port_otype == cochannel_otype.otype)
+        return (COCHANNEL);
     else if (port_otype == copipe_otype.otype)
         return (COPIPE);
-    else if (port_otype == cochannel_otype.otype)
-        return (COCHANNEL);
     else
         return (INVALID_COPORT);  
 }
@@ -181,7 +182,7 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
         return (-1);
     }
 
-    if(acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) && ((COPORT_CLOSING | COPORT_CLOSED) != 0))
+    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0)
         return (-1);
 
     event = port->info->event;
@@ -229,7 +230,7 @@ cochannel_corecv(const coport_t *port, void *buf, size_t len)
         return (-1);
     }
     new_len = port_size - len;
-    if(acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) && ((COPORT_CLOSING | COPORT_CLOSED) != 0))
+    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0)
         return (-1);
     
     event = port->info->event;
@@ -287,24 +288,27 @@ copipe_corecv(const coport_t *port, void *buf, size_t len)
     return (cheri_getlen(buf));
 }
 
+
 __attribute__ ((constructor)) static void
 coport_ipc_utils_init(void)
 {
 	int mib[4];
     size_t len;
     int cores;
-    void *sealroot;
+    void *sealroot, *returncap_sealroot;
 
     assert(sysarch(CHERI_GET_SEALCAP, &sealroot) != -1);
 
     assert((cheri_gettag(sealroot) != 0));    
     assert(cheri_getlen(sealroot) != 0);
     assert((cheri_getperm(sealroot) & CHERI_PERM_SEAL) != 0);
-    /* TODO-PBB: simulate a divided otype space elsewhere */
+    /* TODO-PBB: simulate a divided otype space, pending type manager */
     sealroot = cheri_incoffset(sealroot, 128);
 
-    sealroot = make_otypes(sealroot, 2, allocated_otypes);
+    sealroot = make_otypes(sealroot, 1, allocated_otypes);
+    cochannel_otype = copipe_otype;
     cocarrier_otype.otype = 0;
+    setup_cinvoke_targets(copipe_otype.sc);
 
     len = sizeof(cores); 
     mib[0] = CTL_HW;

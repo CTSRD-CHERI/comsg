@@ -33,6 +33,7 @@
 #include "dance.h"
 
 #include <cocall/cocall_args.h>
+#include <coproc/utils.h>
 
 #include <err.h>
 #include <sys/errno.h>
@@ -143,7 +144,7 @@ void ipcd_init(cocall_args_t *cocall_args, void *token)
 	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
 		return;
 
-	while(atomic_load_explicit(&codiscover_scb, memory_order_acquire) == NULL) {
+	while((atomic_load_explicit(&codiscover_scb, memory_order_acquire) == NULL) || (atomic_load_explicit(&global_namespace, memory_order_acquire) == NULL)) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
 		// this implementation may not do what we want (priority inversion?)
 		sched_yield();
@@ -161,6 +162,7 @@ void ipcd_init(cocall_args_t *cocall_args, void *token)
 
 void coproc_user_init(cocall_args_t *cocall_args, void *token)
 {
+	UNUSED(token);
 	if (atomic_load_explicit(&codiscover_scb, memory_order_acquire) == NULL) {
 		/* nsd has not yet started */
 		COCALL_ERR(cocall_args, EAGAIN);

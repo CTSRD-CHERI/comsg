@@ -37,7 +37,7 @@
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
 
-
+#include <stdbool.h>
 #include <stddef.h>
 
 
@@ -54,6 +54,8 @@
 #define COCALL_CORECV (10)
 #define COCALL_COPOLL (11)
 #define COCALL_COPROC_INIT (12)
+#define COCALL_COCREATE (13)
+#define COCALL_CODROP (14)
 
 #define U_COOPEN "coopen"
 #define U_COCLOSE "coclose"
@@ -70,16 +72,19 @@
 #define U_COSELECT "coselect"
 #define U_COUPDATE "coupdate" 
 #define U_CODELETE "codelete"
+#define U_COPROC_INIT "coproc_init"
 
-#define n_ukern_calls (13)
+#define n_ukern_calls (15)
 
 extern namespace_t *global_ns;
+extern bool is_ukernel;
 
 namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb);
 nsobject_t *coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns);
 nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);
 coservice_t *codiscover(nsobject_t *nsobj, void **scb);
 coservice_t *coprovide(void **worker_scbs, int nworkers);
+namespace_t *cocreate(const char *name, nstype_t type, namespace_t *parent);
 coport_t *coopen(coport_type_t type);
 void *cocarrier_recv(coport_t *port, size_t len);
 int cocarrier_send(coport_t *port, void *buf, size_t len);

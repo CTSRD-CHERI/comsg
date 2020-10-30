@@ -34,9 +34,6 @@
 #include <coproc/coport.h>
 #include <stddef.h>
 
-int cosend_cinvoke(coport_t *port, void *buf, size_t len);
-int corecv_cinvoke(coport_t *port, void **buf, size_t len);
-int cosend_impl(coport_t *port, void *buf, size_t len);
-int corecv_impl(coport_t *port, void **buf, size_t len);
+void setup_cinvoke_targets(void *coport_sealcap);
 
 #endif

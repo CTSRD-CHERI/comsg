@@ -56,7 +56,6 @@ dkms.conf
 setup.sh
 output
 build
-tests
 *.swo
 *.swp
 *.dump

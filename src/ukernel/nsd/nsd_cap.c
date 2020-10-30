@@ -55,6 +55,7 @@ setup_otypes(void)
     if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0) {
         err(errno, "setup_otypes: error in sysarch - could not get sealroot");
     }
+    sealroot = cheri_incoffset(sealroot, 96);
     sealroot = make_otypes(sealroot, required_otypes, global_object_types);
 }
 

@@ -40,6 +40,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <sys/queue.h>
 #include <sys/time.h>
@@ -55,6 +56,12 @@ static const int bucket_batch = 64;
 static pthread_t bucket_refiller, batch_freer;
 
 typedef enum {UNINITIALIZED=0, READY=1, ALLOCATED=2, SPLIT=3, FREED=4} bucket_entry_status_t;
+
+
+#if 0
+#define err(n, s, ...) do { printf("%s: Errno=%d\n", s, n); kill(getpid(), SIGSEGV); } while(0)
+#endif 
+
 
 struct _bucket_entry {
 	TAILQ_ENTRY(_bucket_entry) next;
@@ -84,7 +91,7 @@ struct bucket {
 };
 
 struct {
-	struct bucket buckets[MAX_BUCKETS];
+	struct bucket *buckets;
 	size_t sizes[MAX_BUCKETS]; 
 	size_t nbuckets;
 	struct bucket *flexible_bucket;
@@ -99,6 +106,20 @@ int bucket_compare(const void* arg1, const void* arg2)
 	if (b1.size > b2.size) 
 		return 1;
 	else if (b1.size < b2.size)
+		return -1;
+	else
+		return 0;
+}
+
+static 
+int bucketsize_compare(const void* arg1, const void* arg2) 
+{
+	size_t b1, b2;
+	b1 = (*(size_t *)arg1);
+	b2 = (*(size_t *)arg2);
+	if (b1 > b2) 
+		return 1;
+	else if (b1 < b2)
 		return -1;
 	else
 		return 0;
@@ -295,20 +316,25 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 		err(EINVAL, "ccmalloc_init: number of requested buckets (%lu) invalid", nbuckets);
 	else if (cheri_getlen(bucket_sizes) < (nbuckets * sizeof(size_t)))
 		err(EINVAL, "ccmalloc_init: invalid bounds for number of requested buckets (%lu) ", nbuckets);
-
-	for(i = 0; i < nbuckets; i++) {
-		init_bucket(&bucket_table.buckets[i], bucket_sizes[i]);
+	
+	qsort(bucket_sizes, nbuckets, sizeof(size_t), bucketsize_compare);
+	bucket_table.sizes[0] = bucket_sizes[0];
+	bucket_table.nbuckets = 1;
+	for (i = 1; i < nbuckets; i++) {
+		if (bucket_sizes[bucket_table.nbuckets-1] == bucket_sizes[i]) {
+			continue;
+		}
+		bucket_table.sizes[bucket_table.nbuckets] = bucket_sizes[i];
 		bucket_table.nbuckets++;
 	}
-	qsort(bucket_table.buckets, bucket_table.nbuckets, sizeof(struct bucket), bucket_compare);
+	bucket_table.sizes[bucket_table.nbuckets] = 0;
 
-	bucket_table.flexible_bucket = &bucket_table.buckets[nbuckets-1];
-	bucket_table.sizes[0] = bucket_table.buckets[0].size;
-	for(i = 1; i < bucket_table.nbuckets; i++) {
-		if (bucket_table.sizes[i-1] == bucket_table.sizes[i]) 
-			continue;
-		bucket_table.sizes[i] = bucket_table.buckets[i].size;
+	bucket_table.buckets = calloc(bucket_table.nbuckets, sizeof(struct bucket));
+	for(i = 0; i < bucket_table.nbuckets; i++) {
+		init_bucket(&bucket_table.buckets[i], bucket_table.sizes[i]);
 	}
+	bucket_table.flexible_bucket = &bucket_table.buckets[nbuckets-1];
+	
 	
 	error = pthread_create(&bucket_refiller, NULL, refill_buckets, NULL);
 	if (error)

@@ -34,6 +34,7 @@
 
 #include <assert.h>
 #include <err.h>
+#include <stdio.h>
 #include <sys/errno.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -60,15 +61,19 @@ void coaccept_init(
     if(cosetup(COSETUP_COACCEPT, code_cap, data_cap) != 0)
         err(errno, "coaccept_init: could not cosetup");
 
-    if (target_name != NULL) {
-        if (target_name[0] == '\0') {
-            *target_cap = *data_cap;
-        }
-        else if(coregister(target_name, target_cap) != 0)
+    if (target_name == NULL) {
+        //printf("coaccept_init: null target_name\n");
+        *target_cap = *data_cap;
+    }
+    else if (target_name[0] == '\0') {
+        //printf("coaccept_init: empty string target_name\n");
+        *target_cap = *data_cap;
+    }
+    else {
+        //printf("coaccept_init: coregistering as %s\n", target_name);
+        if(coregister(target_name, target_cap) != 0)
             err(errno, "coaccept_init: could not coregister with name %s", target_name);
     }
-    else
-        *target_cap = *data_cap;
 
     pthread_cond_signal(&registration_cond);
     pthread_mutex_unlock(&registration_mutex);
@@ -94,32 +99,6 @@ start_coaccept_worker(worker_args_t *thread_args)
     return;
 }
 
-void *coaccept_worker(void *worker_argp)
-{
-	void *sw, *scb, *cookie;
-	cocall_args_t cocall_args, *cocall_args_ptr;
-    
-    cocall_args_ptr = &cocall_args;
-    cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(cocall_args_t));
-    assert(cheri_local(cocall_args_ptr));
-    assert(cheri_getperm(cocall_args_ptr) & CHERI_PERM_STORE_LOCAL_CAP);
-
-	worker_args_t *worker_args = worker_argp;
-	coaccept_init(&sw, &scb, worker_args->name, &worker_args->scb_cap);
-	for(;;) {
-		if(coaccept(sw, scb, &cookie, cocall_args_ptr, sizeof(cocall_args_t)) == 0) {
-            if(worker_args->validation_function != NULL) 
-                if(!worker_args->validation_function(cocall_args_ptr)) {
-                    cocall_args_ptr->status = -1;
-                    cocall_args_ptr->error = EINVAL;
-                    continue;
-                }
-            worker_args->worker_function(cocall_args_ptr, cookie);
-        } else
-			err(errno, "coaccept_worker: worker failed to coaccept");
-	}
-    return (worker_args);
-}
 
 void 
 start_sloaccept_worker(worker_args_t *thread_args)
@@ -140,6 +119,38 @@ start_sloaccept_worker(worker_args_t *thread_args)
     return;
 }
 
+void *coaccept_worker(void *worker_argp)
+{
+	void *sw, *scb, *cookie;
+    void **cookie_cap;
+	cocall_args_t cocall_args, *cocall_args_ptr;
+
+    cookie_cap = &cookie;
+    
+    cocall_args_ptr = &cocall_args;
+    cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(cocall_args_t));
+    memset(cocall_args_ptr, '\0', cheri_getlen(cocall_args_ptr));
+    assert(cheri_local(cocall_args_ptr));
+    assert(cheri_getperm(cocall_args_ptr) & CHERI_PERM_STORE_LOCAL_CAP);
+
+	worker_args_t *worker_args = worker_argp;
+	coaccept_init(&sw, &scb, worker_args->name, &worker_args->scb_cap);
+	for(;;) {
+		if(coaccept(sw, scb, &cookie, cocall_args_ptr, sizeof(cocall_args_t)) == 0) {
+            if(cheri_gettag(worker_args->validation_function) != 0) {
+                if((*worker_args->validation_function)(cocall_args_ptr) == 0) {
+                    cocall_args_ptr->status = -1;
+                    cocall_args_ptr->error = EINVAL;
+                    continue;
+                }
+            }
+            (*worker_args->worker_function)(cocall_args_ptr, cookie);
+        } else
+			err(errno, "coaccept_worker: worker failed to coaccept");
+	}
+    return (worker_args);
+}
+
 void *sloaccept_worker(void *worker_argp)
 {
     void *sw, *scb, *cookie;
@@ -147,6 +158,7 @@ void *sloaccept_worker(void *worker_argp)
     
     cocall_args_ptr = &cocall_args;
     cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(struct _cocall_args));
+    memset(cocall_args_ptr, '\0', cheri_getlen(cocall_args_ptr));
     assert(cheri_local(cocall_args_ptr));
     assert(cheri_getperm(cocall_args_ptr) & CHERI_PERM_STORE_LOCAL_CAP);
 
@@ -154,13 +166,13 @@ void *sloaccept_worker(void *worker_argp)
     coaccept_init(&sw, &scb, worker_args->name, &worker_args->scb_cap);
     for(;;) {
         if(coaccept_slow(sw, scb, &cookie, cocall_args_ptr, sizeof(struct _cocall_args)) == 0) {
-            if(worker_args->validation_function != NULL) 
-                if(!worker_args->validation_function(cocall_args_ptr)) {
+            if(cheri_gettag(worker_args->validation_function) != 0) 
+                if((*worker_args->validation_function)(cocall_args_ptr) == 0) {
                     cocall_args_ptr->status = -1;
                     cocall_args_ptr->error = EINVAL;
                     continue;
                 }
-            worker_args->worker_function(cocall_args_ptr, cookie);
+            (*worker_args->worker_function)(cocall_args_ptr, cookie);
         } else
             err(errno, "coaccept_worker: worker failed to coaccept");
     }

@@ -42,7 +42,7 @@ typedef struct call_set {
 	int ncalls;
 } call_set_t;
 
-static int default_ncalls = 13;
+static int default_ncalls = 32;
 static pthread_key_t last_key = -1;
 static int last_ncalls = 0;
 
