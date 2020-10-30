@@ -29,8 +29,8 @@
 #include <cheri/cherireg.h>
 #include <stdatomic.h>
 
-#define COSERVICE_CODISCOVER_PERMS (1)
-#define COSERVICE_PROVIDE_PERMS (1)
+#define COSERVICE_CODISCOVER_PERMS (-1)
+#define COSERVICE_PROVIDE_PERMS (-1)
 #define COSERVICE_MAX_WORKERS (128)
 
 typedef struct _coservice

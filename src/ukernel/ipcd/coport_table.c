@@ -64,19 +64,19 @@ void setup_table(void)
 	size_t top_of_table;
 
 	cocarrier_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	top_of_table = (cheri_getlen(cocarrier_table.coports) / sizeof(coport_t)) - 1;
+	top_of_table = (cheri_getlen(cocarrier_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
 	cocarrier_table.next_coport = top_of_table;
 	cocarrier_table.first_coport = top_of_table;
 	cocarrier_table.ncoports = 0;
 
 	copipe_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	top_of_table = (cheri_getlen(copipe_table.coports) / sizeof(coport_t)) - 1;
+	top_of_table = (cheri_getlen(copipe_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
 	copipe_table.next_coport = top_of_table;
 	copipe_table.first_coport = top_of_table;
 	copipe_table.ncoports = 0;
 
 	cochannel_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	top_of_table = (cheri_getlen(cochannel_table.coports) / sizeof(coport_t)) - 1;
+	top_of_table = (cheri_getlen(cochannel_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
 	cochannel_table.next_coport = top_of_table;
 	cochannel_table.first_coport = top_of_table;
 	cochannel_table.ncoports = 0;
@@ -106,18 +106,19 @@ struct _coport_table *get_coport_table(coport_type_t type)
 
 coport_t *allocate_coport(coport_type_t type)
 {
-	coport_tbl_entry_t *entry;
+	struct _coport_table *coport_table;
 	coport_t *ptr;
+	size_t index;
 
-	struct _coport_table *coport_table = get_coport_table(type);
-	size_t index = atomic_fetch_sub(&coport_table->next_coport, 1);
-
-	entry = &coport_table->coports[index];
-	ptr = cheri_setboundsexact(&entry->port, sizeof(coport_t));
+	coport_table = get_coport_table(type);
+	index = atomic_fetch_sub(&coport_table->next_coport, 1);
+	
+	ptr = &coport_table->coports[index].port;
+	ptr = cheri_setboundsexact(ptr, sizeof(coport_t));
 	memset(ptr, 0, sizeof(coport_t));
 
 	atomic_fetch_add(&coport_table->ncoports, 1);
-	atomic_store_explicit(&entry->ref_count, 1, memory_order_release);
+	atomic_store_explicit(&coport_table->coports[index].ref_count, 1, memory_order_release);
 	return (ptr);
 }
 

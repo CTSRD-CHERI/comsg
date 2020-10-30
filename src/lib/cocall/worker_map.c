@@ -30,6 +30,8 @@
  */
 #include <cocall/worker_map.h>
 #include <cocall/worker.h>
+#include <coproc/namespace.h>
+
 
 #include <cheri/cheric.h>
 #include <err.h>
@@ -63,6 +65,7 @@ void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map
 #else
         memset(thread_args->name, '\0', NS_NAME_LEN);
 #endif
+        thread_args->validation_function = arg_func;
         thread_args->worker_function = func;
         start_coaccept_worker(thread_args);
         
@@ -92,10 +95,14 @@ spawn_slow_worker_thread(worker_args_t *worker, function_map_t *func_map)
         worker_arr = calloc(func_map->nworkers, sizeof(worker_args_t));
     else
         worker_arr = realloc(func_map->workers, (func_map->nworkers * sizeof(worker_args_t)));
-    worker_arr[idx] = *worker;
+    
     func_map->workers = cheri_andperm(worker_arr, FUNC_MAP_PERMS);
-
     thread_args = cheri_setbounds(&worker_arr[idx], sizeof(worker_args_t));
+    
+    thread_args->worker_function = worker->worker_function;
+    thread_args->validation_function = worker->validation_function;
+    strcpy(thread_args->name, worker->name);
+    
     start_sloaccept_worker(thread_args);
     
     return;
@@ -116,10 +123,14 @@ spawn_worker_thread(worker_args_t *worker, function_map_t *func_map)
         worker_arr = calloc(func_map->nworkers, sizeof(worker_args_t));
     else
         worker_arr = realloc(func_map->workers, (func_map->nworkers * sizeof(worker_args_t)));
-    worker_arr[idx] = *worker;
+   
     func_map->workers = cheri_andperm(worker_arr, FUNC_MAP_PERMS);
-
     thread_args = cheri_setbounds(&worker_arr[idx], sizeof(worker_args_t));
+    
+    thread_args->worker_function = worker->worker_function;
+    thread_args->validation_function = worker->validation_function;
+    strncpy(thread_args->name, worker->name, NS_NAME_LEN);
+  
     start_coaccept_worker(thread_args);
     
     return;

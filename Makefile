@@ -9,13 +9,16 @@ INC_DIRS += $(COMSG_DIR)/include
 INC_FLAGS := $(addprefix -isystem,$(INC_DIRS))
 
 LDFLAGS :=-fuse-ld=lld -Wl,-znow -L $(OUT_DIR)
-CFLAGS := -g -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 \
-	-mabi=purecap -fPIE -mstack-alignment=16 -fPIC -v
+CFLAGS := -g -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 -mabi=purecap -mstack-alignment=16 -fPIC -fPIE -v
+CFLAGS := -g -fPIC -fPIE -v 
+
 
 export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS
 
 LIBS := $(addprefix lib,$(shell find $(SRC_DIR)/lib -mindepth 1 -type d -exec basename {} \;))
 UKERNEL_EXECS := $(shell find $(SRC_DIR)/ukernel -mindepth 1 -type d -exec basename {} \;)
+TESTS := $(shell find $(SRC_DIR)/tests -mindepth 1 -type d -exec basename {} \;)
+
 
 libcoproc:
 	$(MAKE) -C $(SRC_DIR)/lib/$(subst lib,,$@) $@
@@ -50,6 +53,13 @@ $(UKERNEL_EXECS): libs
 
 .PHONY: ukernel
 ukernel : libs $(UKERNEL_EXECS)
+
+$(TESTS): libs ukernel
+	$(MAKE) -C $(SRC_DIR)/tests/$@ $@
+	cp $(OUT_DIR)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+
+.PHONY: tests
+tests : libs ukernel $(TESTS)
 
 .PHONY: clean
 clean : 

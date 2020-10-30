@@ -28,26 +28,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COPORT_IPC_CINVOKE_H
+#define _COPORT_IPC_CINVOKE_H
 
-#include <err.h>
-#include <machine/sysarch.h>
-#include <sys/errno.h>
-#include <unistd.h>
+#include <coproc/coport.h>
+#include <stddef.h>
 
-static char *coprocd_args[] = {"/usr/bin/coprocd", NULL};
-extern char **environ;
-static void *sealroot;
 
-int main(int argc, char *const argv[])
-{
-	pid_t test_pid, coprocd_pid;
+typedef int (*coport_func_ptr)(coport_t *, void *, size_t);
+extern const coport_func_ptr *cosend_codecap;
+extern const coport_func_ptr *corecv_codecap;
+extern const void **cinvoke_return_cap;
+extern const void **return_stack_sealcap;
 
-    if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0)
-    	err(errno, "setup_otypes: error in sysarch - could not get sealroot");
+extern int coport_cinvoke(void *codecap, coport_t *coport, void *buf, size_t len);
 
-    test_pid = getpid();
-    coprocd_pid = fork();
-    if (coprocd_pid != 0)
-    	coexecve(test_pid, coprocd_args[0], coprocd_args, environ);
-	return (0);
-}
+#define cosend_cinvoke(port, buffer, length) coport_cinvoke(*cosend_codecap, port, buffer, (*cinvoke_return_cap), (*return_stack_sealcap), length)
+#define corecv_cinvoke(port, buffer, length) coport_cinvoke(*corecv_codecap, port, buffer, (*cinvoke_return_cap), (*return_stack_sealcap), length)
+
+
+#endif

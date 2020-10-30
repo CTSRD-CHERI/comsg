@@ -32,6 +32,7 @@
 #include "daemons.h"
 
 #include <cocall/worker_map.h>
+#include <comsg/ukern_calls.h>
 
 #include <stdlib.h>
 #include <pthread.h>
@@ -40,11 +41,12 @@ int main(int argc, char const *argv[])
 {
 	function_map_t *user_prog_mgr;
 	
+	is_ukernel = true;
 	//we can dance if we want to
 	spawn_daemons();
 
 	for(;;) {
-		user_prog_mgr = spawn_worker("COPROC_INIT", coproc_user_init, NULL);
+		user_prog_mgr = spawn_worker(U_COPROC_INIT, coproc_user_init, NULL);
 		pthread_join(user_prog_mgr->workers[0].worker, NULL);
 		free(user_prog_mgr->workers);
 		free(user_prog_mgr);

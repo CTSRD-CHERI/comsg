@@ -46,6 +46,7 @@
 #include <comsg/ukern_calls.h>
 
 #include <assert.h>
+#include <cheri/cheric.h>
 #include <err.h>
 #include <sys/errno.h>
 
@@ -71,11 +72,9 @@ void ipcd_startup(void)
 
 	do {
 		coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, global_ns);
-		if(coprovide_nsobj == NULL)
+		if(cheri_gettag(coprovide_nsobj) == 0)
 			continue;
-		else if (cheri_getsealed(coprovide_nsobj))
-			continue;
-		else if (coprovide_nsobj->obj == NULL)
+		else if (cheri_gettag(coprovide_nsobj->obj) == 0)
 			continue;
 	} while (0);
 	

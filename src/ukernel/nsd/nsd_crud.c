@@ -127,13 +127,17 @@ namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *pare
 		global_ns = ns_ptr;
 	}
 	else {
-		parent_cap = cheri_andperm(parent, NS_PERMS_OBJ);
+		if (cheri_getsealed(parent)) 
+			parent_cap = unseal_ns(parent);
+		parent_cap = cheri_andperm(parent_cap, NS_PERMS_OBJ_MASK);
 		parent_cap = seal_ns(parent_cap);
+
 		ns_ptr->parent = parent_cap;
 	}
 
 	init_ns_members(ns_ptr);
 	ns_ptr = cheri_andperm(ns_ptr, NS_PERMS_OWN_MASK);
+	ns_ptr = seal_ns(ns_ptr);
 	
 	return (ns_ptr);
 }
