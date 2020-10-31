@@ -54,6 +54,7 @@ void namespace_object_update(coupdate_args_t *cocall_args, void *token)
 	UNUSED(token);
 	nsobject_t *nsobj, *parent_obj;
 
+
 	/* BIGTODO-PBB: I'm almost certain there are many races now. Fix this. */
 	nsobj = unseal_nsobj(cocall_args->nsobj);
 	if (nsobj == NULL)
@@ -65,10 +66,6 @@ void namespace_object_update(coupdate_args_t *cocall_args, void *token)
 
 	nsobj->type = cocall_args->nsobj_type;
 	switch(cocall_args->nsobj_type) {
-		case COMMAP:
-			nsobj->obj = cocall_args->obj;
-			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
-			break;
 		case COSERVICE:
 			nsobj->coservice = cocall_args->coservice;
 			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
@@ -77,7 +74,10 @@ void namespace_object_update(coupdate_args_t *cocall_args, void *token)
 			nsobj->coport = cocall_args->coport;
 			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
 			break;
+			case COMMAP:
 		default:
+			nsobj->obj = cocall_args->obj;
+			nsobj = CLEAR_NSOBJ_STORE_PERM(nsobj);
 			break;
 	}
 	cocall_args->nsobj = nsobj;
