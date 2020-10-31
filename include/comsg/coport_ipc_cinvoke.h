@@ -38,13 +38,12 @@
 typedef int (*coport_func_ptr)(coport_t *, void *, size_t);
 extern const coport_func_ptr *cosend_codecap;
 extern const coport_func_ptr *corecv_codecap;
-extern const void **cinvoke_return_cap;
 extern const void **return_stack_sealcap;
 
-extern int coport_cinvoke(void *codecap, coport_t *coport, void *buf, size_t len);
+extern int coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
 
-#define cosend_cinvoke(port, buffer, length) coport_cinvoke(*cosend_codecap, port, buffer, (*cinvoke_return_cap), (*return_stack_sealcap), length)
-#define corecv_cinvoke(port, buffer, length) coport_cinvoke(*corecv_codecap, port, buffer, (*cinvoke_return_cap), (*return_stack_sealcap), length)
+#define cosend_cinvoke(port, buffer, length) coport_cinvoke(*cosend_codecap, port, buffer, (*return_stack_sealcap), length)
+#define corecv_cinvoke(port, buffer, length) coport_cinvoke(*corecv_codecap, port, buffer, (*return_stack_sealcap), length)
 
 
 #endif
