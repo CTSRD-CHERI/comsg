@@ -59,15 +59,17 @@ do_tests(void)
 	namespace_t *proc_ns;
 	coport_t *port;
 	nsobject_t *port_obj;
-	int sent, recvd;
+	int sent, recvd, error;
 	char *recv;
-	char *ns_name = calloc(32, sizeof(char));
+	char *ns_name;
 
+	ns_name = calloc(32, sizeof(char));
 	strcpy(ns_name, default_name);
+	recv = malloc(strlen(test_str)+1);
 
 coproc_init_lbl:
 	printf("coproctest: initializing coproc...");
-		global_ns = coproc_init(NULL, NULL, NULL, NULL);
+	global_ns = coproc_init(NULL, NULL, NULL, NULL);
 	if (global_ns != NULL) 
 		printf("\t success!\n");
 	else {
@@ -79,37 +81,148 @@ coproc_init_lbl:
 		printf("\n");
 		err(errno, "do_tests: coproc_init failed");
 	}
+	
 	printf("coproctest: creating namespace...");
 cocreate_lbl:
 	proc_ns = cocreate(ns_name, APPLICATION, global_ns);
 	if (proc_ns != NULL) 
 		printf("\tsuccess!\n");
 	else {
-		if (ns_name[10] < 'Z') {
+		if (errno == EEXIST && ns_name[10] < 'Z') {
 			ns_name[10]++;
 			goto cocreate_lbl;
 		}
 		err(errno, "coproctest: do_tests: cocreate failed");
 	}
-	printf("coproctest: creating named coport...");
+	
+	printf("coproctest: creating named COCHANNEL...");
 	port_obj = open_named_coport("test_coport", COCHANNEL, proc_ns);
 	if (port_obj != NULL)
 		printf("\tsuccess!\n");
 	else
 		err(errno, "coproctest: do_tests: open_named_coport failed");
+	
 	printf("coproctest: sending message... \"%s\"", test_str);
 	sent = cosend_cinvoke(port_obj->coport, test_str, strlen(test_str));
 	if (sent > 0)
 		printf("\tsuccess!\n");
 	else
 		err(errno, "coproctest: do_tests: cosend_cinvoke failed");
+	
 	printf("coproctest: receiving message...");
-	recv = malloc(strlen(test_str)+1);
 	recvd = corecv_cinvoke(port_obj->coport, (void **)&recv, strlen(test_str));
 	if (recvd > 0)
 		printf("\tsuccess! received \"%s\"\n", recv);
 	else
 		err(errno, "coproctest: do_tests: corecv_cinvoke failed");
+	
+	
+	printf("coproctest: deleting coport namespace object...");
+	error = codelete(port_obj, proc_ns);
+	if (error == 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: delete failed");
+
+	printf("coproctest: closing coport...");
+	error = coclose(port_obj->coport);
+	if (error == 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: coclose failed");
+
+	printf("coproctest: creating reservation...");
+	port_obj = coinsert("test_coport", RESERVATION, NULL, proc_ns);
+	if (port_obj != NULL)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: coinsert failed");
+
+	printf("coproctest: creating unnamed COPIPE...");
+	port = open_coport(COPIPE);
+	if (port == NULL)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: open_coport failed");
+	
+	printf("coproctest: assigning name to COPIPE via reservation...");
+	port_obj = coupdate(port_obj, port);
+	if (port_obj != NULL)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: coupdate failed");
+	
+	printf("coproctest: sending message... \"%s\"", test_str);
+	sent = cosend_cinvoke(port_obj->coport, test_str, strlen(test_str));
+	if (sent > 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: cosend_cinvoke failed");
+	
+	printf("coproctest: receiving message...");
+	recvd = corecv_cinvoke(port_obj->coport, (void **)&recv, strlen(test_str));
+	if (recvd > 0)
+		printf("\tsuccess! received \"%s\"\n", recv);
+	else
+		err(errno, "coproctest: do_tests: corecv_cinvoke failed");
+	free(recv);
+	recv = NULL;
+
+	printf("coproctest: closing coport...");
+	error = coclose(port_obj->coport);
+	if (error == 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: coclose failed");
+
+	printf("coproctest: deleting coport namespace object...");
+	error = codelete(port_obj, proc_ns);
+	if (error == 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: delete failed");
+
+	printf("coproctest: creating unnamed COCARRIER...");
+	port = open_coport(COCARRIER);
+	if (port == NULL)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: open_coport failed");
+
+	printf("coproctest: inserting coport into application namespace...");
+	port_obj = coinsert("test_coport", COPORT, port, proc_ns);
+	if (port_obj != NULL)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: coinsert failed");
+
+	sent = cocarrier_send(port_obj->coport, test_str, strlen(test_str));
+	if (sent > 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: cosend_cinvoke failed");
+
+	printf("coproctest: receiving message...");
+	recv = cocarrier_recv(port_obj->coport, strlen(test_str));
+	recvd = cheri_getlen(recv);
+	if (cheri_gettag(recv))
+		printf("\tsuccess! received \"%s\"\n", recv);
+	else
+		err(errno, "coproctest: do_tests: corecv_cinvoke failed");
+	
+	printf("coproctest: deleting coport namespace object...");
+	error = codelete(port_obj, proc_ns);
+	if (error == 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: delete failed");
+
+	printf("coproctest: closing coport...");
+	error = coclose(port_obj->coport);
+	if (error == 0)
+		printf("\tsuccess!\n");
+	else
+		err(errno, "coproctest: do_tests: coclose failed");
 }
 
 int main(int argc, char *const argv[])
