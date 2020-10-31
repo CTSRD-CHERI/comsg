@@ -51,7 +51,7 @@
 #define CINVOKE_FRAME_SIZE (11*CHERICAP_SIZE + 96)
 
 
-/* XXX-PBB: temporary  */
+/* XXX-PBB: register save/restore from cheri_invoke  */
 .text 
 .option pic0
 NESTED(coport_cinvoke, CINVOKE_FRAME_SIZE, _FRAME_RETURN_REG)
@@ -71,7 +71,7 @@ NESTED(coport_cinvoke, CINVOKE_FRAME_SIZE, _FRAME_RETURN_REG)
 
 	cgetdefault	$c12
 	cincoffset	$csp, $csp, -11*CHERICAP_SIZE
-	cgetoffset $t1, $csp
+
 	csc	$c17, $zero, 0($csp)
 	csc	$c18, $zero, CHERICAP_SIZE($csp)
 	csc	$c19, $zero, 2*CHERICAP_SIZE($csp)
@@ -84,11 +84,6 @@ NESTED(coport_cinvoke, CINVOKE_FRAME_SIZE, _FRAME_RETURN_REG)
 	csc	$c26, $zero, 9*CHERICAP_SIZE($csp)
 	csc	$c12, $zero, 10*CHERICAP_SIZE($csp)
 
-	cseal $c7, $csp, $c7
-	csetoffset $csp, $csp, $zero
-	csetbounds $csp, $csp, $t0
-	csetoffset $csp, $csp, $t1
-
 	/* Load argument registers */
 	cmove $c1, $c3
 	cmove $c2, $c4
@@ -97,15 +92,23 @@ NESTED(coport_cinvoke, CINVOKE_FRAME_SIZE, _FRAME_RETURN_REG)
 	 * $c3 is currently restored by inline assembly 
 	 * future abi ought to handle this for us
 	 */
+
 	cmove $c3, $cnull
 	cmove $c5, $cnull
+	/* Prepare ccall-return registers */
+	
+	cseal $c21, $csp, $c6 /* idc to restore on return */
+	cgetoffset $t1, $csp
+	csetoffset $csp, $csp, $zero /* now prevent callee access to lower frames than the current one */
+	csetbounds $csp, $csp, $t0
+	csetoffset $csp, $csp, $t1
+	
 
-	/* Load ccall-return registers */
-	cmove $c21, $c6
-	cmove $c22, $c7
+	cgetpcc $c22 /* return address, c17 will not work as it is saved by compiler generated code */
+	cincoffset $c22, $c22, 20
+	cseal $c22, $c22, $c6
 	cmove $c6, $cnull
-	cmove $c7, $cnull
-
+	
 	ccall $c1, $c2, 1
 	nop
 
@@ -143,35 +146,4 @@ XNESTED(cinvoke_return)
 	nop
 END(coport_cinvoke)
 
-#if 0
-
-.text
-.globl _C_LABEL(_cosend)
-_C_LABEL(_cosend):
-	cmove	$c3, $idc /* first arg is unsealed port cap */
-	lui		t9, %pcrel_hi(_CHERI_CAPABILITY_TABLE_ - 8)
-	daddiu		t9, t9, %pcrel_lo(_CHERI_CAPABILITY_TABLE_ - 4)
-	cgetpcc		$cgp				
-	cincoffset	$cgp, $cgp, t9
-	clcbi		$c12, %capcall20(cosend_impl)($cgp)
-	cjalr	$c12, $c17
-	nop
-	cjr		$c18 /* return from cinvoke */
-	nop
-
-.text
-.globl _C_LABEL(_corecv)
-_C_LABEL(_corecv):
-	cmove	$c3, $idc /* first arg to _corecv_impl is unsealed data cap */
-	lui		t9, %pcrel_hi(_CHERI_CAPABILITY_TABLE_ - 8)
-	daddiu		t9, t9, %pcrel_lo(_CHERI_CAPABILITY_TABLE_ - 4)
-	cgetpcc		$cgp				
-	cincoffset	$cgp, $cgp, t9
-	clcbi		$c12, %capcall20(corecv_impl)($cgp)
-	cjalr	$c12, $c17
-	nop
-	cjr		$c18 /* return from cinvoke */
-	nop
-
-#endif
 
