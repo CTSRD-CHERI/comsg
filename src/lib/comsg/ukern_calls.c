@@ -410,3 +410,61 @@ coclose(coport_t *coport)
 		return (0);
 
 }
+
+nsobject_t *coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
+{
+	coupdate_args_t cocall_args;
+	int error;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+
+	switch(type) {
+	case COMMAP:
+		cocall_args.obj = subject;
+		break;
+	case COPORT:
+		cocall_args.coport = subject;
+		break;
+	case COSERVICE:
+		cocall_args.coservice = subject;
+		break;
+	case INVALID_NSOBJ:
+	case RESERVATION:
+	default:
+		err(EINVAL, "coupdate: invalid object type %d for coupdate", type);
+		break;
+	}
+	cocall_args.nsobj_type = type;
+	cocall_args.nsobj = nsobj;
+
+	error = ukern_call(COCALL_COUPDATE, &cocall_args);
+	if (error != 0) 
+		err(errno, "cupdate: error performing cocall");
+	else if (cocall_args.status == -1) {
+		//TODO-PBB: handle errors better? or leave it to consumers?
+		errno = cocall_args.error;
+		return (NULL);
+	}
+	
+	return (cocall_args.nsobj);	
+}
+
+int codelete(nsobject_t *nsobj, namespace_t *parent)
+{
+	codelete_args_t cocall_args;
+	int error;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	cocall_args.nsobj = nsobj;
+	cocall_args.ns_cap = parent;
+
+	error = ukern_call(COCALL_CODELETE, &cocall_args);
+	if (error != 0) 
+		err(errno, "cupdate: error performing cocall");
+	else if (cocall_args.status == -1)
+		errno = cocall_args.error;
+
+	return (cocall_args.status);
+}
+
+
