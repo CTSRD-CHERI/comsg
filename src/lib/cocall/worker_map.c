@@ -141,7 +141,9 @@ function_map_t *spawn_slow_worker(const char *worker_name, void *func, void *val
     worker_args_t wargs;
     function_map_t *map = new_function_map();
     
-    strncpy(wargs.name, worker_name, NS_NAME_LEN);
+    memset(&wargs, '\0', sizeof(wargs));
+    if(worker_name != NULL)
+        strncpy(wargs.name, worker_name, NS_NAME_LEN);
     wargs.worker_function = func;
     wargs.validation_function = valid; 
     
@@ -154,7 +156,10 @@ function_map_t *spawn_worker(const char *worker_name, void *func, void *valid)
     worker_args_t wargs;
     function_map_t *map = new_function_map();
     
-    strncpy(wargs.name, worker_name, NS_NAME_LEN);
+    memset(&wargs, '\0', sizeof(wargs));
+    if(worker_name != NULL)
+        strncpy(wargs.name, worker_name, NS_NAME_LEN);
+
     wargs.worker_function = func;
     wargs.validation_function = valid; 
     
@@ -175,8 +180,9 @@ void **get_worker_scbs(function_map_t *func)
 {
     int nworkers = func->nworkers;
     void **scbs = calloc(nworkers, CHERICAP_SIZE);
-    for(int i = 0; i < nworkers; i++)
+    for(int i = 0; i < nworkers; i++) 
         scbs[i] = func->workers[i].scb_cap;
+    
 
     return (scbs);
 }
