@@ -35,8 +35,8 @@
 #include <threads.h>
 #include <unistd.h>
 
-static _Thread_local void *code_cap = NULL;
-static _Thread_local void *data_cap = NULL;
+static thread_local void *code_cap = NULL;
+static thread_local void *data_cap = NULL;
 
 static 
 void cocall_init(void)
@@ -49,14 +49,14 @@ void cocall_init(void)
 
 int cocall_tls(void *target, void *buffer, size_t len)
 {
-	if (code_cap == NULL || data_cap == NULL)
+	if ((code_cap == NULL) || (data_cap == NULL))
 		cocall_init();
 	return (cocall(code_cap, data_cap, target, buffer, len));
 }
 
 int slocall_tls(void *target, void *buffer, size_t len)
 {
-	if (code_cap == NULL || data_cap == NULL)
+	if ((code_cap == NULL) || (data_cap == NULL))
 		cocall_init();
 	return (cocall_slow(code_cap, data_cap, target, buffer, len));
 }

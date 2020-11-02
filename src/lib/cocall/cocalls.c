@@ -107,9 +107,19 @@ void set_cocall_target(pthread_key_t set_key, int target_func, void *target_cap)
 	return;
 }
 
+void *get_global_target(int target_func)
+{
+	return (global_set.target_caps[target_func]);
+}
+
 void *get_cocall_target(pthread_key_t set_key, int target_func)
 {
 	call_set_t *set = pthread_getspecific(set_key);
+	if (set == NULL) {
+		init_target_set(set_key, 0); //defaults to size of largest set
+		set = pthread_getspecific(set_key);
+	}
+
 	if (set->target_caps[target_func] != NULL)
 		return (set->target_caps[target_func]);
 	else

@@ -38,16 +38,20 @@
 #include <err.h>
 #include <sys/errno.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 /* Provided by coservice daemon*/
-static _Atomic(void *) codiscover_scb = NULL;
+static _Atomic(void *)codiscover_scb = NULL;
 
 /* Provided by namespace daemon */
 static _Atomic(namespace_t *) global_namespace = NULL;
-static _Atomic(void *) coinsert_scb = NULL;
-static _Atomic(void *) coselect_scb = NULL;
+static void *coinsert_scb = NULL;
+static void *coselect_scb = NULL;
+
+static _Atomic bool coproc_inited = false;
+static _Atomic bool ukern_inited = false;
 
 #define NSD_SELECTOR 1
 #define COSERVICED_SELECTOR 2
@@ -56,10 +60,14 @@ static _Atomic(void *) coselect_scb = NULL;
 void
 invalidate_startup_info(void)
 {
-	atomic_store(&codiscover_scb, NULL);
-	atomic_store(&global_namespace, NULL);
-	atomic_store(&coinsert_scb, NULL);
-	atomic_store(&coselect_scb, NULL);
+	coinsert_scb = NULL;
+	coselect_scb = NULL;
+	if (atomic_load_explicit(&coproc_inited, memory_order_acquire) == false)
+		return;
+	codiscover_scb = NULL;
+	global_namespace = NULL;
+	atomic_store_explicit(&ukern_inited, false, memory_order_release);
+	atomic_store_explicit(&coproc_inited, false, memory_order_release);
 }
 
 //TODO-PBB: apply memory ordering that gives something sensible
@@ -82,25 +90,20 @@ int authenticate_dance(cocall_args_t *cocall_args, int selector)
 			break;
 	}
 	
-	if (daemon_pid == 0) {
-		cocall_args->status = -1;
-		cocall_args->error = EAGAIN;
+	if (daemon_pid == 0 || caller_pid != daemon_pid) 
 		return (0);
-	}
-	else if (caller_pid != daemon_pid) {
-		cocall_args->status = -1;
-		cocall_args->error = EPERM;
-		return (0);
-	}
-	return (1);
+	else
+		return (1);
 }
 
 void nsd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
-		return;
+		COCALL_ERR(cocall_args, EPERM);
+
+	
 	/* clear old codiscover; whether valid or not it refers to the old universe */
-	codiscover_scb =  NULL;
+	codiscover_scb = NULL;
 	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) and lookup nsobj (coselect) */
 	coinsert_scb = cocall_args->coinsert;
 	coselect_scb = cocall_args->coselect;
@@ -113,7 +116,7 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 		// this implementation may not do what we want (priority inversion?)
 		sched_yield();
 	}
-	
+	cocall_args->done_scb = done_worker_scb;
 	COCALL_RETURN(cocall_args, 0);
 }
 
@@ -121,7 +124,7 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 void coserviced_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, COSERVICED_SELECTOR))
-		return;
+		COCALL_ERR(cocall_args, EPERM);
 
 	while((cocall_args->ns_cap = atomic_load_explicit(&global_namespace, memory_order_acquire)) == NULL) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
@@ -142,9 +145,9 @@ void coserviced_init(cocall_args_t *cocall_args, void *token)
 void ipcd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
-		return;
+		COCALL_ERR(cocall_args, EPERM);
 
-	while((atomic_load_explicit(&codiscover_scb, memory_order_acquire) == NULL) || (atomic_load_explicit(&global_namespace, memory_order_acquire) == NULL)) {
+	while((atomic_load_explicit(&coproc_inited, memory_order_acquire) == false)) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
 		// this implementation may not do what we want (priority inversion?)
 		sched_yield();
@@ -156,15 +159,29 @@ void ipcd_init(cocall_args_t *cocall_args, void *token)
 	cocall_args->codiscover = codiscover_scb;
 	cocall_args->coinsert = coinsert_scb;
 	cocall_args->coselect = coselect_scb;
+
+	atomic_store_explicit(&ukern_inited, true, memory_order_release);
 	
+	COCALL_RETURN(cocall_args, 0);
+}
+
+void coproc_init_complete(cocall_args_t *cocall_args, void *token)
+{
+	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
+		COCALL_ERR(cocall_args, EPERM);
+	else if (atomic_load_explicit(&coproc_inited, memory_order_acquire) == true)
+		COCALL_ERR(cocall_args, EAGAIN);
+
+	atomic_store_explicit(&coproc_inited, true, memory_order_release);
+
 	COCALL_RETURN(cocall_args, 0);
 }
 
 void coproc_user_init(cocall_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	if (atomic_load_explicit(&codiscover_scb, memory_order_acquire) == NULL) {
-		/* nsd has not yet started */
+	if (atomic_load_explicit(&ukern_inited, memory_order_acquire) == false) {
+		/* nsd and coserviced have not yet completed their startup routines */
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
 

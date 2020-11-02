@@ -44,4 +44,7 @@ int targeted_slocall(pthread_key_t set_key, int target, void *buf, size_t len);
 void *get_cocall_target(pthread_key_t set_key, int target_func);
 void set_cocall_target(pthread_key_t set_key, int target_func, void *target_cap);
 
+void *get_global_target(int target_func);
+
+
 #endif //!defined(_COCALLS_H)
