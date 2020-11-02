@@ -85,8 +85,9 @@ struct _cocall_args
 		struct {
 			void *codiscover;
 			void *coinsert;
-			void *coselect;	
-		}; //coproc_init
+			void *coselect;
+			void *done_scb;
+		}; //coproc_init, coproc_init_done
 		struct {
 			char ns_name[NS_NAME_LEN];
 			nstype_t ns_type;
@@ -111,7 +112,7 @@ struct _cocall_args
 		struct {
 			coport_type_t coport_type;
 			coport_t *port;
-		}; //coopen
+		}; //coopen, coclose
 		struct {
 			pollcoport_t *coports;
 			uint ncoports;

@@ -56,6 +56,7 @@
 #define COCALL_COPROC_INIT (12)
 #define COCALL_COCREATE (13)
 #define COCALL_CODROP (14)
+#define COCALL_COPROC_INIT_DONE (15)
 
 #define U_COOPEN "coopen"
 #define U_COCLOSE "coclose"
@@ -73,13 +74,15 @@
 #define U_COUPDATE "coupdate" 
 #define U_CODELETE "codelete"
 #define U_COPROC_INIT "coproc_init"
+#define U_COPROC_INIT_DONE "coproc_init_done"
 
-#define n_ukern_calls (15)
+#define n_ukern_calls (16)
 
 extern namespace_t *global_ns;
 extern bool is_ukernel;
 
 namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb);
+int finish_coproc_init(void);
 nsobject_t *coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns);
 nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);
 coservice_t *codiscover(nsobject_t *nsobj, void **scb);

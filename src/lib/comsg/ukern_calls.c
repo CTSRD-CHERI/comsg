@@ -62,21 +62,41 @@ __attribute__((constructor)) static void
 init_ukern_calls(void)
 {
 	ukern_call_set = allocate_target_set();
+	init_target_set(ukern_call_set, n_ukern_calls);
 	global_ns = NULL;
+}
+
+static void
+init_new_thread_calls(void)
+{
+	nsobject_t *service_obj;
+
+	set_cocall_target(ukern_call_set, COCALL_CODISCOVER,  get_global_target(COCALL_CODISCOVER));
+	set_cocall_target(ukern_call_set, COCALL_COSELECT, get_global_target(COCALL_COSELECT));
+	
+	service_obj = coselect(U_COSELECT, COSERVICE, global_ns);
+	discover_ukern_func(service_obj, COCALL_COSELECT);
+
+	service_obj = coselect(U_CODISCOVER, COSERVICE, global_ns);
+	discover_ukern_func(service_obj, COCALL_CODISCOVER);
 }
 
 static int 
 ukern_call(int func, cocall_args_t *args)
 {
 	nsobject_t *func_obj;
+	void *global_coselect_scb, *coselect_scb;
 
 	if (get_cocall_target(ukern_call_set, func) == NULL) {
-		if ((get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL) && (get_cocall_target(ukern_call_set, COCALL_COSELECT) == NULL) && global_ns == NULL)
+		if ((get_global_target(COCALL_CODISCOVER) == NULL) || (get_global_target(COCALL_COSELECT) == NULL))
 			err(ESRCH, "ukern_call: coproc_init either failed or has not been called");
-		else {
-			func_obj = coselect(ukern_func_names[func], COSERVICE, global_ns);
-			discover_ukern_func(func_obj, func);
-		}
+		else if ((get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL) || (get_cocall_target(ukern_call_set, COCALL_COSELECT) == NULL))
+			init_new_thread_calls();	
+
+		func_obj = coselect(ukern_func_names[func], COSERVICE, global_ns);
+		if (func_obj == NULL)
+			err(ENOSYS, "ukern_call: function %s is not present in the global namespace", ukern_func_names[func]);
+		discover_ukern_func(func_obj, func);
 	}
 
 	return (targeted_cocall(ukern_call_set, func, args, sizeof(cocall_args_t)));
@@ -162,7 +182,7 @@ coselect(const char *name, nsobject_type_t type, namespace_t *ns)
 	cocall_args.nsobj = NULL;
 	cocall_args.ns_cap = ns;
 
-	error = ukern_call(COCALL_COSELECT, &cocall_args);
+	error = targeted_cocall(ukern_call_set, COCALL_COSELECT, &cocall_args, sizeof(cocall_args));
 	if (error == -1)
 		err(errno, "coselect: error performing cocall to coselect");
 	else if (cocall_args.status == -1) {
@@ -182,7 +202,7 @@ codiscover(nsobject_t *nsobj, void **scb)
 	cocall_args.nsobj = nsobj;
 	cocall_args.scb_cap = NULL;
 
-	error = ukern_call(COCALL_CODISCOVER, &cocall_args);
+	error = targeted_cocall(ukern_call_set, COCALL_CODISCOVER, &cocall_args, sizeof(cocall_args));
 	if (error == -1)
 		err(errno, "codiscover: error performing cocall to codiscover");
 	else if (cocall_args.status == -1) {
@@ -270,7 +290,7 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 	if (is_ukernel)
 		error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
 	else 
-		error = ukern_call(COCALL_COPROC_INIT, &cocall_args);
+		error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
 	if(error){
 		err(errno, "coproc_init: cocall failed");
 	}
@@ -283,7 +303,31 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 	set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args.codiscover);
 	set_cocall_target(ukern_call_set, COCALL_COSELECT, cocall_args.coselect);
 	
+	if (cheri_gettag(cocall_args.done_scb) && is_ukernel)
+		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT_DONE, cocall_args.done_scb);
 	return (cocall_args.ns_cap);
+}
+
+int
+finish_coproc_init(void)
+{
+	int error;
+	coproc_init_args_t cocall_args;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	if (!is_ukernel)
+		err(EPERM, "finish_coproc_init: microkernel only calls should not be made by user programs");
+
+	error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT_DONE, &cocall_args, sizeof(coproc_init_args_t));
+	if(error){
+		err(errno, "finish_coproc_init: cocall failed");
+	}
+	else if (cocall_args.status == -1) {
+		errno = cocall_args.error;
+		return (-1);
+	}
+
+	return (0);
 }
 
 int 
@@ -298,6 +342,7 @@ cocarrier_send(coport_t *port, void *buf, size_t len)
 	cocall_args.cocarrier = port;
     buf = cheri_setbounds(buf, len);
     cocall_args.message = cheri_andperm(buf, COCARRIER_MSG_PERMS);
+    cocall_args.length = len;
     
     error = ukern_call(COCALL_COSEND, &cocall_args);
     if(error)
@@ -341,8 +386,9 @@ cocarrier_recv(coport_t *port, size_t len)
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	cocall_args.cocarrier = port;
+	cocall_args.length = len;
 
-	error = ukern_call(COCALL_COSEND, &cocall_args);
+	error = ukern_call(COCALL_CORECV, &cocall_args);
     if(error != 0)
         err(error, "cocarrier_recv: cocall failed");
 

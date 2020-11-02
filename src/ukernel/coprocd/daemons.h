@@ -33,11 +33,12 @@
 
 #include <sys/types.h>
 
-
 void spawn_daemons(void);
 pid_t get_coserviced_pid(void);
 pid_t get_ipcd_pid(void);
 pid_t get_nsd_pid(void);
 void kill_daemons(void);
+
+extern void *done_worker_scb;
 
 #endif
