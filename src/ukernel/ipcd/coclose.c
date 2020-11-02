@@ -30,6 +30,7 @@
  */
 #include "coclose.h"
 #include "ipcd_cap.h"
+#include "coport_table.h"
 
 #include <cocall/cocall_args.h>
 #include <coproc/coport.h>
@@ -40,6 +41,9 @@
 int 
 validate_coclose_args(coclose_args_t *cocall_args)
 {
+	coport_t *port = cocall_args->port;
+	if (!valid_coport(port))
+		return (0);
 	return (1);
 }
 
@@ -53,8 +57,11 @@ coport_close(coclose_args_t *cocall_args, void *token)
 
 	/* TODO-PBB: check permissions */
 	coport = unseal_coport(cocall_args->port);
+	
+	status = coport->info->status;
+	if (status == COPORT_CLOSED || status == COPORT_CLOSING)
+		COCALL_ERR(cocall_args, EPIPE);
 
-	/* TODO-PBB: We should account for closing from COPORT_DONE, or other states, some day*/
 	status = COPORT_OPEN;
 	while(!atomic_compare_exchange_weak_explicit(&coport->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
 		switch (status) {
