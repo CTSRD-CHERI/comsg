@@ -53,10 +53,9 @@
 static 
 void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
 {
-	function_map_t *service_map = spawn_workers(func, valid, IPCD_NWORKERS);
 
-	serv->function_map = service_map;
-	serv->service = coprovide(get_worker_scbs(service_map), IPCD_NWORKERS);
+	serv->function_map = spawn_workers(func, valid, IPCD_NWORKERS);
+	serv->service = coprovide(get_worker_scbs(serv->function_map), IPCD_NWORKERS);
 	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
 	if (serv->nsobj == NULL)
 		err(errno, "init_service: error inserting %s into global namespace", name);

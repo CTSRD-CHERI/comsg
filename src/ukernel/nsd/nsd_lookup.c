@@ -74,8 +74,10 @@ nsobject_t *lookup_nsobject(const char *name, nsobject_type_t nsobject_type, nam
 
 	LIST_FOREACH_SAFE (member, &ns_cap->members->objects, entries, member_temp) {
 		result = member->nsobj;
-		if((strncmp(result->name, name, NS_NAME_LEN) == 0) && (result->type == nsobject_type)) {
-			if (result->type != RESERVATION && result->obj == NULL)
+		if((strncmp(result->name, name, NS_NAME_LEN) == 0)) {
+			if (result->type != nsobject_type)
+				return (NULL);
+			else if (result->type != RESERVATION && result->obj == NULL)
 				return (NULL);
 			result = cheri_setboundsexact(result, sizeof(nsobject_t));
 			return (result);
