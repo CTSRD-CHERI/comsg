@@ -49,19 +49,28 @@ generate_id(void)
     return id++;
 }
 
+/* these are not secret or secure, they just shouldn't be the same as each other by accident*/
+
+__attribute__((constructor))
+void init_rand(void)
+{
+    int garbage;
+    srand((unsigned)garbage);
+}
+
 int
 rand_string(char *buf, size_t len)
 {
     size_t i;
     int rand_no;
     char c;
+
     
     //last character should contain a NULL
     len = MIN(len + 1, cheri_getlen(buf) - 1);
-    srandomdev();
     for (i = 0; i < len; i++)
     {
-        rand_no = random() % KEYSPACE;
+        rand_no = rand() % KEYSPACE;
         c = alphanum[rand_no];
         buf[i] = c;
     }
