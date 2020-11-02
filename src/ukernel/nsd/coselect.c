@@ -51,11 +51,12 @@ int validate_coselect_args(coselect_args_t* cocall_args)
 void namespace_object_select(coselect_args_t *cocall_args, void *token)
 {
 	nsobject_t *obj;
+	
 
 	obj = lookup_nsobject(cocall_args->nsobj_name, cocall_args->nsobj_type, cocall_args->ns_cap);
 	if(obj == NULL) 
 		COCALL_ERR(cocall_args, ENOENT);
-	else if (obj->obj == NULL && obj->type != RESERVATION)
+	else if (!cheri_gettag(obj->obj) && cocall_args->nsobj_type != RESERVATION)
 		COCALL_ERR(cocall_args, ENOENT); /* Is currently being inserted/updated */
 
 	if (obj->type == RESERVATION)

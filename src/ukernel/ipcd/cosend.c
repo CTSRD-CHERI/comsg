@@ -65,14 +65,15 @@ int validate_cosend_args(coopen_args_t *cocall_args)
 void coport_send(coopen_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	coport_t *cocarrier;
-	void **cocarrier_buf;
-	size_t port_len, index, new_len;
+	coport_status_t status;
+	size_t port_len, index, new_len, msg_len;
 	coport_eventmask_t event;
-	coport_status_t status = COPORT_OPEN;
+	coport_t *cocarrier;
+	char *msg_buffer;
+	void **cocarrier_buf;
 
-	size_t msg_len = MIN(cocall_args->length, cheri_getlen(cocall_args->message));
-	char *msg_buffer = cocall_flexible_malloc(msg_len);
+	msg_len = MIN(cocall_args->length, cheri_getlen(cocall_args->message));
+	msg_buffer = cocall_flexible_malloc(msg_len);
 
 	memcpy(msg_buffer, cocall_args->message, msg_len);
 
