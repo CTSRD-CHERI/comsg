@@ -93,10 +93,14 @@ process_coport_handle(coport_t *port, coport_type_t type)
 {
     switch (type) {
     case COPIPE:
+        if(cheri_getsealed(port))
+            break;
         port = cheri_clearperm(port, CHERI_PERM_GLOBAL);
         port = cheri_seal(port, copipe_otype.sc);
         break;
     case COCHANNEL:
+        if(cheri_getsealed(port))
+            break;
         port = cheri_clearperm(port, CHERI_PERM_GLOBAL);
         port = cheri_seal(port, cochannel_otype.sc);
         break;
@@ -271,7 +275,7 @@ copipe_corecv(const coport_t *port, void *buf, size_t len)
 
     if (cheri_getlen(buf) < len)
         buf = cheri_setbounds(buf, len);
-    buf = cheri_andperm(buf, COPIPE_BUFFER_PERMS);
+    buf = cheri_andperm(buf, COPIPE_RECVBUF_PERMS);
 
     acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
 
@@ -303,7 +307,7 @@ coport_ipc_utils_init(void)
     assert(cheri_getlen(sealroot) != 0);
     assert((cheri_getperm(sealroot) & CHERI_PERM_SEAL) != 0);
     /* TODO-PBB: simulate a divided otype space, pending type manager */
-    sealroot = cheri_incoffset(sealroot, 128);
+    sealroot = cheri_incoffset(sealroot, 32);
 
     sealroot = make_otypes(sealroot, 1, allocated_otypes);
     cochannel_otype = copipe_otype;

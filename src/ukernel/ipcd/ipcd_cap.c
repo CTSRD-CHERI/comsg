@@ -39,22 +39,23 @@
 #include <machine/sysarch.h>
 #include <unistd.h>
 
-static struct object_type cocarrier_otype;
+static struct object_type cocarrier_otype, coport_otype;
 static void *root_cap;
 
 static __attribute__((constructor)) void
 setup_ipcd_otypes(void)
 {
-    struct object_type *otypes[] = {&cocarrier_otype};
+    struct object_type *otypes[] = {&coport_otype, &cocarrier_otype};
     assert(sysarch(CHERI_GET_SEALCAP, &root_cap) != -1);
 
     assert(cheri_gettag(root_cap) != 0);    
     assert(cheri_getlen(root_cap) != 0);
     assert((cheri_getperm(root_cap) & CHERI_PERM_SEAL) != 0);
-    /* TODO-PBB: simulate a divided otype space elsewhere */
+    /* TODO-PBB: implement type manager and a divided otype space  */
+    /* XXX-PBB: we currently simulate the eventual role of the type manager here and in libcomsg */
     root_cap = cheri_incoffset(root_cap, 32);
 
-    root_cap = make_otypes(root_cap, 1, otypes);
+    root_cap = make_otypes(root_cap, 2, otypes);
 }
 
 coport_type_t
@@ -67,7 +68,9 @@ coport_gettype(coport_t *ptr)
 int 
 valid_coport(coport_t *addr)
 {
-    if(cheri_getlen(addr) < sizeof(coport_t))
+    if (!cheri_gettag(addr))
+        return (0);
+    else if(cheri_getlen(addr) < sizeof(coport_t))
         return (0);
     else if(!in_coport_table(addr, coport_gettype(addr)))
         return (0);
@@ -78,9 +81,9 @@ valid_coport(coport_t *addr)
 int 
 valid_cocarrier(coport_t *addr)
 {
-    if(cheri_gettype(addr) != cocarrier_otype.otype)
+    if(!valid_coport(addr))
         return (0);
-    else if(!valid_coport(addr))
+    else if(cheri_gettype(addr) != cocarrier_otype.otype)
         return (0);
     else 
         return (1);
@@ -89,10 +92,11 @@ valid_cocarrier(coport_t *addr)
 coport_t *
 seal_coport(coport_t *ptr)
 {
+    if (cheri_getsealed(ptr))
+        return (ptr);
+    ptr = cheri_clearperm(ptr, CHERI_PERM_GLOBAL);
     if (ptr->type != COCARRIER)
-        return (ptr);
-    else if (cheri_getsealed(ptr) == 1)
-        return (ptr);
+        return (cheri_seal(ptr, coport_otype.sc));
     else //TODO-PBB: seal
         return (cheri_seal(ptr, cocarrier_otype.sc));
 }
@@ -100,10 +104,12 @@ seal_coport(coport_t *ptr)
 coport_t *
 unseal_coport(coport_t *ptr)
 {
-    if (cheri_getsealed(ptr) == 0)
+    if (!cheri_getsealed(ptr))
         return (ptr);
     else if (cheri_gettype(ptr) == cocarrier_otype.otype)
         return (cheri_unseal(ptr, cocarrier_otype.usc));
+    else if (cheri_gettype(ptr) == coport_otype.otype)
+        return (cheri_unseal(ptr, coport_otype.usc));
     else 
-        return (ptr);
+        return (NULL);
 }
