@@ -120,7 +120,7 @@ int corecv_impl(coport_t *port, void **buf, size_t len)
         }
         break;
     case COPIPE:
-        retval = copipe_corecv(port, buf, len);
+        retval = copipe_corecv(port, *buf, len);
         break;
     default:
         err(1, "corecv: invalid coport type");

@@ -27,6 +27,7 @@
 
 #include "coport_ipc_utils.h"
 
+#include <comsg/coport_ipc_cinvoke.h>
 #include <comsg/ukern_calls.h>
 #include <coproc/coport.h>
 
@@ -82,13 +83,11 @@ cosend(const coport_t *port, const void *buf, size_t len)
     type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
-        retval = cochannel_send(port, buf, len);
+    case COPIPE:
+        retval = cosend_cinvoke(port, buf, len);
         break;
     case COCARRIER:
         retval = cocarrier_send(port, buf, len);
-        break;
-    case COPIPE:
-        retval = copipe_send(port, buf, len);
         break;
     default:
         errno = EINVAL;
@@ -109,7 +108,8 @@ corecv(const coport_t *port, void **buf, size_t len)
     type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
-        retval = cochannel_corecv(port, *buf, len);
+    case COPIPE:
+        retval = corecv_cinvoke(port, buf, len);
         break;
     case COCARRIER:
         msg = cocarrier_recv(port, len);
@@ -119,9 +119,6 @@ corecv(const coport_t *port, void **buf, size_t len)
             *buf = msg;
             retval = cheri_getlen(buf);
         }
-        break;
-    case COPIPE:
-        retval = copipe_corecv(port, buf, len);
         break;
     default:
         err(1, "corecv: invalid coport type");
