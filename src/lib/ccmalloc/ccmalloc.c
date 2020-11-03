@@ -58,7 +58,7 @@ static pthread_t bucket_refiller, batch_freer;
 typedef enum {UNINITIALIZED=0, READY=1, ALLOCATED=2, SPLIT=3, FREED=4} bucket_entry_status_t;
 
 
-#if 0
+#if 1
 #define err(n, s, ...) do { printf("%s: Errno=%d\n", s, n); kill(getpid(), SIGSEGV); } while(0)
 #endif 
 
@@ -300,7 +300,8 @@ void *refill_buckets(void *args)
 __attribute__ ((constructor)) static 
 void set_nbuckets(void)
 {
-	bucket_table.nbuckets = 0;
+	memset(&bucket_table, '\0', sizeof(bucket_table));
+
 }
 
 void
@@ -333,7 +334,7 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 	for(i = 0; i < bucket_table.nbuckets; i++) {
 		init_bucket(&bucket_table.buckets[i], bucket_table.sizes[i]);
 	}
-	bucket_table.flexible_bucket = &bucket_table.buckets[nbuckets-1];
+	bucket_table.flexible_bucket = &bucket_table.buckets[i-1];
 	
 	
 	error = pthread_create(&bucket_refiller, NULL, refill_buckets, NULL);
