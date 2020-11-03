@@ -127,14 +127,11 @@ corecv(const coport_t *port, void **buf, size_t len)
     return (retval);
 }
 
-pollcoport_t 
-make_pollcoport(coport_t *port, coport_eventmask_t events)
+void
+make_pollcoport(pollcoport_t *pcpt, coport_t *port, coport_eventmask_t events)
 {
-    pollcoport_t pcpt;
+    pcpt->coport = port;
+    pcpt->events = events;
+    pcpt->revents = NOEVENT;
 
-    pcpt.coport = port;
-    pcpt.events = events;
-    pcpt.revents = NOEVENT;
-
-    return (pcpt);
 }

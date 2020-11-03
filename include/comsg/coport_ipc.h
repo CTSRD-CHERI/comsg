@@ -37,6 +37,6 @@ coport_t *open_coport(coport_type_t type);
 int cosend(const coport_t *prt, const void *buf, size_t len);
 int corecv(const coport_t *port, void **buf, size_t len);
 coport_type_t coport_gettype(coport_t *port);
-pollcoport_t make_pollcoport(coport_t *port, coport_eventmask_t events);
+void make_pollcoport(pollcoport_t *pct, coport_t *port, coport_eventmask_t events);
 
 #endif
