@@ -166,11 +166,11 @@ pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 	//Pid is not supplied as a thread argument because it can change.
 	init_func_map = spawn_slow_worker(init_name, init_func, NULL);
 	if (done_worker_scb == NULL) {
-		done_func_map = spawn_slow_worker(NULL, coproc_init_complete, NULL);
+		done_func_map = spawn_slow_worker("coproc_init_done1", coproc_init_complete, NULL);
 		done_worker_scb = done_func_map->workers[0].scb_cap;
 	}
 	if (done2_worker_scb == NULL) {
-		done2_func_map = spawn_slow_worker(NULL, ukern_init_complete, NULL);
+		done2_func_map = spawn_slow_worker("coproc_init_done2", ukern_init_complete, NULL);
 		done2_worker_scb = done2_func_map->workers[0].scb_cap;
 	}
 

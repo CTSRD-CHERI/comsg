@@ -87,7 +87,7 @@ void spawn_slow_worker_threads(void *func, void* arg_func, int nworkers, functio
     for(int i = 0; i < nworkers; i++)
     {
         thread_args = cheri_setbounds(&worker_arr[i], sizeof(worker_args_t));
-        memset(thread_args->name, '\0', NS_NAME_LEN);
+        rand_string(thread_args->name, NS_NAME_LEN);
         thread_args->validation_function = arg_func;
         thread_args->worker_function = func;
         start_sloaccept_worker(thread_args);
