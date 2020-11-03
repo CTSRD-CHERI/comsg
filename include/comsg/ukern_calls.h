@@ -57,6 +57,7 @@
 #define COCALL_COCREATE (13)
 #define COCALL_CODROP (14)
 #define COCALL_COPROC_INIT_DONE (15)
+#define COCALL_SLOPOLL (16)
 
 #define U_COOPEN "coopen"
 #define U_COCLOSE "coclose"
@@ -75,8 +76,9 @@
 #define U_CODELETE "codelete"
 #define U_COPROC_INIT "coproc_init"
 #define U_COPROC_INIT_DONE "coproc_init_done"
+#define U_SLOPOLL "copoll_slow"
 
-#define n_ukern_calls (16)
+#define n_ukern_calls (17)
 
 extern namespace_t *global_ns;
 extern bool is_ukernel;

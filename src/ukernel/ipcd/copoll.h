@@ -34,6 +34,9 @@
 #include <cocall/cocall_args.h>
 
 int validate_copoll_args(coclose_args_t *cocall_args);
+
 void cocarrier_poll(coclose_args_t *cocall_args, void *token);
+void cocarrier_poll_slow(coclose_args_t *cocall_args, void *token);
+
 
 #endif //!defined(_COPOLL_H)

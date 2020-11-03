@@ -47,7 +47,10 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char *ukern_func_names[] = {"NOTUSED", U_CODISCOVER, U_COPROVIDE, U_COINSERT, U_COSELECT, U_COUPDATE, U_CODELETE, U_COOPEN, U_COCLOSE, U_COSEND, U_CORECV, U_COPOLL, U_COPROC_INIT, U_COCREATE, U_CODROP};
+static const char *ukern_func_names[] = {"NOTUSED", U_CODISCOVER, U_COPROVIDE, U_COINSERT, U_COSELECT, U_COUPDATE, U_CODELETE, U_COOPEN, U_COCLOSE, U_COSEND, U_CORECV, U_COPOLL, U_COPROC_INIT, U_COCREATE, U_CODROP, U_COPROC_INIT_DONE, U_SLOPOLL};
+
+static int slocall_funcs[] = {COCALL_SLOPOLL};
+static int n_slocalls = 1;
 
 namespace_t *global_ns = NULL;
 bool is_ukernel = false;
@@ -81,6 +84,16 @@ init_new_thread_calls(void)
 	discover_ukern_func(service_obj, COCALL_CODISCOVER);
 }
 
+static inline bool
+is_slocall(int func)
+{
+	for (int i = 0; i < n_slocalls; i++) {
+		if (slocall_funcs[i] == func)
+			return (true);
+	}
+	return (false);
+}
+
 static int 
 ukern_call(int func, cocall_args_t *args)
 {
@@ -98,8 +111,10 @@ ukern_call(int func, cocall_args_t *args)
 			err(ENOSYS, "ukern_call: function %s is not present in the global namespace", ukern_func_names[func]);
 		discover_ukern_func(func_obj, func);
 	}
-
-	return (targeted_cocall(ukern_call_set, func, args, sizeof(cocall_args_t)));
+	if (is_slocall(func))
+		return (targeted_slocall(ukern_call_set, func, args, sizeof(cocall_args_t)));
+	else 
+		return (targeted_cocall(ukern_call_set, func, args, sizeof(cocall_args_t)));
 }
 
 void 
@@ -318,7 +333,7 @@ finish_coproc_init(void)
 	if (!is_ukernel)
 		err(EPERM, "finish_coproc_init: microkernel only calls should not be made by user programs");
 
-	error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT_DONE, &cocall_args, sizeof(coproc_init_args_t));
+	error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT_DONE, &cocall_args, sizeof(coproc_init_args_t));
 	if(error){
 		err(errno, "finish_coproc_init: cocall failed");
 	}
@@ -405,7 +420,9 @@ copoll(pollcoport_t *coports, int ncoports, int timeout)
 {
 	copoll_args_t cocall_args;
 	int error;
+	int function_variant;
 
+	function_variant = COCALL_COPOLL;
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	cocall_args.ncoports = ncoports;
 	cocall_args.timeout = timeout;
@@ -422,13 +439,19 @@ copoll(pollcoport_t *coports, int ncoports, int timeout)
 		cocall_args.coports = calloc(ncoports, sizeof(pollcoport_t));
 		memcpy(cocall_args.coports, coports, sizeof(pollcoport_t) * ncoports);
 	}
-
-	error = ukern_call(COCALL_COPOLL, &cocall_args);
+do_copoll:
+	error = ukern_call(function_variant, &cocall_args);
 	if(error != 0)
-		err(error, "copoll: cocall failed");
+		err(errno, "copoll: cocall failed");
 	if (cocall_args.status == -1) {
-		errno = cocall_args.error;
-		return (-1);
+		if (cocall_args.error == EWOULDBLOCK && timeout != 0 && function_variant != COCALL_SLOPOLL) {
+			function_variant = COCALL_SLOPOLL;
+			goto do_copoll;
+		}
+		else {
+			errno = cocall_args.error;
+			return (-1);
+		}
 	}
 	if (timeout != 0) {
 		memcpy(coports, cocall_args.coports, sizeof(pollcoport_t) * ncoports);

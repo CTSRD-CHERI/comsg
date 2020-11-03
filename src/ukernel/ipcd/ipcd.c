@@ -45,7 +45,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-coservice_provision_t coopen_serv, coclose_serv, copoll_serv, cosend_serv, corecv_serv;
+coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_serv, cosend_serv, corecv_serv;
 
 static 
 void usage(void)

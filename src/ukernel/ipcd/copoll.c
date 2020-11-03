@@ -43,6 +43,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 #include <sys/queue.h>
 
 int 
@@ -80,6 +81,7 @@ populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
 	for (i = 0; i < ncoports; i++)
 		user[i].revents = ukern[i].revents;
 }
+
 
 /* 
  * Cocarriers call into the microkernel. Others do not. There are several reasons, among which:
@@ -159,8 +161,9 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 	return (matched);
 }
 
+
 void 
-cocarrier_poll(copoll_args_t *cocall_args, void *token)
+cocarrier_poll_slow(cocall_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	uint ncoports; 
@@ -178,10 +181,35 @@ cocarrier_poll(copoll_args_t *cocall_args, void *token)
 	 * If the caller is willing to wait and we have no matches on the events polled for,
 	 * then wait for the specified amount of time.
 	 */
-	if (cocall_args->timeout != 0 && matched == 0) {
-		/* Here (may) be syscalls; we should henceforth be on the slow-path. */
+	if (cocall_args->timeout != 0 && matched == 0) 
 		matched = wait_for_events(targets, ncoports, cocall_args->timeout);
+	
+	populate_revents(cocall_args->coports, targets, ncoports);
+	cocall_free(targets);
+
+	COCALL_RETURN(cocall_args, matched);
+}
+
+void 
+cocarrier_poll(copoll_args_t *cocall_args, void *token)
+{
+	UNUSED(token);
+	uint ncoports; 
+	int matched;
+	size_t target_len;
+
+	ncoports = cocall_args->ncoports;
+	target_len = ncoports * sizeof(pollcoport_t);
+
+	pollcoport_t *targets = cocall_malloc(target_len);
+	memcpy(targets, cocall_args->coports, target_len); //copyin
+
+	matched = inspect_events(targets, ncoports);
+	if (cocall_args->timeout != 0 && matched == 0) {
+		cocall_free(targets);
+		COCALL_ERR(cocall_args, EWOULDBLOCK);
 	}
+
 	populate_revents(cocall_args->coports, targets, ncoports);
 	cocall_free(targets);
 

@@ -37,7 +37,7 @@
 
 #include <cocall/worker_map.h>
 
-extern coservice_provision_t coopen_serv, coclose_serv, copoll_serv, cosend_serv, corecv_serv;
+extern coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_serv, cosend_serv, corecv_serv;
 
 //TODO-PBB: Revisit
 #define IPCD_NWORKERS 12
