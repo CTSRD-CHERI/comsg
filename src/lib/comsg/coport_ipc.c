@@ -133,5 +133,4 @@ make_pollcoport(pollcoport_t *pcpt, coport_t *port, coport_eventmask_t events)
     pcpt->coport = port;
     pcpt->events = events;
     pcpt->revents = NOEVENT;
-
 }

@@ -88,11 +88,11 @@ do_cocarrier(void *argp)
 	pthread_mutex_unlock(&start);
 	error = copoll(&pct, 1, -1);
 	if (error == -1) {
-		printf("\tfailed\n");
+		printf("\t\t\tfailed\n");
 		err(errno, "do_cocarrier: copoll failed");
 	}
 	else
-		printf("coproctest: polling coport... \tsuccess!\n");
+		printf("coproctest: polling coport... \t\t\tsuccess!\n");
 	pthread_mutex_lock(&start);
 	printf("coproctest: receiving message...");
 	*args->dest_buf = cocarrier_recv(args->port, cheri_getlen(test_str));
