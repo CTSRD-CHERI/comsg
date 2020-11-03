@@ -160,7 +160,7 @@ void ipcd_init(cocall_args_t *cocall_args, void *token)
 	cocall_args->coinsert = coinsert_scb;
 	cocall_args->coselect = coselect_scb;
 
-	atomic_store_explicit(&ukern_inited, true, memory_order_release);
+	cocall_args->done_scb = done2_worker_scb;
 	
 	COCALL_RETURN(cocall_args, 0);
 }
@@ -173,6 +173,18 @@ void coproc_init_complete(cocall_args_t *cocall_args, void *token)
 		COCALL_ERR(cocall_args, EAGAIN);
 
 	atomic_store_explicit(&coproc_inited, true, memory_order_release);
+
+	COCALL_RETURN(cocall_args, 0);
+}
+
+void ukern_init_complete(cocall_args_t *cocall_args, void *token)
+{
+	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
+		COCALL_ERR(cocall_args, EPERM);
+	else if (atomic_load_explicit(&ukern_inited, memory_order_acquire) == true)
+		COCALL_ERR(cocall_args, EAGAIN);
+
+	atomic_store_explicit(&ukern_inited, true, memory_order_release);
 
 	COCALL_RETURN(cocall_args, 0);
 }

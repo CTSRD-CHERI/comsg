@@ -40,5 +40,6 @@ pid_t get_nsd_pid(void);
 void kill_daemons(void);
 
 extern void *done_worker_scb;
+extern void *done2_worker_scb;
 
 #endif

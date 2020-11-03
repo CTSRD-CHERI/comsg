@@ -61,6 +61,16 @@ void init_service(coservice_provision_t *serv, void *func, void *valid, const ch
 		err(errno, "init_service: error inserting %s into global namespace", name);
 }
 
+static 
+void init_slow_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
+{
+	serv->function_map = spawn_slow_workers(func, valid, IPCD_NWORKERS);
+	serv->service = coprovide(get_worker_scbs(serv->function_map), IPCD_NWORKERS);
+	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
+	if (serv->nsobj == NULL)
+		err(errno, "init_service: error inserting %s into global namespace", name);
+}
+
 void ipcd_startup(void)
 {
 	nsobject_t *coprovide_nsobj;
@@ -85,5 +95,8 @@ void ipcd_startup(void)
 	init_service(&cosend_serv, coport_send, validate_cosend_args, U_COSEND);
 	init_service(&corecv_serv, coport_recv, validate_corecv_args, U_CORECV);
 	init_service(&copoll_serv, cocarrier_poll, validate_copoll_args, U_COPOLL);
+	init_slow_service(&slopoll_serv, cocarrier_poll_slow, validate_copoll_args, U_SLOPOLL);
+
+	finish_coproc_init();
 
 }

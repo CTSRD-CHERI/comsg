@@ -60,6 +60,8 @@ static pid_t coprocd = 0;
 
 void *done_worker_scb = NULL;
 static function_map_t *done_func_map;
+void *done2_worker_scb = NULL;
+static function_map_t *done2_func_map;
 
 extern char **environ;
 
@@ -164,8 +166,12 @@ pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 	//Pid is not supplied as a thread argument because it can change.
 	init_func_map = spawn_slow_worker(init_name, init_func, NULL);
 	if (done_worker_scb == NULL) {
-		done_func_map = spawn_worker(NULL, coproc_init_complete, NULL);
+		done_func_map = spawn_slow_worker(NULL, coproc_init_complete, NULL);
 		done_worker_scb = done_func_map->workers[0].scb_cap;
+	}
+	if (done2_worker_scb == NULL) {
+		done2_func_map = spawn_slow_worker(NULL, ukern_init_complete, NULL);
+		done2_worker_scb = done2_func_map->workers[0].scb_cap;
 	}
 
 	child_pid = fork();
@@ -192,8 +198,6 @@ void kill_daemons(void)
 	if (nsd != 0)
 		kill(nsd, SIGTERM);
 }
-
-
 
 void spawn_daemons(void)
 {
