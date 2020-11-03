@@ -60,14 +60,37 @@ void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map
     for(int i = 0; i < nworkers; i++)
     {
         thread_args = cheri_setbounds(&worker_arr[i], sizeof(worker_args_t));
-#if 0
-        rand_string(&thread_args.name, NS_NAME_LEN);
-#else
         memset(thread_args->name, '\0', NS_NAME_LEN);
-#endif
         thread_args->validation_function = arg_func;
         thread_args->worker_function = func;
         start_coaccept_worker(thread_args);
+        
+    }
+}
+
+static
+void spawn_slow_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
+{
+    pthread_attr_t thread_attrs;
+    worker_args_t *worker_arr;
+    worker_args_t *thread_args;
+
+    pthread_attr_init(&thread_attrs);
+
+    func_worker_map->nworkers += nworkers;
+    if(func_worker_map->workers == NULL) 
+        worker_arr = calloc(nworkers, sizeof(worker_args_t));
+    else
+        worker_arr = realloc(func_worker_map->workers, (func_worker_map->nworkers * sizeof(worker_args_t)));
+    func_worker_map->workers = cheri_andperm(worker_arr, FUNC_MAP_PERMS);
+    
+    for(int i = 0; i < nworkers; i++)
+    {
+        thread_args = cheri_setbounds(&worker_arr[i], sizeof(worker_args_t));
+        memset(thread_args->name, '\0', NS_NAME_LEN);
+        thread_args->validation_function = arg_func;
+        thread_args->worker_function = func;
+        start_sloaccept_worker(thread_args);
         
     }
 }
@@ -172,6 +195,15 @@ function_map_t *spawn_workers(void *func, void *arg_func, int nworkers)
     function_map_t *func_map = new_function_map();
    
     spawn_worker_threads(func, arg_func, nworkers, func_map);
+
+    return (func_map);
+}
+
+function_map_t *spawn_slow_workers(void *func, void *arg_func, int nworkers)
+{
+    function_map_t *func_map = new_function_map();
+   
+    spawn_slow_worker_threads(func, arg_func, nworkers, func_map);
 
     return (func_map);
 }
