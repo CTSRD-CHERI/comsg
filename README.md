@@ -28,7 +28,13 @@ NOTE: This section is mostly incomplete.
 
 ### Coports - Fast Userspace IPC
 
-The microkernel compartment *ipcd* provides fast IPC to user programs. The three IPC mechanisms provided share a basic structure (a coport). COCHANNELs are short, shared, circular buffers. COCARRIERs are single-copy IPC mechanisms. COPIPEs are direct-copy IPC mechanisms. All three mechanisms are currently 'anycast' (a sent message can be received by one and only one of the listening entities). 
+The microkernel compartment *ipcd* provides fast IPC to user programs. The three IPC mechanisms provided share a basic structure (a coport):
+
+- COCHANNELs are short, shared, circular buffers.
+- COCARRIERs are single-copy IPC mechanisms.
+- COPIPEs are direct-copy IPC mechanisms.
+
+All three mechanisms are currently 'anycast' (a sent message can be received by one and only one of the listening entities). 
 
 A process sending data via a COCARRIER must call into the microkernel, passing a capability to its message, a handle to a coport, and the length of message they wish to send. The microkernel copies the message into memory that it owns, and places a read-only capability to that message into a queue. To receive a message, a process calls into the microkernel and removes this capability from the queue. COCARRIERs support event monitoring via a poll-like microkernel call.
 
@@ -48,34 +54,34 @@ Coservices allow multiple threads to provide the same functionality via cocalls.
 
 ## Functions
 
-Three shared libraries, libcoproc, licocall, and libcomsg, are provided for interacting with coprocesses, the microkernel and IPC mechanisms. The library provides the following functions:
+Three shared libraries, `libcoproc`, `libcocall`, and `libcomsg`, are provided for interacting with coprocesses, the microkernel and IPC mechanisms. The library provides the following functions:
 
 ### Setup Functions
 
-+ coproc_init - retrieves capabilities to call coselect, coinsert, and codiscover
++ `coproc_init` - retrieves capabilities to call coselect, coinsert, and codiscover
 
 ### IPC Functions
 
-+ open_coport - open a new coport of a specified type
-+ open_named_coport - open a new named (name+namespace) coport of a specified type
-+ coclose - close a coport
++ `open_coport` - open a new coport of a specified type
++ `open_named_coport` - open a new named (name+namespace) coport of a specified type
++ `coclose` - close a coport
 
-+ cosend - send data over a coport
-+ corecv - receive data via a coport
-+ copoll - inspect the event state of a coport
++ `cosend` - send data over a coport
++ `corecv` - receive data via a coport
++ `copoll` - inspect the event state of a coport
 
 ### Namespace Functions
 
-+ cocreate - create a new (child) namespace
-+ codrop - delete a namespace (currently not fully implemented)
++ `cocreate` - create a new (child) namespace
++ `codrop` - delete a namespace (currently not fully implemented)
 
-+ coinsert - create a named object with specified type in a namepsace
-+ coselect - search a namespace for an object with matching name and type 
-+ codelete - delete a namespace object
-+ coupdate - convert a namespace reservation to an "active" type
++ `coinsert` - create a named object with specified type in a namepsace
++ `coselect` - search a namespace for an object with matching name and type 
++ `codelete` - delete a namespace object
++ `coupdate` - convert a namespace reservation to an "active" type
 
 ### Service Management Functions
 
-+ codiscover - retrieve a capability to cocall the service specified
-+ coprovide - set up a service provision
++ `codiscover` - retrieve a capability to cocall the service specified
++ `coprovide` - set up a service provision
 
