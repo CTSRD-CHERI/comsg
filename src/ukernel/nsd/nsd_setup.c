@@ -119,7 +119,7 @@ void init_services(void)
 	start_global_service(&cocreate_serv);
 	start_global_service(&codrop_serv);
 
-	finish_coproc_init();
+	coproc_init_done();
 
 	return;
 }

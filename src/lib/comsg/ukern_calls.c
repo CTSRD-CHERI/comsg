@@ -324,18 +324,18 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 }
 
 int
-finish_coproc_init(void)
+coproc_init_done(void)
 {
 	int error;
 	coproc_init_args_t cocall_args;
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	if (!is_ukernel)
-		err(EPERM, "finish_coproc_init: microkernel only calls should not be made by user programs");
+		err(EPERM, "coproc_init_done: microkernel only calls should not be made by user programs");
 
 	error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT_DONE, &cocall_args, sizeof(coproc_init_args_t));
 	if(error){
-		err(errno, "finish_coproc_init: cocall failed");
+		err(errno, "coproc_init_done: cocall failed");
 	}
 	else if (cocall_args.status == -1) {
 		errno = cocall_args.error;

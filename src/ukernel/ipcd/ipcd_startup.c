@@ -97,6 +97,6 @@ void ipcd_startup(void)
 	init_service(&copoll_serv, cocarrier_poll, validate_copoll_args, U_COPOLL);
 	init_slow_service(&slopoll_serv, cocarrier_poll_slow, validate_copoll_args, U_SLOPOLL);
 
-	finish_coproc_init();
+	coproc_init_done();
 
 }

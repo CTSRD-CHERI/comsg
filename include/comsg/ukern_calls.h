@@ -84,7 +84,7 @@ extern namespace_t *global_ns;
 extern bool is_ukernel;
 
 namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb);
-int finish_coproc_init(void);
+int coproc_init_done(void);
 nsobject_t *coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns);
 nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);
 coservice_t *codiscover(nsobject_t *nsobj, void **scb);
