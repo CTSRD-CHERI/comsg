@@ -15,5 +15,5 @@ SRCS :=	cocreate.c \
 
 DEP_LIBS := pthread comsg ccmalloc coproc cocall
 
-include $(MK_DIR)/comesg.prog.mk
+include $(MK_DIR)/comsg.prog.mk
 

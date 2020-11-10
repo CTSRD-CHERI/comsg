@@ -1,4 +1,4 @@
-# comesg
+# comsg
 
 This is a proof-of-concept userspace microkernel facilitating syscall-free IPC using CHERI co-processes.
 
