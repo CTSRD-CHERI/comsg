@@ -29,6 +29,7 @@
 #define _CCMALLOC_H
 
 #include <stddef.h>
+#include <sys/cdefs.h>
 
 typedef enum {PROMISCUOUS=1, FLEETING=2, NORESIZE=4, NEVERFREE=8} ccmalloc_flags_t;
 
@@ -37,7 +38,8 @@ void *cocall_malloc(size_t len);
 void *cocall_calloc(size_t num, size_t length);
 void cocall_free(void*);
 
-inline void *cocall_flexible_malloc(size_t len)
+static __always_inline inline void *
+cocall_flexible_malloc(size_t len)
 {
 	return (cocall_malloc(len));
 }

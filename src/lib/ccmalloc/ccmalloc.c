@@ -28,16 +28,36 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include <ccmalloc.h>
+
+#include <coproc/utils.h>
+
+#include <assert.h>
+#include <err.h>
+#include <cheri/cheric.h>
+#include <cheri/cherireg.h>
+#include <pthread.h>
+
+#include <stdatomic.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <sys/errno.h>
+#include <sys/mman.h>
+#include <sys/queue.h>
 
 #define BUCKET_FLAGS ( MAP_ANON | MAP_ALIGNED_CHERI )
 #define BUCKET_PROT ( PROT_READ | PROT_WRITE )
 
-typedef enum {0 = FREED, 1 = MAPPED, 2 = INUSE} bucket_status_t;
+typedef enum {FREED = 0, MAPPED = 1, INUSE = 2} batch_status_t ;
 
 struct batch {
 	LIST_ENTRY(batch) batches;
 	_Atomic(void *) mem;
-	_Atomic bucket_status_t status;
+	_Atomic batch_status_t status;
 	_Atomic size_t freed;
 	_Atomic size_t allocated;
 };
@@ -48,22 +68,26 @@ struct bucket {
 	size_t cherisize;
 	size_t alignment;
 	size_t alloc_size;
-	struct batch *spare;
+	_Atomic(struct batch *) spare;
 };
 
 static struct {
 	size_t *sizes;
-	struct *buckets;
+	struct bucket *buckets;
 	size_t nbuckets;
 } bucket_table;
 
 static const size_t alloc_size = (1024 * 1024);
+static pthread_t refiller, emptier;
 
 static void init_bucket(struct bucket *new_bucket, size_t len);
 static int bucketsize_compare(const void* arg1, const void* arg2);
 static void new_batch(struct bucket *bucket);
-static struct batch *get_spare(struct bucket *bucket)
-static struct bucket *get_bucket(size_t size)
+static struct batch *get_spare(struct bucket *bucket);
+static struct bucket *get_bucket(size_t size);
+
+static void *empty_buckets(void *args);
+static void *refill_buckets(void *args);
 
 static 
 int bucketsize_compare(const void* arg1, const void* arg2) 
@@ -79,7 +103,7 @@ int bucketsize_compare(const void* arg1, const void* arg2)
 		return (0);
 }
 
-inline bool
+static inline bool
 needs_new_batch(struct bucket *bucket)
 {
 	if (bucket->spare == NULL)
@@ -88,7 +112,7 @@ needs_new_batch(struct bucket *bucket)
 		return (false);
 }
 
-inline size_t
+static inline size_t
 mem_remaining(struct batch *batch)
 {
 	void *cap;
@@ -118,6 +142,7 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 {
 	size_t i, last_bucket;
 
+
 	bucket_table.buckets = calloc(nbuckets, sizeof(struct bucket));
 	qsort(bucket_sizes, nbuckets, sizeof(size_t), bucketsize_compare);
 	
@@ -134,8 +159,10 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 		init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket]);
 	}
 	bucket_table.sizes[bucket_table.nbuckets] = 0;
-	bucket_table.buckets = realloc(bucket_table.nbuckets * sizeof(struct bucket))
-	bucket_table.flexible_bucket = &bucket_table.buckets[i-1];
+	bucket_table.buckets = realloc(bucket_table.buckets, bucket_table.nbuckets * sizeof(struct bucket));
+
+	pthread_create(&refiller, NULL, refill_buckets, NULL);
+	pthread_create(&emptier, NULL, empty_buckets, NULL);
 }
 
 struct batch *
@@ -159,11 +186,13 @@ get_bucket(size_t size)
 	
 	for (i = 0; i < bucket_table.nbuckets; i++) {
 		if (size == bucket_table.buckets[i].size)
-			return (bucket_table.buckets[i]);
+			return (&bucket_table.buckets[i]);
 		else if (size == bucket_table.buckets[i].cherisize)
-			return (bucket_table.bucket[i]);
+			return (&bucket_table.buckets[i]);
 	}
-	return (bucket_table.flexible_bucket);
+	assert(size < bucket_table.sizes[i-1]);
+	return (&bucket_table.buckets[i-1]);
+
 }
 
 void
@@ -183,8 +212,8 @@ new_batch(struct bucket *bucket)
 	batch->allocated = 0;
 	batch->mem = mem;
 	expected = NULL;
-	if(!atomic_compare_exchange_strong_explicit(bucket->spare, &expected, batch, memory_order_acq_rel, memory_order_acquire)) {
-		munmap(mem);
+	if(!atomic_compare_exchange_strong_explicit(&bucket->spare, &expected, batch, memory_order_acq_rel, memory_order_acquire)) {
+		munmap(mem, cheri_getlen(mem));
 		free(batch);
 	}
 }
@@ -192,22 +221,26 @@ new_batch(struct bucket *bucket)
 void *
 refill_buckets(void *args)
 {
+	UNUSED(args);
 	struct bucket *bucket;
 	size_t i;
 
 	for (;;) {
 		sleep(10);
 		for (i = 0; i < bucket_table.nbuckets; i++) {
-			bucket = bucket_table.buckets[i];
+			bucket = &bucket_table.buckets[i];
 			if (needs_new_batch(bucket)) 
 				new_batch(bucket);
 		}
 	}
+
+	return (NULL);
 }
 
 void *
 empty_buckets(void *args)
 {
+	UNUSED(args);
 	struct batch *batch;
 	struct bucket *bucket;
 	size_t i, allocated, freed; 
@@ -217,10 +250,10 @@ empty_buckets(void *args)
 	for (;;) {
 		sleep(10);
 		for (i = 0; i < bucket_table.nbuckets; i++) {
-			bucket = bucket_table.buckets[i];
+			bucket = &bucket_table.buckets[i];
 			batch = LIST_FIRST(&bucket->batch_list);
 			for (;;) {
-				batch = LIST_NEXT(batch);
+				batch = LIST_NEXT(batch, batches);
 				if (batch == NULL)
 					break;
 				else if (batch->status == FREED)
@@ -236,6 +269,8 @@ empty_buckets(void *args)
 			}
 		}
 	}
+
+	return (NULL);
 }
 
 void *
@@ -244,7 +279,7 @@ cocall_malloc(size_t len)
 	struct batch *batch;
 	struct bucket *bucket;
 	void *result_cap, *cap, *new_cap;
-	bucket_status_t status;
+	batch_status_t status;
 
 	bucket = get_bucket(len);
 	batch = LIST_FIRST(&bucket->batch_list);
