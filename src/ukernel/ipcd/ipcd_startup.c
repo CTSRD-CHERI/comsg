@@ -75,6 +75,9 @@ void ipcd_startup(void)
 {
 	nsobject_t *coprovide_nsobj;
 	void *coprovide_scb;
+
+	setup_copoll_notifiers();
+	
 	global_ns = coproc_init(NULL, NULL, NULL, NULL);
 	if (global_ns == NULL)
 		err(errno, "ipcd_startup: cocall failed");

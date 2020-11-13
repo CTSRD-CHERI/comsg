@@ -38,6 +38,7 @@
 
 #include <sys/errno.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stddef.h>
 
 int 
@@ -58,17 +59,20 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	coport_eventmask_t event;
 	coport_status_t status;
 	size_t port_len, index, new_len;
+	bool closing;
 
 	cocarrier = unseal_coport(cocall_args->cocarrier);
 	cocarrier_buf = cocarrier->buffer->buf;
 
 	status = COPORT_OPEN;
+	closing = false;
 	while(!atomic_compare_exchange_weak_explicit(&cocarrier->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed)) {
 		switch (status) {
 		case COPORT_CLOSED:
 			COCALL_ERR(cocall_args, EPIPE);
 			break; /* NOTREACHED */
 		case COPORT_CLOSING:
+			closing = true;
 			break;
 		default:
 			status = COPORT_OPEN;
@@ -90,16 +94,17 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	cocarrier->info->length = new_len;
 
 	cocall_args->message = cocarrier_buf[index];
-
+	if (!closing)
+		event |= COPOLL_OUT;
 	if (new_len == 0)
-		event = ((COPOLL_OUT | event) & ~(COPOLL_RERR | COPOLL_IN));
+		event &= ~(COPOLL_RERR | COPOLL_IN);
 	else 
-		event = ((COPOLL_OUT | event) & ~COPOLL_RERR);
+		event &= ~COPOLL_RERR;
 	cocarrier->info->event = event;
 	/* Restore status value (might be COPORT_CLOSING or COPORT_OPEN) */
 	atomic_store_explicit(&cocarrier->info->status, status, memory_order_release);
 
-	copoll_notify(cocarrier);
+	copoll_notify(cocarrier, COPOLL_OUT);
 	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));
 }
 
