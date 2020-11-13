@@ -43,6 +43,10 @@
 static pthread_mutex_t global_copoll_lock;
 static pthread_cond_t global_cosend_cond;
 
+static pthread_cond_t *coport_event_conds;
+
+
+
 __attribute__((constructor)) static void 
 init_copoll_lock(void)
 {
@@ -105,24 +109,19 @@ await_copoll_events(void)
 }
 
 void 
-copoll_notify(coport_t *cocarrier)
+copoll_notify(coport_t *cocarrier, coport_eventmask_t event)
 {
+
 	coport_status_t status;
-	if(!LIST_EMPTY(&cocarrier->cd->listeners)) {
-		acquire_copoll_mutex();
-		/* 
-		 * TODO-PBB: Because we divide up responsibility for the cocarrier table
-		 * among delivery threads, currently we signal all of them to ensure
-		 * the right one is among those that wakes up. This is silly, as 
-		 * it should be possible to determine the correct thread at runtime.
-		 * Per-thread conditions and a global lock would suffice and decrease
-		 * contention and unnecessary work, so we should do that instead.
-		 */
-        pthread_cond_broadcast(&global_cosend_cond);
-        release_copoll_mutex();
+	if(!LIST_EMPTY(&cocarrier->cd->listeners) && ((cocarrier->cd->levent & event) != NOEVENT)) {
+		do {
+			acquire_copoll_mutex();
+	        put_coport_event(coport);
+        	release_copoll_mutex();
+        } while (0);
     } else {
     	/* 
-    	 * If there are no listeners and we do not signal the delivery threads,
+    	 * If there are no listeners for this coport, or for this event,
     	 * then we need to perform the status change ourselves. In future, there might
     	 * be cases where the status could have changed, e.g. to COPORT_CLOSED, since
     	 * we set it to COPORT_DONE, so we use cmpxchg rather than a blind store.

@@ -60,7 +60,7 @@
 */
 typedef enum {COSEND, CORECV} coport_op_t;
 typedef enum {INVALID_COPORT = 0, COPIPE = 1, COCARRIER = 2, COCHANNEL = 3} coport_type_t;
-typedef enum {COPORT_CLOSED = 0, COPORT_OPEN = 1, COPORT_BUSY = 2, COPORT_READY = 4, COPORT_DONE = 8, COPORT_CLOSING = 16} coport_status_t;
+typedef enum {COPORT_CLOSED = 0, COPORT_OPEN = 1, COPORT_BUSY = 2, COPORT_READY = 4, COPORT_DONE = 8, COPORT_CLOSING = 16, COPORT_POLLING = 32} coport_status_t;
 typedef enum {NOEVENT = 0, COPOLL_CLOSED = 1, COPOLL_IN = 2, COPOLL_OUT = 4, COPOLL_RERR = 8, COPOLL_WERR = 16} coport_eventmask_t;
 typedef enum {RECV = 1, SEND = 2, CREAT = 4, EXCL = 8, ONEWAY = 16} coport_flags_t; //currently unimplemented
 
@@ -81,11 +81,9 @@ typedef enum {RECV = 1, SEND = 2, CREAT = 4, EXCL = 8, ONEWAY = 16} coport_flags
 
 #define COCARRIER_SIZE (COPORT_BUF_LEN / CHERICAP_SIZE)
 
-#if 1
-
-typedef struct __no_subobject_bounds _coport_listener 
-{
+typedef struct __no_subobject_bounds _coport_listener {
     LIST_ENTRY(_coport_listener) entries;
+    _Atomic bool removed;
     pthread_cond_t *wakeup;
     coport_eventmask_t events; 
     coport_eventmask_t revent;
@@ -94,7 +92,8 @@ typedef struct __no_subobject_bounds _coport_listener
 typedef union {
     struct {
         LIST_HEAD(, _coport_listener) listeners;
-    }; 
+        coport_eventmask_t levent; /* bitwise or of listener events */
+    };  /* COCARRIER */
 } coport_typedep_t;
 
 typedef struct {
@@ -109,40 +108,12 @@ typedef struct {
     void *buf;
 } coport_buf_t;
 
-struct _coport //Pointer to whole struct has Load + Load caps, but no store
-{
+struct _coport {
     coport_info_t *info; //Read and Write data only
     coport_type_t type; 
     coport_buf_t *buffer;  //Permissions vary on type
     coport_typedep_t *cd; //Read and Write + R/W Caps
-};
-
-#else 
-
-/* Changes occur across processes to most things in this struct */
-struct _coport
-{
-    _Atomic(void * __capability) buffer; 
-    _Atomic size_t length; 
-    _Atomic size_t start;
-    _Atomic size_t end;
-    _Atomic coport_status_t status;
-    coport_type_t type;
-    union //used to allow other coport_type dependent stuff later if we want it.
-    {
-        struct cocarrier_fields
-        {
-            _Atomic coport_eventmask_t event;
-            LIST_HEAD(, _coport_listener) listeners;
-        }; 
-        struct cochannel_fields
-        {
-            _Atomic coport_eventmask_t event;
-        };
-    };
-};
-
-#endif
+}; //Pointer to whole struct has Load + Load caps, but no store
 
 typedef struct _coport coport_t; 
 

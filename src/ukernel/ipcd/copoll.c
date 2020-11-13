@@ -40,6 +40,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,12 +95,13 @@ init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 	coport_listener_t **listen_entries;
 	uint i;
 	
-	listen_entries = cocall_calloc(ncoports, CHERICAP_SIZE);
+	listen_entries = calloc(ncoports, CHERICAP_SIZE);
 	for (i = 0; i < ncoports; i++) {
 		listen_entries[i] = malloc(sizeof(coport_listener_t));
 		listen_entries[i]->wakeup = cond;
 		listen_entries[i]->revent = NOEVENT;
 		listen_entries[i]->events = coports[i].events;
+		atomic_store_explicit(&listen_entries[i]->removed, false, memory_order_release);
 	}
 	return (listen_entries);
 }
@@ -130,12 +132,17 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 		while(!atomic_compare_exchange_weak_explicit(&coport->info->status, &status, COPORT_BUSY, memory_order_acq_rel, memory_order_relaxed))
 			status = COPORT_OPEN;
 		LIST_INSERT_HEAD(&coports[i].coport->cd->listeners, listen_entries[i], entries);
+		coport->cd->levent |= listen_entries[i]->events;
 		atomic_store_explicit(&coport->info->status, COPORT_OPEN, memory_order_release);
 	}
 
 	copoll_wait(&wake, timeout);
 
 	for (i = 0; i < ncoports; i++) {
+		if (atomic_load_explicit(listen_entries[i]->removed, memory_order_acquire)) {
+			assert(listen_entries[i]->revents != NOEVENT); /* if this fails, we have some concurrency mistakes*/
+			continue;
+		}
 		coport = unseal_coport(coports[i].coport);
 		status = COPORT_OPEN;
 		//TODO-PBB: An area where better waiting could possibly be used
@@ -143,6 +150,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 			status = COPORT_OPEN;
 		LIST_REMOVE(listen_entries[i], entries);
 		atomic_store_explicit(&coport->info->status, COPORT_OPEN, memory_order_release);
+		listen_entries[i]->removed = true;
 	}
 	pthread_cond_destroy(&wake);
 	release_copoll_mutex();

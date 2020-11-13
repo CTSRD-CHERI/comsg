@@ -34,11 +34,19 @@
 
 #include <stddef.h>
 
-struct copoll_delivery_args {
-	size_t modulo;
-	size_t remainder;
-};
+extern const size_t n_copoll_notifiers;
 
-void *copoll_deliver(void *args);
+#define COPORT_EVENTQUEUE_LEN (32)
+
+typedef struct {
+	pthread_t notifier_thread;
+	pthread_cond_t notifier_wakeup;
+	coport_t *event_queue[COPORT_EVENTQUEUE_LEN];
+	_Atomic size_t next_event;
+} copoll_notifier_t;
+
+
+void put_coport_event(coport_t *coport);
+
 
 #endif //!defined(_COPOLL_DELIVER_H)
