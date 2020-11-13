@@ -32,13 +32,25 @@
 #ifndef _COPOLL_DELIVER_H
 #define _COPOLL_DELIVER_H
 
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stddef.h>
 
-struct copoll_delivery_args {
-	size_t modulo;
-	size_t remainder;
-};
+#include <coproc/coport.h>
 
-void *copoll_deliver(void *args);
+extern const size_t n_copoll_notifiers;
+
+#define COPORT_EVENTQUEUE_LEN (32)
+
+typedef struct {
+	pthread_t notifier_thread;
+	pthread_cond_t notifier_wakeup;
+	coport_t *event_queue[COPORT_EVENTQUEUE_LEN];
+	_Atomic size_t next_event;
+} copoll_notifier_t;
+
+
+void put_coport_event(coport_t *coport);
+void setup_copoll_notifiers(void);
 
 #endif //!defined(_COPOLL_DELIVER_H)

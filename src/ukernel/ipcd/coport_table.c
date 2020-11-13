@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "coport_table.h"
+#include "copoll_deliver.h"
 #include <coproc/coport.h>
 
 #include <assert.h>
@@ -138,42 +139,17 @@ int can_allocate_coport(coport_type_t type)
 		return (1);
 }
 
-/*
- * Used for copoll delivery. Walks a vertical slice of the cocarrier table
- * and returns a NULL-terminated array of those cocarriers with threads 
- * listening for events.
- */
-coport_t **
-get_cocarrier_events(size_t mod, size_t r)
+int 
+get_coport_notifier_index(coport_t *coport)
 {
-	coport_t **cocarriers, *cocarrier;
-	size_t idx, end, start, expected_max_len, i;
-	coport_status_t status;
-	
-	idx = 0;
-	end = atomic_load(&cocarrier_table.next_coport);
-	start = cocarrier_table.first_coport;
-	expected_max_len = ((start - end) / mod) + 1;
+	struct _coport_table *coport_table;
+	size_t idx, end, start;
 
-	cocarriers = calloc(expected_max_len, CHERICAP_SIZE);
-	for (i = (start - r); i > end; i-=mod) {
-		assert((start - i) % mod == r); /*TODO-PBB: remove this sanity check */
-		cocarrier = &cocarrier_table.coports[i].port;
-		status = cocarrier->info->status;
-		if (status == COPORT_CLOSING && cocarrier->info->length == 0) 
-			atomic_store_explicit(&cocarrier->info->status, COPORT_CLOSED, memory_order_release);
-		else if (status == COPORT_CLOSED)
-			continue;
-		if (LIST_EMPTY(&cocarrier->cd->listeners))
-			continue;
-		cocarriers[++idx] = cocarrier;
-	}
-	if (idx != 0) {
-		cocarriers[idx] = NULL;
-		return (cocarriers);
-	} else {
-		free(cocarriers);
-		return (NULL);
-	}
+	coport_table = get_coport_table(coport->type);
+	start = coport_table->first_coport;
+	idx = (cheri_getaddress(&coport_table->coports[start]) - cheri_getaddress(coport)) / sizeof(coport_t);
+	idx = idx % n_copoll_notifiers;
+
+	return (idx);
 }
 

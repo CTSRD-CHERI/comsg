@@ -34,9 +34,11 @@
 
 #include <coproc/coport.h>
 
+#define N_COPORT_TABLES 3
+
 coport_t *allocate_coport(coport_type_t type);
 int in_coport_table(coport_t *ptr, coport_type_t type);
 int can_allocate_coport(coport_type_t type);
-coport_t **get_cocarrier_events(size_t mod, size_t r);
+int get_coport_notifier_index(coport_t *coport);
 
 #endif //!defined(_COPORT_TABLE_H)

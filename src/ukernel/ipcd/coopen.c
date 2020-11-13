@@ -75,6 +75,7 @@ void init_coport(coport_type_t type, coport_t *port)
 			break;
 		case COCARRIER:
 			LIST_INIT(&port->cd->listeners);
+			port->cd->levent = NOEVENT;
 		case COCHANNEL: 
 			port->info->length = 0;
 			port->info->event = COPOLL_INIT_EVENTS;
