@@ -29,9 +29,9 @@
 #include <sys/queue.h>
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
-#include <sys/mman.h>
 #include <sys/param.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <pthread.h>
 
 #include <coproc/namespace.h>
@@ -46,9 +46,6 @@
 
 #define COPORT_PERM_RECV CHERI_PERM_SW2
 #define COPORT_PERM_SEND CHERI_PERM_SW3
-
-#define COPORT_MMAP_FLAGS (MAP_ANONYMOUS | MAP_SHARED | MAP_ALIGNED_CHERI)
-#define COPORT_MMAP_PROT (PROT_READ | PROT_WRITE)
 
 /* 
     COCHANNEL - simple data buffer with pipe-like semantics

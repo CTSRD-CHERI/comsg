@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "copoll_utils.h"
-
+#include "copoll_deliver.h"
 #include <coproc/coport.h>
 
 #include <err.h>
@@ -103,9 +103,9 @@ copoll_wait(pthread_cond_t *wait_cond, long timeout)
 }
 
 void 
-await_copoll_events(void)
+await_copoll_events(pthread_cond_t *wait_cond)
 {
-	pthread_cond_wait(&global_cosend_cond, &global_copoll_lock);
+	pthread_cond_wait(&wait_cond, &global_copoll_lock);
 }
 
 void 
@@ -114,11 +114,9 @@ copoll_notify(coport_t *cocarrier, coport_eventmask_t event)
 
 	coport_status_t status;
 	if(!LIST_EMPTY(&cocarrier->cd->listeners) && ((cocarrier->cd->levent & event) != NOEVENT)) {
-		do {
-			acquire_copoll_mutex();
-	        put_coport_event(coport);
-        	release_copoll_mutex();
-        } while (0);
+		acquire_copoll_mutex();
+        put_coport_event(cocarrier);
+    	release_copoll_mutex(); 
     } else {
     	/* 
     	 * If there are no listeners for this coport, or for this event,

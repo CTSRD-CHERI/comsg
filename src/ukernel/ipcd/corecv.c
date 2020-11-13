@@ -104,7 +104,7 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	/* Restore status value (might be COPORT_CLOSING or COPORT_OPEN) */
 	atomic_store_explicit(&cocarrier->info->status, status, memory_order_release);
 
-	copoll_notify(cocarrier);
+	copoll_notify(cocarrier, COPOLL_OUT);
 	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));
 }
 

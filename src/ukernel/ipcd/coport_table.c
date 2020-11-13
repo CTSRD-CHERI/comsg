@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "coport_table.h"
+#include "copoll_deliver.h"
 #include <coproc/coport.h>
 
 #include <assert.h>
@@ -144,11 +145,10 @@ get_coport_notifier_index(coport_t *coport)
 	struct _coport_table *coport_table;
 	size_t idx, end, start;
 
-	coport = unseal_coport(coport);
 	coport_table = get_coport_table(coport->type);
 	start = coport_table->first_coport;
-	idx = (&coport_table.coports[start] - cheri_getaddress(coport)) / sizeof(coport_t);
-	idx = idx % n_copoll_notifiers
+	idx = (cheri_getaddress(&coport_table->coports[start]) - cheri_getaddress(coport)) / sizeof(coport_t);
+	idx = idx % n_copoll_notifiers;
 
 	return (idx);
 }

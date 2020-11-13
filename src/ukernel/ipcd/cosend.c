@@ -121,6 +121,6 @@ void coport_send(coopen_args_t *cocall_args, void *token)
     cocarrier->info->event = event;
     atomic_store_explicit(&cocarrier->info->status, COPORT_DONE, memory_order_release);
 
-    copoll_notify(cocarrier);
+    copoll_notify(cocarrier, COPOLL_IN);
     COCALL_RETURN(cocall_args, msg_len);
 }

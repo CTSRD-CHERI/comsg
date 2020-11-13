@@ -139,8 +139,8 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 	copoll_wait(&wake, timeout);
 
 	for (i = 0; i < ncoports; i++) {
-		if (atomic_load_explicit(listen_entries[i]->removed, memory_order_acquire)) {
-			assert(listen_entries[i]->revents != NOEVENT); /* if this fails, we have some concurrency mistakes*/
+		if (atomic_load_explicit(&listen_entries[i]->removed, memory_order_acquire)) {
+			assert(listen_entries[i]->revent != NOEVENT); /* if this fails, we have some concurrency mistakes*/
 			continue;
 		}
 		coport = unseal_coport(coports[i].coport);
@@ -153,6 +153,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 		listen_entries[i]->removed = true;
 	}
 	pthread_cond_destroy(&wake);
+	pthread_condattr_destroy(&wake_attr);
 	release_copoll_mutex();
 
 	matched = 0;
@@ -181,7 +182,7 @@ cocarrier_poll_slow(cocall_args_t *cocall_args, void *token)
 	ncoports = cocall_args->ncoports;
 	target_len = ncoports * sizeof(pollcoport_t);
 
-	pollcoport_t *targets = cocall_malloc(target_len);
+	pollcoport_t *targets = malloc(target_len);
 	memcpy(targets, cocall_args->coports, target_len); //copyin
 
 	matched = inspect_events(targets, ncoports);
@@ -193,7 +194,7 @@ cocarrier_poll_slow(cocall_args_t *cocall_args, void *token)
 		matched = wait_for_events(targets, ncoports, cocall_args->timeout);
 	
 	populate_revents(cocall_args->coports, targets, ncoports);
-	cocall_free(targets);
+	free(targets);
 
 	COCALL_RETURN(cocall_args, matched);
 }

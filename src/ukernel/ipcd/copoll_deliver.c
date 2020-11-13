@@ -40,6 +40,8 @@
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/queue.h>
 
 
 const size_t n_copoll_notifiers = 4;
@@ -48,14 +50,14 @@ static copoll_notifier_t notifiers[n_copoll_notifiers];
 static void 
 process_coport_event(coport_t *coport)
 {
-	coport_listener_t *listener;
+	coport_listener_t *listener, *listener_temp;
 	coport_eventmask_t coport_event, listener_mask, revents;
 	coport_status_t status;
 
 	if (!cheri_gettag(coport))
-		break;
+		return;
 	else if (LIST_EMPTY(&coport->cd->listeners))
-		continue; //NOTREACHED
+		return; //NOTREACHED
 	
 	status = COPORT_DONE;
 	while(!atomic_compare_exchange_strong_explicit(&coport->info->status, &status, COPORT_POLLING, memory_order_acq_rel, memory_order_acquire)) {
@@ -74,8 +76,8 @@ process_coport_event(coport_t *coport)
 	coport_event = coport->info->event;
 	assert((coport_event & coport->cd->levent) != NOEVENT);
 
-	LIST_FOREACH_SAFE(listener, &coport->cd->listeners, entries) {
-		listener_mask = listener->events
+	LIST_FOREACH_SAFE(listener, &coport->cd->listeners, entries, listener_temp) {
+		listener_mask = listener->events;
 		revents = (coport_event & listener_mask);
 		if(revents == NOEVENT) 
 			continue;
@@ -87,6 +89,7 @@ process_coport_event(coport_t *coport)
 	}
 	coport->cd->levent &= ~coport_event;
 	atomic_store_explicit(&coport->info->status, status, memory_order_release);
+
 }
 
 static void *
@@ -94,14 +97,10 @@ copoll_deliver(void *argp)
 {
 	copoll_notifier_t *notifier;
 	coport_t *coport;
-	struct copoll_delivery_args *args;
 	size_t i, n_events;
 	size_t index;
-	
-	args = argp; 
-	index = args->remainder;
 
-	notifier = &notifiers[index];
+	notifier = argp;
 	acquire_copoll_mutex();
 	for (;;) {
 		await_copoll_events(&notifier->notifier_wakeup);
@@ -118,21 +117,20 @@ copoll_deliver(void *argp)
 void 
 put_coport_event(coport_t *coport)
 {
-	coport_notifier_t *notifier;
+	copoll_notifier_t *notifier;
 	size_t event_idx, notifier_idx;
 
 	notifier_idx = get_coport_notifier_index(coport);
 	notifier = &notifiers[notifier_idx];
-	event_idx = atomic_fetch_add_explict(&notifier->next_event, 1, memory_order_acq_rel);
+	event_idx = atomic_fetch_add_explicit(&notifier->next_event, 1, memory_order_acq_rel);
 	assert(event_idx < COPORT_EVENTQUEUE_LEN);
-
 	notifier->event_queue[event_idx] = coport;
-
+	pthread_cond_signal(&notifier->notifier_wakeup);
 }
 
 
-__attribute__((constructor)) static void
-setup_notifiers(void)
+void
+setup_copoll_notifiers(void)
 {
 	size_t i;
 	pthread_condattr_t notifier_cond_attrs;

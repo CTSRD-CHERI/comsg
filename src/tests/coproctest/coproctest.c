@@ -83,7 +83,7 @@ do_cocarrier(void *argp)
 
 	pthread_mutex_lock(&start);
 	make_pollcoport(&pct, args->port, COPOLL_IN);
-	printf("coproctest: polling coport...\n");
+	printf("coproctest: polling coport (is recv possible?)...\n");
 	pthread_cond_signal(&started);
 	pthread_mutex_unlock(&start);
 	error = copoll(&pct, 1, -1);
@@ -109,6 +109,7 @@ do_cocarrier(void *argp)
 static void 
 do_tests(void)
 {
+	pollcoport_t pct;
 	namespace_t *proc_ns;
 	coport_t *port;
 	nsobject_t *port_obj;
@@ -266,7 +267,17 @@ cocreate_lbl:
 	else
 		err(errno, "coproctest: do_tests: coinsert failed");
 
-	
+	make_pollcoport(&pct, port, COPOLL_OUT);
+	printf("coproctest: polling coport (is send possible?)...\n");
+	error = copoll(&pct, 1, 0);
+	if (error == -1) {
+		printf("\t\t\tfailed\n");
+		err(errno, "do_cocarrier: copoll failed");
+	}
+	else
+		printf("coproctest: polling coport... \t\t\tsuccess!\n");
+
+
 	recvr_args->port = port;
 	recvd = 0;
 	pthread_mutex_lock(&start);

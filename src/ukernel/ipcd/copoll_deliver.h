@@ -32,7 +32,11 @@
 #ifndef _COPOLL_DELIVER_H
 #define _COPOLL_DELIVER_H
 
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stddef.h>
+
+#include <coproc/coport.h>
 
 extern const size_t n_copoll_notifiers;
 
@@ -47,6 +51,6 @@ typedef struct {
 
 
 void put_coport_event(coport_t *coport);
-
+void setup_copoll_notifiers(void);
 
 #endif //!defined(_COPOLL_DELIVER_H)
