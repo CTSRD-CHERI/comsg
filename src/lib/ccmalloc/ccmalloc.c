@@ -2,6 +2,11 @@
  * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
+ * This software was developed by SRI International and the University of
+ * Cambridge Computer Laboratory (Department of Computer Science and
+ * Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ * DARPA SSITH research programme.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -24,92 +29,41 @@
  * SUCH DAMAGE.
  */
 
-//TODO-PBB: Implement.
-#include <ccmalloc.h>
-
-#include <coproc/utils.h>
-
-#include <assert.h>
-#include <cheri/cheric.h>
-#include <cheri/cherireg.h>
-#include <err.h>
-#include <sys/errno.h>
-#include <pthread.h>
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <signal.h>
-#include <sys/mman.h>
-#include <sys/queue.h>
-#include <sys/time.h>
-#include <unistd.h>
-
-#define MAX_BUCKETS 12
-#define BUCKET_MAX_BATCHES 1024
-#define BUCKET_FLAGS ( MAP_ANON | MAP_ALIGNED_CHERI | MAP_SHARED )
+#define BUCKET_FLAGS ( MAP_ANON | MAP_ALIGNED_CHERI )
 #define BUCKET_PROT ( PROT_READ | PROT_WRITE )
 
-#define WAITMAX 1000000000L
-static const int bucket_batch = 64;
-static pthread_t bucket_refiller, batch_freer;
+typedef enum {0 = FREED, 1 = MAPPED, 2 = INUSE} bucket_status_t;
 
-typedef enum {UNINITIALIZED=0, READY=1, ALLOCATED=2, SPLIT=3, FREED=4} bucket_entry_status_t;
-
-
-#if 1
-#define err(n, s, ...) do { printf("%s: Errno=%d\n", s, n); kill(getpid(), SIGSEGV); } while(0)
-#endif 
-
-
-struct _bucket_entry {
-	TAILQ_ENTRY(_bucket_entry) next;
+struct batch {
+	LIST_ENTRY(batch) batches;
 	_Atomic(void *) mem;
-	_Atomic bucket_entry_status_t status;
-	_Atomic int nchunks;
-};
-
-struct _batch {
-	void *map_cap;
-	struct _bucket_entry *starting_entry;
-	int freed;
+	_Atomic bucket_status_t status;
+	_Atomic size_t freed;
+	_Atomic size_t allocated;
 };
 
 struct bucket {
-	TAILQ_HEAD(, _bucket_entry) entries;
-	_Atomic (struct _bucket_entry *)next_free_entry;
+	LIST_HEAD(, batch) batch_list;
 	size_t size;
 	size_t cherisize;
 	size_t alignment;
-	struct _batch batches[BUCKET_MAX_BATCHES];
-	_Atomic int nbatches;
-	int batch_size;
-	_Atomic int used_entries;
-	size_t smallest_alloc; /* UNUSED unless flexible_bucket */
-	pthread_mutex_t batch_lock;
+	size_t alloc_size;
+	struct batch *spare;
 };
 
-struct {
-	struct bucket *buckets;
-	size_t sizes[MAX_BUCKETS]; 
+static struct {
+	size_t *sizes;
+	struct *buckets;
 	size_t nbuckets;
-	struct bucket *flexible_bucket;
 } bucket_table;
 
-static 
-int bucket_compare(const void* arg1, const void* arg2) 
-{
-	struct bucket b1, b2;
-	b1 = (*(struct bucket *)arg1);
-	b2 = (*(struct bucket *)arg2);
-	if (b1.size > b2.size) 
-		return 1;
-	else if (b1.size < b2.size)
-		return -1;
-	else
-		return 0;
-}
+static const size_t alloc_size = (1024 * 1024);
+
+static void init_bucket(struct bucket *new_bucket, size_t len);
+static int bucketsize_compare(const void* arg1, const void* arg2);
+static void new_batch(struct bucket *bucket);
+static struct batch *get_spare(struct bucket *bucket)
+static struct bucket *get_bucket(size_t size)
 
 static 
 int bucketsize_compare(const void* arg1, const void* arg2) 
@@ -118,448 +72,231 @@ int bucketsize_compare(const void* arg1, const void* arg2)
 	b1 = (*(size_t *)arg1);
 	b2 = (*(size_t *)arg2);
 	if (b1 > b2) 
-		return 1;
+		return (1);
 	else if (b1 < b2)
-		return -1;
+		return (-1);
 	else
-		return 0;
+		return (0);
 }
 
-static void 
-new_bucket_batch(struct bucket *bucket)
+inline bool
+needs_new_batch(struct bucket *bucket)
 {
-	struct _bucket_entry *new_entries, *entry_ptr;
-	struct _batch new_batch;
-	size_t alloc_size;
-	void *mem;
-	int batch_idx;
-	int i;
-
-	pthread_mutex_lock(&bucket->batch_lock);
-	if (bucket->nbatches >= BUCKET_MAX_BATCHES)
-		err(ENOMEM, "new_bucket_batch: cannot allocate a new bucket batch");
+	if (bucket->spare == NULL)
+		return (true);
 	else
-		batch_idx = atomic_fetch_add(&bucket->nbatches, 1);
-	
-	
+		return (false);
+}
 
-	alloc_size = CHERI_REPRESENTABLE_LENGTH(bucket->cherisize * bucket_batch);
-	mem = mmap(NULL, alloc_size, BUCKET_PROT, BUCKET_FLAGS,  -1, 0);
-	if(mem == (void *)-1)
-		err(errno, "new_bucket_batch: mmap failed");
-	new_entries = calloc(bucket_batch, sizeof(struct _bucket_entry));
+inline size_t
+mem_remaining(struct batch *batch)
+{
+	void *cap;
 
-
-	bucket->batches[batch_idx].map_cap = mem;
-	bucket->batches[batch_idx].starting_entry = cheri_setbounds(&new_entries[0], sizeof(struct _bucket_entry));
-	if (bucket->next_free_entry == NULL)
-		bucket->next_free_entry = cheri_setbounds(&new_entries[0], sizeof(struct _bucket_entry));
-
-	for(i = 0; i < bucket->batch_size; i++)
-	{
-		entry_ptr = &new_entries[i];
-		if (((cheri_getaddress(mem) + bucket->cherisize) >= cheri_gettop(mem))) {
-			bucket->batch_size = i + 1;
-			break;
-		}
-		entry_ptr->mem = cheri_setboundsexact(mem, bucket->cherisize);
-		mem = cheri_setaddress(mem, cheri_gettop(entry_ptr->mem));
-		mem = __builtin_align_up(mem, bucket->alignment);
-
-		entry_ptr->status = READY;
-		entry_ptr = cheri_setbounds(entry_ptr, sizeof(struct _bucket_entry));
-		TAILQ_INSERT_TAIL(&bucket->entries, entry_ptr, next);
-	}
-	pthread_mutex_unlock(&bucket->batch_lock);
-
+	cap = atomic_load_explicit(&batch->mem, memory_order_acquire);
+	return (cheri_getlen(cap) - cheri_getoffset(cap));
 }
 
 static void
 init_bucket(struct bucket *new_bucket, size_t len)
 {
-	pthread_mutex_init(&new_bucket->batch_lock, NULL);
+	LIST_INIT(&new_bucket->batch_list);
+	new_bucket->alloc_size = alloc_size;
 	new_bucket->size = len;
 	new_bucket->cherisize = CHERI_REPRESENTABLE_LENGTH(len);
 	new_bucket->alignment = CHERI_REPRESENTABLE_ALIGNMENT(len);
-	new_bucket->used_entries = 0;
-	new_bucket->smallest_alloc = 0;
-	new_bucket->nbatches = 0;
-	memset(&new_bucket->batches, '\0', sizeof(struct _batch) * BUCKET_MAX_BATCHES);
-	TAILQ_INIT(&new_bucket->entries);
-	new_bucket->next_free_entry = NULL;
-	new_bucket->batch_size = bucket_batch;
-	new_bucket_batch(new_bucket);
-
-
-}
-
-static
-int batch_free(struct _batch *batch)
-{
-	struct _bucket_entry *cur_entry;
-	cur_entry = batch->starting_entry;
-	do {
-		if (cheri_is_address_inbounds(batch->map_cap, cheri_getaddress(cur_entry->mem)) == 0)
-			break;
-		else if (atomic_load(&cur_entry->status) != FREED)
-			return (0);
-		cur_entry = TAILQ_NEXT(cur_entry, next);
-	} while(cur_entry != NULL);
-	return (1);
-}
-
-static 
-void *free_batches(void *args)
-{
-	UNUSED(args);
-	struct bucket *bucket;
-	struct _batch *batch;
-	void *map_cap;
-	struct timespec wait;
-	long new_wait;
-	size_t map_len;
-	size_t nbuckets;
-	int didfree;
+	new_bucket->spare = NULL;
 	
-	nbuckets = bucket_table.nbuckets;
-	wait.tv_sec = 60 / nbuckets;
-	wait.tv_nsec = 0;
-	for(;;) {
-		didfree = 0;
-		for (size_t i = 0; i < nbuckets; i++) {
-			bucket = &bucket_table.buckets[i];
-			pthread_mutex_lock(&bucket->batch_lock);
-			for(size_t j = 0; j < bucket->nbatches; j++) {
-				batch = &bucket->batches[j];
-				if (batch->freed)
-					continue;
-				else if (batch_free(batch)) {
-					map_cap = batch->map_cap;
-					map_len = cheri_getlen(map_cap);
-					munmap(map_cap, map_len);
-					batch->freed = 1;
-					batch->map_cap = cheri_cleartag(map_cap);
-				}
-			}
-			pthread_mutex_unlock(&bucket->batch_lock);
-			nanosleep(&wait, NULL);
-		}
-		if (!didfree) {
-			new_wait = wait.tv_sec * 2;
-			wait.tv_sec = (new_wait < 60) ? new_wait : wait.tv_sec;
-		}
-		else
-			wait.tv_sec = 60 / nbuckets;
-	}
-	return (NULL);
+	new_batch(new_bucket);
+	get_spare(new_bucket);
+	new_batch(new_bucket);
+	assert(new_bucket->spare != NULL);
 }
 
-static
-void *refill_buckets(void *args)
+void 
+ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 {
-	UNUSED(args);
-	struct timespec wait_period;
-	struct bucket *bucket;
-	long new_wait;
-	int started_freer;
-	int batch_remaining;
-	int didwork;
-	size_t nbuckets;
+	size_t i, last_bucket;
 
-
-	nbuckets = bucket_table.nbuckets;
-	started_freer = 0;
-	wait_period.tv_sec = 0;
-	wait_period.tv_nsec = 1000;
-	for(;;) {
-		didwork = 0;
-		for(size_t i = 0; i < nbuckets; i++) {
-			bucket = &bucket_table.buckets[i];
-			batch_remaining = (bucket->batch_size - bucket->used_entries) % (bucket->batch_size + 1);
-			if (batch_remaining < (bucket->batch_size / 2)) {
-				didwork += 1;
-				new_bucket_batch(bucket);
-			}
+	bucket_table.buckets = calloc(nbuckets, sizeof(struct bucket));
+	qsort(bucket_sizes, nbuckets, sizeof(size_t), bucketsize_compare);
+	
+	last_bucket = 0;
+	bucket_table.nbuckets = 1;
+	bucket_table.sizes[0] = bucket_sizes[0];
+	for (i = 1; i < nbuckets; i++) {
+		if (bucket_table.sizes[last_bucket] == bucket_sizes[i]) {
+			bucket_table.buckets[last_bucket].alloc_size += alloc_size;
+			continue;
 		}
-		if (didwork) {
-			if (!started_freer) {
-				//a batch is only going to be freed after the next one has been allocated
-				pthread_create(&batch_freer, NULL, free_batches, NULL);
-				started_freer = 1;
-			}
-			wait_period.tv_nsec = 1000;
-		} else {
-			new_wait = wait_period.tv_nsec * 2;
-			wait_period.tv_nsec = (new_wait < WAITMAX) ? new_wait : wait_period.tv_nsec;
-		}
-		clock_nanosleep(CLOCK_REALTIME, 0, &wait_period, NULL);
+		last_bucket = bucket_table.nbuckets++;
+		bucket_table.sizes[last_bucket] = bucket_sizes[i];
+		init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket]);
 	}
-	return (NULL);
+	bucket_table.sizes[bucket_table.nbuckets] = 0;
+	bucket_table.buckets = realloc(bucket_table.nbuckets * sizeof(struct bucket))
+	bucket_table.flexible_bucket = &bucket_table.buckets[i-1];
 }
 
-__attribute__ ((constructor)) static 
-void set_nbuckets(void)
+struct batch *
+get_spare(struct bucket *bucket)
 {
-	memset(&bucket_table, '\0', sizeof(bucket_table));
+	struct batch *spare_batch;
+	spare_batch = atomic_load_explicit(&bucket->spare, memory_order_acquire);
+	
+	if (spare_batch == NULL)
+		return (NULL);
+	else if (atomic_compare_exchange_strong_explicit(&bucket->spare, &spare_batch, NULL, memory_order_acq_rel, memory_order_acquire))
+		LIST_INSERT_HEAD(&bucket->batch_list, spare_batch, batches);
 
+	return (spare_batch);
+}
+
+struct bucket *
+get_bucket(size_t size)
+{
+	size_t i;
+	
+	for (i = 0; i < bucket_table.nbuckets; i++) {
+		if (size == bucket_table.buckets[i].size)
+			return (bucket_table.buckets[i]);
+		else if (size == bucket_table.buckets[i].cherisize)
+			return (bucket_table.bucket[i]);
+	}
+	return (bucket_table.flexible_bucket);
 }
 
 void
-ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
+new_batch(struct bucket *bucket)
 {
-	int error;
-	size_t i;
-	if (bucket_table.nbuckets != 0)
-		err(EINVAL, "ccmalloc_init: called ccmalloc twice");
-	else if (nbuckets > MAX_BUCKETS)
-		err(EINVAL, "ccmalloc_init: number of requested buckets (%lu) exceeds MAX_BUCKETS", nbuckets);
-	else if (nbuckets == 0)
-		err(EINVAL, "ccmalloc_init: number of requested buckets (%lu) invalid", nbuckets);
-	else if (cheri_getlen(bucket_sizes) < (nbuckets * sizeof(size_t)))
-		err(EINVAL, "ccmalloc_init: invalid bounds for number of requested buckets (%lu) ", nbuckets);
-	
-	qsort(bucket_sizes, nbuckets, sizeof(size_t), bucketsize_compare);
-	bucket_table.sizes[0] = bucket_sizes[0];
-	bucket_table.nbuckets = 1;
-	for (i = 1; i < nbuckets; i++) {
-		if (bucket_sizes[bucket_table.nbuckets-1] == bucket_sizes[i]) {
-			continue;
-		}
-		bucket_table.sizes[bucket_table.nbuckets] = bucket_sizes[i];
-		bucket_table.nbuckets++;
+	struct batch *batch, *expected;
+	void *mem;
+
+	mem = mmap(NULL, alloc_size, BUCKET_PROT, BUCKET_FLAGS, -1, 0);
+	memset(mem, '\0', cheri_getlen(mem)); /* fault in via zero */
+	if(mem == (void *)-1)
+		err(errno, "new_bucket_batch: mmap failed");
+
+	batch = calloc(1, sizeof(struct batch));
+	batch->status = MAPPED;
+	batch->freed = 0;
+	batch->allocated = 0;
+	batch->mem = mem;
+	expected = NULL;
+	if(!atomic_compare_exchange_strong_explicit(bucket->spare, &expected, batch, memory_order_acq_rel, memory_order_acquire)) {
+		munmap(mem);
+		free(batch);
 	}
-	bucket_table.sizes[bucket_table.nbuckets] = 0;
-
-	bucket_table.buckets = calloc(bucket_table.nbuckets, sizeof(struct bucket));
-	for(i = 0; i < bucket_table.nbuckets; i++) {
-		init_bucket(&bucket_table.buckets[i], bucket_table.sizes[i]);
-	}
-	bucket_table.flexible_bucket = &bucket_table.buckets[i-1];
-	
-	
-	error = pthread_create(&bucket_refiller, NULL, refill_buckets, NULL);
-	if (error)
-		err(error, "ccmalloc_init: failed to start bucket refiller thread");
-}
-
-static
-struct bucket *find_bucket_min(size_t len)
-{
-	for(size_t i = 0; i < bucket_table.nbuckets; i++) {
-		if (bucket_table.buckets[i].size < len)
-			return (&bucket_table.buckets[i]);
-	}
-	return (NULL);
-}
-
-static
-struct bucket *find_bucket_exact(size_t len)
-{
-	for(size_t i = 0; i < bucket_table.nbuckets; i++) {
-		if (bucket_table.buckets[i].size == len)
-			return (&bucket_table.buckets[i]);
-	}
-	return (NULL);
-}
-
-static
-struct bucket *find_bucket_cheri(size_t len)
-{
-	for(size_t i = 0; i < bucket_table.nbuckets; i++) {
-		if (bucket_table.buckets[i].cherisize == len)
-			return (&bucket_table.buckets[i]);
-	}
-	return (NULL);
-}
-
-static
-void *get_mem(size_t len)
-{
-	struct bucket *memory_bucket;
-	struct _bucket_entry *new_next;
-	void *cap;
-	int resize;
-	bucket_entry_status_t new_status;
-
-	resize = 0;
-	memory_bucket = find_bucket_exact(len);
-	if (memory_bucket == NULL) {
-		memory_bucket = find_bucket_cheri(len);
-		if (memory_bucket == NULL)
-			err(EINVAL, "cocall_alloc: get_mem: bucket for size %lu not initialized; if required size varies, use flexible malloc", len);
-	}
-
-	while(!atomic_compare_exchange_weak(&memory_bucket->next_free_entry->status, &new_status, ALLOCATED))
-		new_status = READY;
-	atomic_fetch_add(&memory_bucket->used_entries, 1);
-	
-	cap = memory_bucket->next_free_entry->mem;
-	cap = cheri_setbounds(cap, len);
-	
-	new_next = TAILQ_NEXT(memory_bucket->next_free_entry, next);
-	while (new_next != NULL) {
-		if (new_next->status != READY && new_next->status != SPLIT)
-			new_next = TAILQ_NEXT(new_next, next);
-		else 
-			break;
-	}
-	if (new_next != NULL)
-		atomic_store(&memory_bucket->next_free_entry, new_next);
-	else {
-	}
-
-	return (cap);
-	
-}
-
-static void *
-cocall_alloc_noresize(size_t len)
-{
-	return (get_mem(len));
 }
 
 void *
-cocall_flexible_malloc(size_t len)
+refill_buckets(void *args)
 {
 	struct bucket *bucket;
-	struct _bucket_entry *entry, *new_next;
-	void *entry_mem, *new_entry_mem, *result_mem;
-	size_t free_mem;
-	bool size_prompts_update;
-	bucket_entry_status_t status;
+	size_t i;
 
-	bucket = bucket_table.flexible_bucket;
-	assert(len <= bucket->cherisize);
-	
-	entry = bucket->next_free_entry;
 	for (;;) {
-		assert(entry != NULL);
-		entry_mem = atomic_load_explicit(&entry->mem, memory_order_acquire);
-		free_mem = cheri_getlen(entry_mem) - cheri_getoffset(entry_mem);
-		if (len > free_mem) {
-			entry = TAILQ_NEXT(entry, next);
-			continue;
+		sleep(10);
+		for (i = 0; i < bucket_table.nbuckets; i++) {
+			bucket = bucket_table.buckets[i];
+			if (needs_new_batch(bucket)) 
+				new_batch(bucket);
 		}
-		status = atomic_load_explicit(&entry->status, memory_order_acquire);
-		if ((len == bucket->cherisize || len == bucket->size)) {
-			if (status != READY) {
-				entry = TAILQ_NEXT(entry, next);
-				continue;
-			}
-			if(!atomic_compare_exchange_strong_explicit(&entry->status, &status, ALLOCATED, memory_order_acq_rel, memory_order_relaxed)) {
-				entry = TAILQ_NEXT(entry, next);
-				continue;
-			}
-			result_mem = cheri_setbounds(entry_mem, len);
-			break;
-		} else {
-			if (status == READY)
-				atomic_store_explicit(&entry->status, SPLIT, memory_order_release);
-			else
-				assert(status == SPLIT);
-			do {
-				free_mem = cheri_getlen(entry_mem) - cheri_getoffset(entry_mem);
-				if (len > free_mem) {
-					result_mem = NULL;
+	}
+}
+
+void *
+empty_buckets(void *args)
+{
+	struct batch *batch;
+	struct bucket *bucket;
+	size_t i, allocated, freed; 
+	int status;
+	int error;
+
+	for (;;) {
+		sleep(10);
+		for (i = 0; i < bucket_table.nbuckets; i++) {
+			bucket = bucket_table.buckets[i];
+			batch = LIST_FIRST(&bucket->batch_list);
+			for (;;) {
+				batch = LIST_NEXT(batch);
+				if (batch == NULL)
 					break;
-				}
-				result_mem = cheri_setbounds(entry_mem, len);
-				new_entry_mem = cheri_incoffset(entry_mem, cheri_getlen(result_mem));
-			} while(!atomic_compare_exchange_strong_explicit(&entry->mem, &entry_mem, new_entry_mem, memory_order_acq_rel, memory_order_acquire));
-			if(result_mem == NULL) {
-				entry = TAILQ_NEXT(entry, next);
-				continue;
+				else if (batch->status == FREED)
+					continue;
+				allocated = atomic_load_explicit(&batch->allocated, memory_order_acquire);
+				freed = batch->freed;
+				if (allocated != freed)
+					continue;
+				error = munmap(batch->mem, cheri_getlen(batch->mem));
+				if (error != 0)
+					err(errno, "unmap: failed to unmap batch");
+				atomic_store_explicit(&batch->status, FREED, memory_order_release);
 			}
-			result_mem = cheri_andperm(result_mem, ~CHERI_PERM_CHERIABI_VMMAP);
-			atomic_fetch_add(&entry->nchunks, 1);
-			break;
 		}
 	}
-	free_mem = cheri_getlen(entry->mem) - cheri_getoffset(entry->mem);
-	size_prompts_update = (!(bucket->smallest_alloc < (bucket->size / 2)) == !(free_mem < bucket->smallest_alloc));
-	if (entry == bucket->next_free_entry && size_prompts_update) {
-		do {
-			new_next = TAILQ_NEXT(entry, next);
-			if (new_next == NULL) 
-				goto done;
-		} while (new_next->status != ALLOCATED && new_next->status != FREED);
-		atomic_compare_exchange_strong(&bucket->next_free_entry, &entry, new_next);
+}
+
+void *
+cocall_malloc(size_t len)
+{
+	struct batch *batch;
+	struct bucket *bucket;
+	void *result_cap, *cap, *new_cap;
+	bucket_status_t status;
+
+	bucket = get_bucket(len);
+	batch = LIST_FIRST(&bucket->batch_list);
+	
+	status = atomic_load_explicit(&batch->status, memory_order_acquire);
+	if (status == MAPPED)
+		atomic_compare_exchange_strong_explicit(&batch->status, &status, INUSE, memory_order_acq_rel, memory_order_acquire);
+	assert(status == INUSE);
+
+	if (mem_remaining(batch) < len) {
+		batch = get_spare(bucket);
+		if (batch == NULL) 
+			return (NULL);
 	}
-done:
-	if(len < bucket->smallest_alloc)
-		bucket->smallest_alloc = len;
-	return (result_mem);
-		
 
+	cap = atomic_load_explicit(&batch->mem, memory_order_acquire);
+	assert(cap != NULL);
+	do {
+		result_cap = cheri_setbounds(cap, len);
+		new_cap = cheri_incoffset(cap, cheri_getlen(result_cap));
+		new_cap = __builtin_align_up(new_cap, bucket->alignment);
+	} while (!atomic_compare_exchange_strong_explicit(&batch->mem, &cap, new_cap, memory_order_acq_rel, memory_order_acquire));
+
+	atomic_fetch_add_explicit(&batch->allocated, cheri_getlen(result_cap), memory_order_acq_rel);
+	result_cap = cheri_andperm(result_cap, ~CHERI_PERM_CHERIABI_VMMAP);
+	return (result_cap);
 }
 
-
-void *cocall_malloc(size_t len)
-{
-	return (cocall_alloc(len, 0, 0));
-}
-
-void *cocall_alloc(size_t len, ccmalloc_flags_t flags, size_t resize_hint)
-{
-	UNUSED(resize_hint);
-	UNUSED(flags);
-	void *cap;
-
-	if (flags != 0)
-		err(ENOSYS, "cocall_malloc: resizable malloc not yet implemented");
-
-	cap = cocall_alloc_noresize(len);
-	return (cap);
-}
-
-void *cocall_calloc(size_t num, size_t size)
+void *
+cocall_calloc(size_t a, size_t b)
 {
 	void *mem;
-	size_t length = num * size;
-	size_t actual_len;
-
-	mem = cocall_alloc(length, 0, 0);
-	actual_len = cheri_getlen(mem);
-	assert(length <= actual_len);
-	memset(mem, 0, actual_len);
-	
+	a = a * b;
+	mem = cocall_malloc(a);
+	memset(mem, '\0', cheri_getlen(mem));
 	return (mem);
 }
 
-static
-int free_batch_entry(struct _batch *batch, void *cap)
+void
+cocall_free(void *cap) 
 {
-	struct _bucket_entry *cur_entry;
-	cur_entry = batch->starting_entry;
-	do {
-		if (cur_entry->mem == cap) {
-			//could possibly use sw-defined permissions?
-			atomic_store(&cur_entry->status, FREED);
-			return (1);
-		}
-		cur_entry = TAILQ_NEXT(cur_entry, next);
-		
-	} while(cheri_is_address_inbounds(batch->map_cap, cheri_getaddress(cur_entry->mem)));
-	return (0);
-}
+	struct batch *batch;
+	struct bucket *bucket;
+	vaddr_t map_addr;
 
-void cocall_free(void *cap)
-{
-	struct bucket *bucket = find_bucket_cheri(cheri_getlen(cap));
-	struct _bucket_entry *entry;
-	vaddr_t cap_base = cheri_getbase(cap);
-
-	for (int i = 0; i < bucket->nbatches; ++i)
-	{
-		if (bucket->batches[i].freed)
-			continue;
-		else if (cheri_is_address_inbounds(bucket->batches[i].map_cap, cap_base)) {
-			if (!free_batch_entry(&bucket->batches[i], cap))
-				err(EINVAL, "cocall_free: cap does not authorise free");
-			else
-				return;
+	bucket = get_bucket(cheri_getlen(cap));
+	map_addr = cheri_getbase(cap);
+	LIST_FOREACH(batch, &bucket->batch_list, batches) {
+		if (cheri_is_address_inbounds(batch->mem, map_addr)) {
+			atomic_fetch_add(&batch->freed, cheri_getlen(cap));
+			return;
 		}
 	}
-	err(EINVAL, "cocall_free: cap not in bounds for any batch in bucket for size %lu", bucket->size);
+	err(EINVAL, "cocall_free: failed to locate mapping");
 }
-
