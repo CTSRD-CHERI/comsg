@@ -72,6 +72,8 @@ process_coport_event(coport_t *coport)
 	}
 	if (coport->info->length == 0 && status == COPORT_CLOSING)
 		status = COPORT_CLOSED;
+	else 
+		status = COPORT_OPEN;
 
 	coport_event = coport->info->event;
 	assert((coport_event & coport->cd->levent) != NOEVENT);
