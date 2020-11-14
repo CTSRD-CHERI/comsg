@@ -327,13 +327,13 @@ int main(int argc, char *const argv[])
 	    	coexecve(test_pid, coprocd_args[0], coprocd_args, environ);
  
 	    do {
-	    	sched_yield();
+	    	sleep(1);
 	    	error = colookup(U_COPROC_INIT, &coproc_init_scb);
+	    	sleep(1);
 	    } while(error != 0);
 	}
     set_ukern_target(COCALL_COPROC_INIT, coproc_init_scb);
 
-	
     do_tests();
 
 	return (0);
