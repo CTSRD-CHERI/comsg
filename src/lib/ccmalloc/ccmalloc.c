@@ -144,11 +144,13 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 
 
 	bucket_table.buckets = calloc(nbuckets, sizeof(struct bucket));
+	bucket_table.sizes = calloc(nbuckets, sizeof(size_t));
 	qsort(bucket_sizes, nbuckets, sizeof(size_t), bucketsize_compare);
 	
 	last_bucket = 0;
 	bucket_table.nbuckets = 1;
 	bucket_table.sizes[0] = bucket_sizes[0];
+	init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket]);
 	for (i = 1; i < nbuckets; i++) {
 		if (bucket_table.sizes[last_bucket] == bucket_sizes[i]) {
 			bucket_table.buckets[last_bucket].alloc_size += alloc_size;
@@ -158,8 +160,8 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 		bucket_table.sizes[last_bucket] = bucket_sizes[i];
 		init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket]);
 	}
-	bucket_table.sizes[bucket_table.nbuckets] = 0;
 	bucket_table.buckets = realloc(bucket_table.buckets, bucket_table.nbuckets * sizeof(struct bucket));
+	bucket_table.sizes = realloc(bucket_table.sizes, bucket_table.nbuckets * sizeof(size_t));
 
 	pthread_create(&refiller, NULL, refill_buckets, NULL);
 	pthread_create(&emptier, NULL, empty_buckets, NULL);
@@ -284,16 +286,14 @@ cocall_malloc(size_t len)
 	bucket = get_bucket(len);
 	batch = LIST_FIRST(&bucket->batch_list);
 	
-	status = atomic_load_explicit(&batch->status, memory_order_acquire);
-	if (status == MAPPED)
-		atomic_compare_exchange_strong_explicit(&batch->status, &status, INUSE, memory_order_acq_rel, memory_order_acquire);
-	assert(status == INUSE);
-
-	if (mem_remaining(batch) < len) {
+	status = batch->status;
+	if (mem_remaining(batch) < len || status == FREED) {
 		batch = get_spare(bucket);
 		if (batch == NULL) 
 			return (NULL);
 	}
+	else if (status == MAPPED)
+		atomic_store_explicit(&batch->status, INUSE, memory_order_release);
 
 	cap = atomic_load_explicit(&batch->mem, memory_order_acquire);
 	assert(cap != NULL);
