@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "ipcd_startup.h"
+#include "copoll_deliver.h"
 
 #include "coclose.h"
 #include "coopen.h"
