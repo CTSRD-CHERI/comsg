@@ -31,7 +31,7 @@
 #include <cocall/worker_map.h>
 #include <cocall/worker.h>
 #include <coproc/namespace.h>
-
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 #include <err.h>
@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/errno.h>
+
 
 static
 void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
