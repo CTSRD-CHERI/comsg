@@ -105,7 +105,7 @@ copoll_wait(pthread_cond_t *wait_cond, long timeout)
 void 
 await_copoll_events(pthread_cond_t *wait_cond)
 {
-	pthread_cond_wait(&wait_cond, &global_copoll_lock);
+	pthread_cond_wait(wait_cond, &global_copoll_lock);
 }
 
 void 
