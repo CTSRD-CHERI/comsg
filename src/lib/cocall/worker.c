@@ -35,6 +35,7 @@
 #include <assert.h>
 #include <err.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/errno.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -45,7 +46,10 @@ static pthread_cond_t registration_cond;
 __attribute__ ((constructor)) static 
 void init_coregister_mutex(void)
 {
-    pthread_mutex_init(&registration_mutex, NULL);
+    pthread_mutexattr_t mtxattr;
+    pthread_mutexattr_init(&mtxattr);
+    pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&registration_mutex, &mtxattr);
     pthread_cond_init(&registration_cond, NULL);
 }
 
@@ -64,12 +68,10 @@ void coaccept_init(
     if (target_name == NULL) {
         //printf("coaccept_init: null target_name\n");
         *target_cap = *data_cap;
-    }
-    else if (target_name[0] == '\0') {
+    } else if (target_name[0] == '\0') {
         //printf("coaccept_init: empty string target_name\n");
         *target_cap = *data_cap;
-    }
-    else {
+    } else {
         //printf("coaccept_init: coregistering as %s\n", target_name);
         if(coregister(target_name, target_cap) != 0)
             err(errno, "coaccept_init: could not coregister with name %s", target_name);
