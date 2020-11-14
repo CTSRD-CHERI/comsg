@@ -43,7 +43,7 @@ int validate_coupdate_args(coupdate_args_t *cocall_args)
 		return (0);
 	else if (!cheri_getsealed(cocall_args->obj))
 		return (0);
-	else if (cheri_getperm(cocall_args->obj) & CHERI_PERM_GLOBAL != 0)
+	else if ((cheri_getperm(cocall_args->obj) & CHERI_PERM_GLOBAL) != 0)
 		return (0);
 	else
 		return (1);
