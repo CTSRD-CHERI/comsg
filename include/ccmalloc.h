@@ -23,15 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-//TODO-PBB: Implement.
 #ifndef _CCMALLOC_H
 #define _CCMALLOC_H
 
 #include <stddef.h>
 #include <sys/cdefs.h>
-
-typedef enum {PROMISCUOUS=1, FLEETING=2, NORESIZE=4, NEVERFREE=8} ccmalloc_flags_t;
 
 void ccmalloc_init(size_t*, size_t);
 void *cocall_malloc(size_t len);
