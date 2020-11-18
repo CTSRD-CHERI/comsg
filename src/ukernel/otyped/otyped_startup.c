@@ -28,35 +28,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "ipcd_startup.h"
-#include "copoll_deliver.h"
-
-#include "coclose.h"
-#include "coopen.h"
-#include "copoll.h"
-#include "coport_table.h"
-#include "cosend.h"
-#include "corecv.h"
-#include "ipcd.h"
-
+#include "otyped.h"
+#include "otype_alloc.h"
 
 #include <cocall/worker_map.h>
-#include <cocall/cocall_args.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
 #include <comsg/ukern_calls.h>
 
-#include <assert.h>
-#include <cheri/cheric.h>
 #include <err.h>
 #include <sys/errno.h>
 
 static 
 void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
 {
-
-	serv->function_map = spawn_workers(func, valid, IPCD_NWORKERS);
-	serv->service = coprovide(get_worker_scbs(serv->function_map), IPCD_NWORKERS);
+	serv->function_map = spawn_workers(func, valid, OTYPED_WORKERS);
+	serv->service = coprovide(get_worker_scbs(serv->function_map), OTYPED_WORKERS);
 	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
 	if (serv->nsobj == NULL)
 		err(errno, "init_service: error inserting %s into global namespace", name);
@@ -65,42 +50,16 @@ void init_service(coservice_provision_t *serv, void *func, void *valid, const ch
 static 
 void init_slow_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
 {
-	serv->function_map = spawn_slow_workers(func, valid, IPCD_NWORKERS);
-	serv->service = coprovide(get_worker_scbs(serv->function_map), IPCD_NWORKERS);
+	serv->function_map = spawn_slow_workers(func, valid, OTYPED_WORKERS);
+	serv->service = coprovide(get_worker_scbs(serv->function_map), OTYPED_WORKERS);
 	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
 	if (serv->nsobj == NULL)
 		err(errno, "init_service: error inserting %s into global namespace", name);
 }
 
-void ipcd_startup(void)
+void otyped_startup(void)
 {
-	nsobject_t *coprovide_nsobj;
-	void *coprovide_scb;
-
-	setup_copoll_notifiers();
-	
 	global_ns = coproc_init(NULL, NULL, NULL, NULL);
-	if (global_ns == NULL)
-		err(errno, "ipcd_startup: cocall failed");
-	//TODO-PBB: update to coproc_init_done universe
-	do {
-		coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, global_ns);
-		if(cheri_gettag(coprovide_nsobj) == 0)
-			continue;
-		else if (cheri_gettag(coprovide_nsobj->obj) == 0)
-			continue;
-	} while (0);
-	
-	codiscover(coprovide_nsobj, &coprovide_scb);
-	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
-	//init own services
-	init_service(&coopen_serv, coport_open, validate_coopen_args, U_COOPEN);
-	init_service(&coclose_serv, coport_close, validate_coclose_args, U_COCLOSE);
-	init_service(&cosend_serv, coport_send, validate_cosend_args, U_COSEND);
-	init_service(&corecv_serv, coport_recv, validate_corecv_args, U_CORECV);
-	init_service(&copoll_serv, cocarrier_poll, validate_copoll_args, U_COPOLL);
-	init_slow_service(&slopoll_serv, cocarrier_poll_slow, validate_copoll_args, U_SLOPOLL);
-
-	coproc_init_done();
-
+	init_service(user_alloc_serv, allocate_otype_user, NULL, U_ALLOCATE_OTYPE_USER);
+	init_service(ukernel_alloc_serv, allocate_otype_ukernel, NULL, U_ALLOCATE_OTYPE_UKERNEL);
 }

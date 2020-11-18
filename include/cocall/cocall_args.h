@@ -33,6 +33,7 @@
 
 #include <coproc/coport.h>
 #include <coproc/coservice.h>
+#include <coproc/otype.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
 
@@ -96,9 +97,10 @@ struct _cocall_args
 			nsobject_t *nsobj;
 			nsobject_type_t nsobj_type;
 			union {
-				void *obj;	
+				void *obj;
 				coservice_t *coservice;
 				coport_t *coport;
+				otype_t otype;
 			};
 			void *scb_cap;
 		}; //coupdate, coinsert, codelete, coselect, codiscover
@@ -121,6 +123,9 @@ struct _cocall_args
 			void *message;
 			size_t length;
 		}; //cosend/corecv
+		struct {
+			otype_t otype;
+		}; //cotype_alloc
 	};
 } __attribute__((__aligned__(16)));
 
@@ -139,6 +144,7 @@ typedef struct _cocall_args codrop_args_t;
 typedef struct _cocall_args codelete_args_t;
 typedef struct _cocall_args coupdate_args_t;
 typedef struct _cocall_args cocreate_args_t;
+typedef struct _cocall_args cotype_alloc_args_t;
 
 
 #endif //!defined(_COCALL_ARGS_H)

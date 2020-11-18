@@ -33,6 +33,7 @@
 
 #include <coproc/coport.h>
 #include <coproc/coservice.h>
+#include <coproc/otype.h>
 #include <coproc/namespace.h>
 
 #include <sys/cdefs.h>
@@ -71,7 +72,7 @@
 
 #define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_andperm(c, ~NSOBJ_PERM_W) )
 
-typedef enum {INVALID_NSOBJ=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
+typedef enum {INVALID_NSOBJ = -1, RESERVATION = 0, COMMAP = 1, COPORT = 2, COSERVICE = 3, OTYPE = 4} nsobject_type_t;
 
 typedef struct _nsobject
 {
@@ -79,13 +80,14 @@ typedef struct _nsobject
 	nsobject_type_t	type;
 	union
 	{
-		_Atomic(void *)			obj;
+		_Atomic(void 		*)	obj;
 		_Atomic(coservice_t	*)	coservice;
-		_Atomic(coport_t	*)	coport;
+		_Atomic(coport_t 	*)	coport;
+		_Atomic(otype_t)		otype;
 	};
 } nsobject_t;
 
-#define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
+#define VALID_NSOBJ_TYPE(type) ( type != INVALID_NSOBJ )
 
 int valid_nsobj_name(const char *name);
 
