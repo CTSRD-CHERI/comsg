@@ -73,13 +73,6 @@ typedef struct _pollcoport_t
 	coport_eventmask_t revents;
 } pollcoport_t;
 
-struct copoll
-{
-	pollcoport_t *coports;
-	uint ncoports;
-	long timeout; 
-};
-
 struct _cocall_args
 {
 	int status;
