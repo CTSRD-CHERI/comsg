@@ -39,7 +39,9 @@
 #include <err.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/errno.h>
 #include <sys/types.h>
@@ -70,19 +72,6 @@ struct respawn_args {
 	char *exec_path;
 	char *init_str;
 };
-
-static 
-void coexec_daemon(const char *path, const char *init_str)
-{
-	int error;
-	char *coexecve_args[3];
-	coexecve_args[0] = strdup(path);
-	coexecve_args[1] = strdup(init_str);
-	coexecve_args[2] = NULL;
-	error = coexecve(coprocd, coexecve_args[0], coexecve_args, environ);
-	if (error != 0)
-		err(errno, "coexec_daemon: coexecve failed");
-}
 
 static 
 void monitor_child(pid_t child_pid)
@@ -152,33 +141,30 @@ respawn_daemon(void *argp)
 static 
 pid_t spawn_daemon(_Atomic(pid_t) *pidp, const char *exec_path, void *init_func)
 {
-	char * init_name;
 	worker_args_t wargs;
+	char *init_name;
+	char *coexecve_args[3];
 	function_map_t *init_func_map;
-	pthread_t monitor_thread;
 	struct respawn_args *monitor_args;
+	pthread_t monitor_thread;
 	pid_t child_pid;
-
+	int error;
+	
 	init_name = malloc(NS_NAME_LEN);
 	monitor_args = calloc(1, sizeof(struct respawn_args));
 	rand_string(init_name, NS_NAME_LEN);
 	//TODO-PBB: Revisit lack of validation if needed
-	//Pid is not supplied as a thread argument because it can change.
 	init_func_map = spawn_slow_worker(init_name, init_func, NULL);
-	if (done_worker_scb == NULL) {
-		done_func_map = spawn_slow_worker("coproc_init_done1", coproc_init_complete, NULL);
-		done_worker_scb = done_func_map->workers[0].scb_cap;
-	}
-	if (done2_worker_scb == NULL) {
-		done2_func_map = spawn_slow_worker("coproc_init_done2", ukern_init_complete, NULL);
-		done2_worker_scb = done2_func_map->workers[0].scb_cap;
-	}
 
-	child_pid = fork();
-	if(!child_pid)
-		coexec_daemon(exec_path, init_name);
-	else {
-		atomic_store(pidp, child_pid);
+	coexecve_args[0] = strdup(exec_path);
+	coexecve_args[1] = strdup(init_name);
+	coexecve_args[2] = NULL;
+	child_pid = vfork();
+	if(child_pid == 0) {
+		error = coexecve(coprocd, coexecve_args[0], coexecve_args, environ);
+		_exit(errno); /* only reached if error */
+	} else {
+		atomic_store_explicit(pidp, child_pid, memory_order_release);
 		monitor_args->child_pid = pidp;
 		monitor_args->exec_path = exec_path;
 		monitor_args->init_str = init_name;
@@ -202,6 +188,14 @@ void kill_daemons(void)
 void spawn_daemons(void)
 {
 	coprocd = getpid();
+	if (done_worker_scb == NULL) {
+		done_func_map = spawn_slow_worker("coproc_init_done1", coproc_init_complete, NULL);
+		done_worker_scb = done_func_map->workers[0].scb_cap;
+	}
+	if (done2_worker_scb == NULL) {
+		done2_func_map = spawn_slow_worker("coproc_init_done2", ukern_init_complete, NULL);
+		done2_worker_scb = done2_func_map->workers[0].scb_cap;
+	}
 	spawn_daemon(&nsd, nsd_path, nsd_init);
 	spawn_daemon(&coserviced, coserviced_path, coserviced_init);
 	spawn_daemon(&ipcd, ipcd_path, ipcd_init);
