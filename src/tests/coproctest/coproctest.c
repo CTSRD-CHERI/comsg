@@ -316,9 +316,6 @@ int main(int argc, char *const argv[])
 	void *coproc_init_scb;
 	pid_t test_pid, coprocd_pid;
 
-    if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0)
-    	err(errno, "setup_otypes: error in sysarch - could not get sealroot");
-
     error = colookup(U_COPROC_INIT, &coproc_init_scb);
     if (error != 0) {
 	    test_pid = getpid();

@@ -1,4 +1,3 @@
-
 COMSG_DIR ?= $(CURDIR)
 BUILD_DIR := $(COMSG_DIR)/build
 OUT_DIR := $(COMSG_DIR)/output
@@ -8,9 +7,8 @@ MK_DIR := $(COMSG_DIR)
 INC_DIRS += $(COMSG_DIR)/include
 INC_FLAGS := $(addprefix -isystem,$(INC_DIRS))
 
-LDFLAGS :=-fuse-ld=lld -Wl,-znow -L $(OUT_DIR)
-CFLAGS := -g -integrated-as -G0 -msoft-float -cheri=128 -mcpu=cheri128 -mabi=purecap -mstack-alignment=16 -fPIC -fPIE -v
-CFLAGS := -g -fPIC -fPIE -v 
+LDFLAGS := -fuse-ld=lld -Wl,-znow -L $(OUT_DIR)
+CFLAGS :=  --config cheribsd-mips64-purecap.cfg -g -fPIC -fPIE -v
 
 
 export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS

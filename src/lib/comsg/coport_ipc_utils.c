@@ -39,7 +39,6 @@
 #include <assert.h>
 #include <cheri/cheric.h>
 #include <err.h>
-#include <machine/sysarch.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -301,7 +300,10 @@ coport_ipc_utils_init(void)
     int cores;
     void *sealroot, *returncap_sealroot;
 
-    assert(sysarch(CHERI_GET_SEALCAP, &sealroot) != -1);
+    len = sizeof(sealroot);
+    
+    assert(sysctlbyname("security.cheri.sealcap", &sealroot, &len,
+        NULL, 0) >= 0);
 
     assert((cheri_gettag(sealroot) != 0));    
     assert(cheri_getlen(sealroot) != 0);

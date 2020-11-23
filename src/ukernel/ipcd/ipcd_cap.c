@@ -36,7 +36,7 @@
 
 #include <assert.h>
 #include <cheri/cheric.h>
-#include <machine/sysarch.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 
 static struct object_type cocarrier_otype, coport_otype;
@@ -45,8 +45,12 @@ static void *root_cap;
 static __attribute__((constructor)) void
 setup_ipcd_otypes(void)
 {
+    size_t len;
     struct object_type *otypes[] = {&coport_otype, &cocarrier_otype};
-    assert(sysarch(CHERI_GET_SEALCAP, &root_cap) != -1);
+    
+    len = sizeof(root_cap);
+    assert(sysctlbyname("security.cheri.sealcap", &root_cap, &len,
+        NULL, 0) >= 0);
 
     assert(cheri_gettag(root_cap) != 0);    
     assert(cheri_getlen(root_cap) != 0);

@@ -36,7 +36,7 @@
 #include <cheri/cheric.h>
 #include <err.h>
 #include <sys/errno.h>
-#include <machine/sysarch.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 
 static struct object_type coservice_obj;
@@ -48,7 +48,11 @@ __attribute__ ((constructor)) static
 void setup_otypes(void)
 {
     void *sealroot;
-    if (sysarch(CHERI_GET_SEALCAP, &sealroot) < 0) {
+    size_t len;
+
+    len = sizeof(sealroot);
+    if (sysctlbyname("security.cheri.sealcap", &sealroot, &len,
+        NULL, 0) < 0) {
         err(errno, "setup_otypes: error in sysarch - could not get sealroot");
     }
     sealroot = cheri_incoffset(sealroot, 64);

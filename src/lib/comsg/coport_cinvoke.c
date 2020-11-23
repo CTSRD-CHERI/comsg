@@ -43,7 +43,7 @@
 #include <err.h>
 #include <stddef.h>
 #include <sys/errno.h>
-#include <machine/sysarch.h>
+#include <sys/sysctl.h>
 
 static coport_func_ptr _cosend_codecap = NULL;
 static coport_func_ptr _corecv_codecap = NULL;
@@ -154,7 +154,9 @@ coport_cinvoke_init(void)
     int cores;
     void *r_sealroot;
 
-    assert(sysarch(CHERI_GET_SEALCAP, &r_sealroot) != -1);
+    len = sizeof(r_sealroot);
+    assert(sysctlbyname("security.cheri.sealcap", &r_sealroot, &len,
+        NULL, 0) >= 0);
 
     assert((cheri_gettag(r_sealroot) != 0));    
     assert(cheri_getlen(r_sealroot) != 0);
