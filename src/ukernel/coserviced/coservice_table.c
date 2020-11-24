@@ -58,6 +58,8 @@ __attribute__ ((constructor)) static
 void setup_table(void)
 {
 	coservice_table.services = mmap(NULL, coservice_table_len, coservice_table_prot, coservice_table_flags, -1, 0);
+	if (coservice_table.services == MAP_FAILED)
+		err(errno, "setup_table: mmap failed");
 	max_services = cheri_getlen(coservice_table.services) / sizeof(coservice_t);
 	coservice_table.next_service = max_services - 1;
 	coservice_table.active_services = 0UL;

@@ -81,11 +81,15 @@ void setup_namespace_table(void)
 	namespace_table_len += (((maxprocs * sizeof(namespace_t)) / ALLOC_UNIT) + 1) * ALLOC_UNIT;
 	/* Allocate namespace table */
 	namespace_table.namespaces = mmap(NULL, namespace_table_len, namespace_table_prot, namespace_table_flags, -1, 0);
+	if (namespace_table.namespaces == MAP_FAILED)
+		err(errno, "setup_namespace_table: mmap for namespace table failed");
 	max_namespaces = cheri_getlen(namespace_table.namespaces) / sizeof(namespace_t);
 	namespace_table.next_namespace = max_namespaces - 1;
 	namespace_table.namespace_count = 0lu;
 	/* Allocate namespace object table */
 	nsobject_table.nsobjects = mmap(NULL, namespace_table_len, namespace_table_prot, namespace_table_flags, -1, 0);
+	if (nsobject_table.nsobjects == MAP_FAILED)
+		err(errno, "setup_namespace_table: mmap for nsobject table failed");
 	max_nsobjects = cheri_getlen(nsobject_table.nsobjects) / sizeof(nsobject_t);
 	nsobject_table.next_nsobject = max_nsobjects - 1;
 	nsobject_table.nsobject_count = 0lu;
