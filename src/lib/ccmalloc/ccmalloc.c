@@ -204,9 +204,9 @@ new_batch(struct bucket *bucket)
 	void *mem;
 
 	mem = mmap(NULL, alloc_size, BUCKET_PROT, BUCKET_FLAGS, -1, 0);
-	memset(mem, '\0', cheri_getlen(mem)); /* fault in via zero */
-	if(mem == (void *)-1)
+	if(mem == MAP_FAILED)
 		err(errno, "new_bucket_batch: mmap failed");
+	memset(mem, '\0', cheri_getlen(mem)); /* fault in via zero */
 
 	batch = calloc(1, sizeof(struct batch));
 	batch->status = MAPPED;
