@@ -86,6 +86,7 @@ struct _cocall_args
 			void *coinsert;
 			void *coselect;
 			void *done_scb;
+			otype_t sealing_root;
 		}; //coproc_init, coproc_init_done
 		struct {
 			char ns_name[NS_NAME_LEN];
@@ -144,7 +145,7 @@ typedef struct _cocall_args codrop_args_t;
 typedef struct _cocall_args codelete_args_t;
 typedef struct _cocall_args coupdate_args_t;
 typedef struct _cocall_args cocreate_args_t;
-typedef struct _cocall_args cotype_alloc_args_t;
+typedef struct _cocall_args codefine_args_t;
 
 
 #endif //!defined(_COCALL_ARGS_H)

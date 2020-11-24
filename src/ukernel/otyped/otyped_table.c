@@ -46,8 +46,11 @@ static void *
 get_sealroot(void)
 {
 	void *sealroot;
+	size_t len;
 
-	if (sysarch(CHERI_GET_SEALCAP, &sealroot) == -1)
+	len = sizeof(void *);
+	if (sysctlbyname("security.cheri.sealcap", &sealroot, &len,
+        NULL, 0) >= -1)
 		return (NULL);
 	else 
 		return (sealroot);
@@ -71,7 +74,7 @@ init_otyped_table(void)
 }
 
 otype_t 
-allocate_cotype(int selector)
+allocate_otypes(int selector, int ntypes)
 {
 	void **sealrootp;
 	void *new_sealroot, *old_sealroot;
@@ -86,14 +89,14 @@ allocate_cotype(int selector)
 
 	old_sealroot = atomic_load_explicit(sealrootp, memory_order_acquire);
 	do {
-		new_sealroot = cheri_incoffset(old_sealroot, 1);
+		new_sealroot = cheri_incoffset(old_sealroot, ntypes);
 		if (cheri_getlen(new_sealroot) <= cheri_getoffset(new_sealroot)) {
 			new_sealroot = cheri_cleartag(new_sealroot);
 			break;
 		}
 	} while(!atomic_compare_exchange_strong_explicit(sealrootp, &old_sealroot, new_sealroot, memory_order_acq_rel, memory_order_acquire));
 	
-	otype = cheri_setboundsexact(new_sealroot, 1);
+	otype = cheri_setboundsexact(new_sealroot, ntypes);
 	otype = cheri_andperm(otype, OTYPE_PERMS_OWN);
 
 	return (otype);

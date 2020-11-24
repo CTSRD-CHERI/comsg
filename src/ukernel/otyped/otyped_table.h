@@ -36,19 +36,19 @@
 #define UKERNEL_SEALROOT_SELECTOR (1)
 #define USER_SEALROOT_SELECTOR (2)
 
-otype_t allocate_otype(int selector);
+otype_t allocate_otypes(int selector, int ntypes);
 void init_otyped_table(void);
 
 static __always_inline inline otype_t
 allocate_user_otype(void)
 {
-	return (allocate_cotype(USER_SEALROOT_SELECTOR));
+	return (allocate_otypes(USER_SEALROOT_SELECTOR, 1));
 }
 
 static __always_inline inline otype_t
 allocate_ukernel_otype(void)
 {
-	return (allocate_cotype(UKERNEL_SEALROOT_SELECTOR));
+	return (allocate_otypes(UKERNEL_SEALROOT_SELECTOR, 1));
 }
 
 #endif //!defined(_OTYPED_TABLE_H)

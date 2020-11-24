@@ -49,14 +49,15 @@
 
 static const char *ukern_func_names[] = {"NOTUSED", U_CODISCOVER, U_COPROVIDE, U_COINSERT, U_COSELECT, U_COUPDATE, U_CODELETE, U_COOPEN, U_COCLOSE, U_COSEND, U_CORECV, U_COPOLL, U_COPROC_INIT, U_COCREATE, U_CODROP, U_COPROC_INIT_DONE, U_SLOPOLL};
 
-static int slocall_funcs[] = {COCALL_SLOPOLL};
-static int n_slocalls = 1;
+static int slocall_funcs[] = {COCALL_SLOPOLL, COCALL_SLODEFINE};
+static int n_slocalls = 2;
 
 namespace_t *global_ns = NULL;
 bool is_ukernel = false;
 
 static pthread_key_t ukern_call_set;
 
+//Debugging in coprocesses is a pain. This horrid thing gives us a coredump.
 #if 1
 #define err(n, s, ...) do { printf("%s: Errno=%d\n", s, n); kill(getpid(), SIGSEGV); } while(0)
 #endif 
@@ -84,6 +85,7 @@ init_new_thread_calls(void)
 	discover_ukern_func(service_obj, COCALL_CODISCOVER);
 }
 
+/* determine if numbered func is provided by the kernel-switched cocall variant */
 static inline bool
 is_slocall(int func)
 {
@@ -94,6 +96,7 @@ is_slocall(int func)
 	return (false);
 }
 
+/* used for functions with only one variant that are not bootstrapped by coproc_init */
 static int 
 ukern_call(int func, cocall_args_t *args)
 {
@@ -289,7 +292,7 @@ cocreate(const char *name, nstype_t type, namespace_t *parent)
 }
 
 namespace_t *
-coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, void *codiscover_scb)
+coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, void *codiscover_scb, otype_t *sealrootp)
 {
 	int error;
 	
@@ -300,6 +303,16 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 	cocall_args.coinsert = coinsert_scb;
 	cocall_args.codiscover = codiscover_scb;
 	cocall_args.coselect = coselect_scb;
+	/* 
+	 * The following demonstrates how bloated coproc_init has become. We hope to have a better
+	 * mechanism for bootstrapping soon, and that will let us do away with some/most of this.
+	 */
+	if (is_ukernel) {
+		if (sealrootp != NULL) {
+			if (cheri_gettag(*sealrootp))
+				cocall_args.sealroot = *sealrootp;
+		}
+	}
 
 	//the target of this varies based on whether caller is a microkernel compartment & which compartment
 	if (is_ukernel)
@@ -317,6 +330,7 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 	set_cocall_target(ukern_call_set, COCALL_COINSERT, cocall_args.coinsert);
 	set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args.codiscover);
 	set_cocall_target(ukern_call_set, COCALL_COSELECT, cocall_args.coselect);
+	set_cocall_target(ukern_call_set, COCALL_CODEFINE, cocall_args.coselect);
 	
 	if (cheri_gettag(cocall_args.done_scb) && is_ukernel)
 		set_cocall_target(ukern_call_set, COCALL_COPROC_INIT_DONE, cocall_args.done_scb);
@@ -480,7 +494,8 @@ coclose(coport_t *coport)
 
 }
 
-nsobject_t *coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
+nsobject_t *
+coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 {
 	coupdate_args_t cocall_args;
 	int error;
@@ -518,7 +533,8 @@ nsobject_t *coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 	return (cocall_args.nsobj);	
 }
 
-int codelete(nsobject_t *nsobj, namespace_t *parent)
+int
+codelete(nsobject_t *nsobj, namespace_t *parent)
 {
 	codelete_args_t cocall_args;
 	int error;
@@ -529,11 +545,32 @@ int codelete(nsobject_t *nsobj, namespace_t *parent)
 
 	error = ukern_call(COCALL_CODELETE, &cocall_args);
 	if (error != 0) 
-		err(errno, "cupdate: error performing cocall");
+		err(errno, "codelete: error performing cocall");
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 
 	return (cocall_args.status);
 }
 
+otype_t
+codefine(void)
+{
+	codefine_args_t cocall_args;
+	int error;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+
+	if (is_ukernel)
+		error = targeted_slocall(ukern_call_set, COCALL_SLODEFINE, &cocall_args, sizeof(cocall_args));
+	else 
+		error = targeted_cocall(ukern_call_set, COCALL_CODEFINE, &cocall_args, sizeof(cocall_args));
+	if (error != 0) 
+		err(errno, "codefine: error performing cocall");
+	else if (cocall_args.status == -1) {
+		errno = cocall_args.error;
+		return (NULL);
+	}
+
+	return (cocall_args.otype);
+}
 

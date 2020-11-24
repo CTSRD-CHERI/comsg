@@ -40,7 +40,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-
 #define COCALL_INVALID (0) //not used
 #define COCALL_CODISCOVER (1)
 #define COCALL_COPROVIDE (2)
@@ -58,32 +57,43 @@
 #define COCALL_CODROP (14)
 #define COCALL_COPROC_INIT_DONE (15)
 #define COCALL_SLOPOLL (16)
+#define COCALL_CODEFINE (17)
+#define COCALL_SLODEFINE (18)
 
+/* ipcd provided */
 #define U_COOPEN "coopen"
 #define U_COCLOSE "coclose"
 #define U_COSEND "cosend"
 #define U_CORECV "corecv"
 #define U_COPOLL "copoll"
+#define U_SLOPOLL "copoll_slow"
 
+/* coserviced provided */
 #define U_COPROVIDE "coprovide"
 #define U_CODISCOVER "codiscover"
 
+/* nsd provided */
 #define U_COCREATE "cocreate"
 #define U_CODROP "codrop"
 #define U_COINSERT "coinsert"
 #define U_COSELECT "coselect"
 #define U_COUPDATE "coupdate" 
 #define U_CODELETE "codelete"
+
+/* coprocd provided */
 #define U_COPROC_INIT "coproc_init"
 #define U_COPROC_INIT_DONE "coproc_init_done"
-#define U_SLOPOLL "copoll_slow"
 
-#define n_ukern_calls (17)
+/* otyped provided */
+#define U_CODEFINE "codefine"
+#define U_SLODEFINE "codefine_slow"
+
+#define n_ukern_calls (19)
 
 extern namespace_t *global_ns;
 extern bool is_ukernel;
 
-namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb);
+namespace_t *coproc_init(namespace_t *global_ns, void *coinsert_scb, void *coselect_scb, void *codiscover_scb, otype_t *sealroot);
 int coproc_init_done(void);
 nsobject_t *coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns);
 nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);

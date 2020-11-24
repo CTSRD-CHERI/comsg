@@ -28,6 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "otyped_startup.h"
 #include "otyped.h"
 #include "otype_alloc.h"
 
@@ -37,29 +38,30 @@
 #include <err.h>
 #include <sys/errno.h>
 
-static 
-void init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
-{
-	serv->function_map = spawn_workers(func, valid, OTYPED_WORKERS);
-	serv->service = coprovide(get_worker_scbs(serv->function_map), OTYPED_WORKERS);
-	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
-	if (serv->nsobj == NULL)
-		err(errno, "init_service: error inserting %s into global namespace", name);
-}
 
 static 
-void init_slow_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
+void init_slow_service(coservice_provision_t *serv, void *func, void *valid)
 {
 	serv->function_map = spawn_slow_workers(func, valid, OTYPED_WORKERS);
 	serv->service = coprovide(get_worker_scbs(serv->function_map), OTYPED_WORKERS);
-	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
 	if (serv->nsobj == NULL)
-		err(errno, "init_service: error inserting %s into global namespace", name);
+		err(errno, "init_service: error inserting into global namespace");
+}
+
+static void 
+init_service(coservice_provision_t *serv, void *func, void *valid)
+{
+	serv->function_map = spawn_workers(func, valid, OTYPED_WORKERS);
+	serv->service = coprovide(get_worker_scbs(serv->function_map), OTYPED_WORKERS);
 }
 
 void otyped_startup(void)
 {
+	otype_t ukernel_sealroot;
+
+	ukernel_sealroot = allocate_cotypes(UKERNEL_SEALROOT_SELECTOR, reserved_ukernel_otypes);
 	global_ns = coproc_init(NULL, NULL, NULL, NULL);
-	init_service(user_alloc_serv, allocate_otype_user, NULL, U_ALLOCATE_OTYPE_USER);
-	init_service(ukernel_alloc_serv, allocate_otype_ukernel, NULL, U_ALLOCATE_OTYPE_UKERNEL);
+	init_service(user_alloc_serv, allocate_otype_user, NULL);
+	user_alloc_serv->nsobj = coinsert(U_CODEFINE, COSERVICE, serv->service, global_ns);
+	init_slow_service(ukernel_alloc_serv, allocate_otype_ukernel, NULL);
 }

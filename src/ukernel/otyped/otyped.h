@@ -37,5 +37,6 @@
 #include <cocall/worker_map.h>
 
 extern coservice_provision_t ukernel_alloc_serv, user_alloc_serv;
+extern long reserved_ukern_types;
 
 #endif //!defined(_OTYPED_H)

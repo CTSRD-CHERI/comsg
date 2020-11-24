@@ -30,21 +30,41 @@
  */
 #include "otyped.h"
 #include <cocall/worker_map.h>
+#include <comsg/ukern_calls.h>
+#include <coproc/otype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 coservice_provision_t ukernel_alloc_serv, user_alloc_serv;
+long reserved_ukernel_types;
+
+static void
+usage(void)
+{
+	exit(1);
+}
 
 int main(int argc, char *const argv[])
 {
 	int opt, error;
 	
-	while((opt = getopt(argc, argv, "")) != -1) {
+	opterr = 0;
+	reserved_ukernel_types = -1;
+	while((opt = getopt(argc, argv, "n:")) != -1) {
 		switch (opt) {
+		case 'n':
+			reserved_ukernel_types = strtol(optarg);
+			if (reserved_ukernel_types <= 0 || reserved_ukernel_types > COPROC_OTYPE_SPACE_LEN)
+				err(EINVAL, "cannot reserve %s ukernel types", optarg);
+			break;
 		case '?':
 		default: 
 			usage();
 			break;
 		}
 	}
+	
 	if(argc >= 2) {
 		error = colookup(argv[argc-1], &init_cap);
 		if(error)

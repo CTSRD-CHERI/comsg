@@ -2,7 +2,8 @@ LIB := coproc
 
 SRCS :=	namespace.c		\
 	namespace_object.c		\
-	utils.c		
+	utils.c		\
+	otype.c
 
 SHLIB_MAJOR=	1
 

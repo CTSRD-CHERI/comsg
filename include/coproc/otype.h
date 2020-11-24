@@ -32,6 +32,7 @@
 #define _OTYPE_H
 
 #include <cheri/cherireg.h>
+#include <sys/cdefs.h>
 
 /* 
  * PBB: It is my belief that this will probably be more otype space than the 
@@ -57,5 +58,19 @@
 #define _OTYPE_T_DECLARED
 typedef void * __capability otype_t;
 #endif //!defined(_OTYPE_T_DECLARED)
+
+struct object_type
+{
+	otype_t sc;
+	otype_t usc;
+	long otype;
+};
+
+__BEGIN_DECLS
+
+void *make_otypes(otype_t rootcap, int n_otypes, struct object_type **results);
+
+__END_DECLS
+
 
 #endif //!defined(_COTYPE_H)

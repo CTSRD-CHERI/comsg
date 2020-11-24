@@ -28,74 +28,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#include <coproc/utils.h>
+#include <coproc/otype.h>
 
 #include <assert.h>
 #include <cheri/cheric.h>
-#include <sys/sysctl.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/param.h>
-#include <sys/types.h>
-#include <unistd.h>
 
-static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-
-int
-generate_id(void)
+static void
+make_otype(void *type_root, long type, struct object_type *result)
 {
-    static int id = 1;
-    // TODO: Replace this with something smarter.
-    return id++;
+	type_root = cheri_incoffset(type_root, type);
+	type_root = cheri_setboundsexact(type_root, 1);
+
+    result->sc = cheri_andperm(type_root, OTYPE_PERMS_SEAL);
+    result->usc = cheri_andperm(type_root, OTYPE_PERM_UNSEAL);
+
+    result->otype = cheri_gettype(cheri_seal(result, result->sc));
 }
 
-/* these are not secret or secure, they just shouldn't be the same as each other by accident*/
-
-__attribute__((constructor))
-void init_rand(void)
+otype_t
+make_otypes(void *rootcap, int n_otypes, struct object_type **results)
 {
-    int garbage;
-    srand((unsigned)garbage);
-}
+    otype_t seal_root;
+    int i;
 
-int
-rand_string(char *buf, size_t len)
-{
-    size_t i;
-    int rand_no;
-    char c;
+    assert(cheri_getlen(rootcap) >= n_otypes);
+    assert((cheri_getperm(rootcap) & OTYPE_PERMS_OWN) != 0);
 
-    
-    //last character should contain a NULL
-    len = MIN(len + 1, cheri_getlen(buf) - 1);
-    for (i = 0; i < len; i++)
-    {
-        rand_no = rand() % KEYSPACE;
-        c = alphanum[rand_no];
-        buf[i] = c;
-    }
-    buf[len] = '\0';
-    
-    return (len);
-}
+    seal_root = cheri_setboundsexact(rootcap, n_otypes);
+    for(i = 0; i < n_otypes; i++)
+        make_otype(seal_root, i, results[i]);
 
-int
-valid_scb(void * scb)
-{
-    return (1);
-}
-
-int 
-get_maxprocs(void)
-{
-    int mib[4] = {CTL_KERN, KERN_MAXPROC, 0, 0};
-    int maxprocs;
-    size_t len = sizeof(maxprocs);
-    sysctl(mib, 2, &maxprocs, &len, NULL, 0);
-    return (maxprocs);
+    return (cheri_incoffset(rootcap, i));
 }
