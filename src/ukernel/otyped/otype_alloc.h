@@ -31,6 +31,8 @@
 #ifndef _OTYPE_ALLOC_H
 #define _OTYPE_ALLOC_H
 
+#include <cocall/cocall_args.h>
+
 void allocate_otype_user(cocall_args_t *cocall_args, void *token);
 void allocate_otype_ukernel(cocall_args_t *cocall_args, void *token);
 

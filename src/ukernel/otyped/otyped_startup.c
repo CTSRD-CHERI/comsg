@@ -29,7 +29,9 @@
  * SUCH DAMAGE.
  */
 #include "otyped_startup.h"
+
 #include "otyped.h"
+#include "otyped_table.h"
 #include "otype_alloc.h"
 
 #include <cocall/worker_map.h>
@@ -59,9 +61,9 @@ void otyped_startup(void)
 {
 	otype_t ukernel_sealroot;
 
-	ukernel_sealroot = allocate_cotypes(UKERNEL_SEALROOT_SELECTOR, reserved_ukernel_otypes);
+	ukernel_sealroot = allocate_otypes(UKERNEL_SEALROOT_SELECTOR, reserved_ukernel_types);
 	global_ns = coproc_init(NULL, NULL, NULL, NULL);
-	init_service(user_alloc_serv, allocate_otype_user, NULL);
-	user_alloc_serv->nsobj = coinsert(U_CODEFINE, COSERVICE, serv->service, global_ns);
-	init_slow_service(ukernel_alloc_serv, allocate_otype_ukernel, NULL);
+	init_service(&user_alloc_serv, allocate_otype_user, NULL);
+	user_alloc_serv.nsobj = coinsert(U_CODEFINE, COSERVICE, user_alloc_serv.service, global_ns);
+	init_slow_service(&ukernel_alloc_serv, allocate_otype_ukernel, NULL);
 }

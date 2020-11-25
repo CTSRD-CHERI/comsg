@@ -39,7 +39,7 @@ make_otype(void *type_root, long type, struct object_type *result)
 	type_root = cheri_incoffset(type_root, type);
 	type_root = cheri_setboundsexact(type_root, 1);
 
-    result->sc = cheri_andperm(type_root, OTYPE_PERMS_SEAL);
+    result->sc = cheri_andperm(type_root, OTYPE_PERM_SEAL);
     result->usc = cheri_andperm(type_root, OTYPE_PERM_UNSEAL);
 
     result->otype = cheri_gettype(cheri_seal(result, result->sc));

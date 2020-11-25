@@ -33,6 +33,7 @@
 
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
+#include <coproc/otype.h>
 #include <coproc/utils.h>
 
 #include <err.h>

@@ -36,10 +36,11 @@
 #include <cheri/cheric.h>
 #include <machine/sysarch.h>
 #include <stdatomic.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 
-static _Atomic(void *) ukernel_sealroot = NULL;
-static _Atomic(void *) user_sealroot = NULL;
+static void * _Atomic ukernel_sealroot = NULL;
+static void * _Atomic user_sealroot = NULL;
 
 //todo-pbb: make getting root sealcap machine-dependent
 static void *
@@ -76,7 +77,7 @@ init_otyped_table(void)
 otype_t 
 allocate_otypes(int selector, int ntypes)
 {
-	void **sealrootp;
+	void * _Atomic * sealrootp;
 	void *new_sealroot, *old_sealroot;
 	otype_t otype;
 
@@ -102,4 +103,4 @@ allocate_otypes(int selector, int ntypes)
 	return (otype);
 }
 
-/* TODO-PBB: allow revoking/freeing an otype. will require temporal safety support.
+/* TODO-PBB: allow revoking/freeing an otype. will require temporal safety support. */

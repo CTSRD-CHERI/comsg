@@ -86,7 +86,7 @@ struct _cocall_args
 			void *coinsert;
 			void *coselect;
 			void *done_scb;
-			otype_t sealing_root;
+			otype_t sealroot;
 		}; //coproc_init, coproc_init_done
 		struct {
 			char ns_name[NS_NAME_LEN];
@@ -125,7 +125,7 @@ struct _cocall_args
 			size_t length;
 		}; //cosend/corecv
 		struct {
-			otype_t otype;
+			otype_t type_root;
 		}; //cotype_alloc
 	};
 } __attribute__((__aligned__(16)));

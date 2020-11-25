@@ -34,10 +34,12 @@
 #include <coproc/coservice.h>
 
 #include <cheri/cheric.h>
+#include <err.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/errno.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <unistd.h>

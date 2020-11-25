@@ -31,6 +31,7 @@
 #include "coservice_cap.h"
 
 #include <coproc/coservice.h>
+#include <coproc/otype.h>
 #include <coproc/utils.h>
 
 #include <cheri/cheric.h>

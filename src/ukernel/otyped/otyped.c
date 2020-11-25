@@ -29,11 +29,15 @@
  * SUCH DAMAGE.
  */
 #include "otyped.h"
+
 #include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 #include <coproc/otype.h>
+
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/errno.h>
 #include <unistd.h>
 
 coservice_provision_t ukernel_alloc_serv, user_alloc_serv;
@@ -48,13 +52,14 @@ usage(void)
 int main(int argc, char *const argv[])
 {
 	int opt, error;
+	void *init_cap;
 	
 	opterr = 0;
 	reserved_ukernel_types = -1;
 	while((opt = getopt(argc, argv, "n:")) != -1) {
 		switch (opt) {
 		case 'n':
-			reserved_ukernel_types = strtol(optarg);
+			reserved_ukernel_types = strtol(optarg, NULL, 10);
 			if (reserved_ukernel_types <= 0 || reserved_ukernel_types > COPROC_OTYPE_SPACE_LEN)
 				err(EINVAL, "cannot reserve %s ukernel types", optarg);
 			break;

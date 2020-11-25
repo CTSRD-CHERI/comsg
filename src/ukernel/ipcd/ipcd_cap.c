@@ -32,6 +32,8 @@
 #include "coport_table.h"
 
 #include <coproc/coport.h>
+#include <coproc/otype.h>
+
 #include <coproc/utils.h>
 
 #include <assert.h>

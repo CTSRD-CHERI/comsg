@@ -31,7 +31,7 @@
 #ifndef _OTYPED_TABLE_H
 #define _OTYPED_TABLE_H
 
-#include <coproc/cotype.h>
+#include <coproc/otype.h>
 
 #define UKERNEL_SEALROOT_SELECTOR (1)
 #define USER_SEALROOT_SELECTOR (2)

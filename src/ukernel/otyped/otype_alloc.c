@@ -30,6 +30,8 @@
  */
 #include "otype_alloc.h"
 
+#include "otyped_table.h"
+
 #include <cocall/cocall_args.h>
 #include <coproc/otype.h>
 #include <coproc/utils.h>
