@@ -28,30 +28,21 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COPORT_IPC_CINVOKE_H
-#define _COPORT_IPC_CINVOKE_H
+#ifndef COPORT_CINVOKE_H
+#define COPORT_CINVOKE_H
 
-#include <coproc/coport.h>
-#include <stddef.h>
+#define CCALL_RETURN(return_value) __asm__ ( \
+        "move $v0, %[result];\n"\
+        "ccall $c22, $c21, 1;\n"\
+        "nop"\
+        : : [result] "r" (retval));
 
-typedef int (*coport_func_ptr)(coport_t *, void *, size_t);
+#define CCALL_RETURNCAP(return_cap) __asm__ ( \
+        "cmove $c3, %[result];\n"\
+        "ccall $c22, $c21, 1;\n"\
+        "nop"\
+        : : [result] "C" (return_cap));
 
-extern const coport_func_ptr *cosend_codecap;
-extern const coport_func_ptr *corecv_codecap;
-extern const void **return_stack_sealcap;
-
-extern int coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
-
-static inline __always_inline int 
-cosend_cinvoke(port, buffer, length)
-{
-	return (coport_cinvoke(*cosend_codecap, port, buffer, (*return_stack_sealcap), length));
-} 
-
-static inline __always_inline int 
-corecv_cinvoke(port, buffer, length)
-{
-	return (coport_cinvoke(*corecv_codecap, port, buffer, (*return_stack_sealcap), length));
-}
+#define GET_IDC(var) __asm__("cmove %0, $idc" : "=C" (var))
 
 #endif

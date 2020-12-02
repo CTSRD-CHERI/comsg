@@ -28,30 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COPORT_IPC_CINVOKE_H
-#define _COPORT_IPC_CINVOKE_H
 
-#include <coproc/coport.h>
-#include <stddef.h>
+#include <machine/asm.h>
 
-typedef int (*coport_func_ptr)(coport_t *, void *, size_t);
-
-extern const coport_func_ptr *cosend_codecap;
-extern const coport_func_ptr *corecv_codecap;
-extern const void **return_stack_sealcap;
-
-extern int coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
-
-static inline __always_inline int 
-cosend_cinvoke(port, buffer, length)
-{
-	return (coport_cinvoke(*cosend_codecap, port, buffer, (*return_stack_sealcap), length));
-} 
-
-static inline __always_inline int 
-corecv_cinvoke(port, buffer, length)
-{
-	return (coport_cinvoke(*corecv_codecap, port, buffer, (*return_stack_sealcap), length));
-}
-
-#endif
+ENTRY(coport_cinvoke)
+	unimp
+END(coport_cinvoke)

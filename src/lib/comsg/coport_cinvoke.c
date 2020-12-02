@@ -31,7 +31,9 @@
 
 #include "coport_cinvoke.h"
 
+#include "coport_cinvoke_macros.h"
 #include "coport_ipc_utils.h"
+
 #include <comsg/ukern_calls.h>
 #include <comsg/coport_ipc.h>
 #include <comsg/coport_ipc_cinvoke.h>
@@ -54,24 +56,13 @@ const coport_func_ptr *corecv_codecap = &_corecv_codecap;
 const void **return_stack_sealcap = &_stack_sealcap;
 
 
-#define CCALL_RETURN(return_value) __asm__ ( \
-        "move $v0, %[result];\n"\
-        "ccall $c22, $c21, 1;\n"\
-        "nop"\
-        : : [result] "r" (retval));
-
-#define CCALL_RETURNCAP(return_cap) __asm__ ( \
-        "cmove $c3, %[result];\n"\
-        "ccall $c22, $c21, 1;\n"\
-        "nop"\
-        : : [result] "C" (return_cap));
 
 static __attribute__((cheri_ccallee))
 int cosend_impl(coport_t *port, void *buf, size_t len)
 {
 	coport_type_t type;
     int retval;
-    __asm__("cmove %0, $idc" : "=C" (port)); 
+    GET_IDC(port);
   
     if(len == 0)
         return (0);
@@ -101,7 +92,7 @@ int corecv_impl(coport_t *port, void **buf, size_t len)
 	void *msg;
     coport_type_t type;
     int retval;
-    __asm__("cmove %0, $idc" : "=C" (port));
+    GET_IDC(port);
 
     if(len == 0)
         return (0);

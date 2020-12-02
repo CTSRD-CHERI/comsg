@@ -72,8 +72,8 @@ NESTED(coport_cinvoke, CINVOKE_FRAME_SIZE, _FRAME_RETURN_REG)
 	cgetdefault	$c12
 	cincoffset	$csp, $csp, -11*CHERICAP_SIZE
 
-	csc	$c17, $zero, 0($csp)
-	csc	$c18, $zero, CHERICAP_SIZE($csp)
+	csc	$c17, $zero, 0*CHERICAP_SIZE($csp)
+	csc	$c18, $zero, 1*CHERICAP_SIZE($csp)
 	csc	$c19, $zero, 2*CHERICAP_SIZE($csp)
 	csc	$c20, $zero, 3*CHERICAP_SIZE($csp)
 	csc	$c21, $zero, 4*CHERICAP_SIZE($csp)
