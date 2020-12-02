@@ -292,7 +292,7 @@ cocreate(const char *name, nstype_t type, namespace_t *parent)
 }
 
 namespace_t *
-coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, void *codiscover_scb, otype_t *sealrootp)
+coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, void *codiscover_scb)
 {
 	int error;
 	
@@ -303,6 +303,7 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 	cocall_args.coinsert = coinsert_scb;
 	cocall_args.codiscover = codiscover_scb;
 	cocall_args.coselect = coselect_scb;
+	#if 0
 	/* 
 	 * The following demonstrates how bloated coproc_init has become. We hope to have a better
 	 * mechanism for bootstrapping soon, and that will let us do away with some/most of this.
@@ -313,7 +314,7 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 				cocall_args.sealroot = *sealrootp;
 		}
 	}
-
+	#endif
 	//the target of this varies based on whether caller is a microkernel compartment & which compartment
 	if (is_ukernel)
 		error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
