@@ -25,23 +25,22 @@ ARCH_TESTS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(TESTS)))
 
 ARCH_TGTS := $(ARCH_LIBS) $(ARCH_EXECS) $(ARCH_TESTS)
 
+.PHONY: $(ARCH_TGTS)
 $(ARCH_TGTS):
-	@echo $(ARCH_TGTS)
 	$(eval $@_WORDS	:= $(subst -, ,$@))
 	$(eval $@_ARCH 	:= $(lastword $($@_WORDS)))
 	$(eval $@_TGT	:= $(firstword $($@_WORDS)))
-	$(eval $@_DIR	:= $(patsubst %test,tests,$(patsubst lib%,lib, $(patsubst %d,ukernel,$($@_TGT)))))
+	$(eval $@_DIR	:= $(patsubst %test,tests,$(patsubst %d,ukernel,$(patsubst lib%,lib,$($@_TGT)))))
 	$(eval $@_NAME	:= $(patsubst lib%,%,$($@_TGT)))
 	$(MAKE) -C $(SRC_DIR)/$($@_DIR)/$($@_NAME) $($@_TGT) ARCH=$($@_ARCH)
-ifeq ($($@_DIR), lib)
-	cp $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so.* $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so
-endif
-
+	@if [ "$($@_DIR)" == "lib" ]; then \
+	cp $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so.* $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so; \
+	fi
 
 .SECONDEXPANSION:
 $(LIBS): $$(addprefix $$@-,$$(ARCHES))
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib/$@.so
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so $(CHERI_ROOT)/extra-files/usr/lib/$@.so
 
 .PHONY: libs
 libs: $(LIBS)
