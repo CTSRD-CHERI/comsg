@@ -43,13 +43,13 @@ extern const void **return_stack_sealcap;
 extern int coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
 
 static inline __always_inline int 
-cosend_cinvoke(port, buffer, length)
+cosend_cinvoke(coport_t *port, void *buffer, size_t length)
 {
 	return (coport_cinvoke(*cosend_codecap, port, buffer, (*return_stack_sealcap), length));
 } 
 
 static inline __always_inline int 
-corecv_cinvoke(port, buffer, length)
+corecv_cinvoke(coport_t *port, void *buffer, size_t length)
 {
 	return (coport_cinvoke(*corecv_codecap, port, buffer, (*return_stack_sealcap), length));
 }

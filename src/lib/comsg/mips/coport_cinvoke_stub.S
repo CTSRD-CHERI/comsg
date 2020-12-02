@@ -52,6 +52,10 @@
 
 
 /* XXX-PBB: register save/restore from cheri_invoke  */
+/*
+ * int 
+ * coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len)
+ */
 .text 
 .option pic0
 NESTED(coport_cinvoke, CINVOKE_FRAME_SIZE, _FRAME_RETURN_REG)

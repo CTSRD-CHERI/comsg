@@ -55,18 +55,17 @@ const coport_func_ptr *cosend_codecap = &_cosend_codecap;
 const coport_func_ptr *corecv_codecap = &_corecv_codecap;
 const void **return_stack_sealcap = &_stack_sealcap;
 
-
-
-static __attribute__((cheri_ccallee))
+static
 int cosend_impl(coport_t *port, void *buf, size_t len)
 {
 	coport_type_t type;
     int retval;
     GET_IDC(port);
   
-    if(len == 0)
-        return (0);
-
+   if(len == 0) {
+        retval = 0;
+        CCALL_RETURN(retval);
+    }
     type = port->type;
     switch(type) {
     case COCHANNEL:
@@ -86,7 +85,7 @@ int cosend_impl(coport_t *port, void *buf, size_t len)
     return (retval);  /* NOTREACHED */
 }
 
-static __attribute__((cheri_ccallee))
+static
 int corecv_impl(coport_t *port, void **buf, size_t len)
 {
 	void *msg;
@@ -94,8 +93,10 @@ int corecv_impl(coport_t *port, void **buf, size_t len)
     int retval;
     GET_IDC(port);
 
-    if(len == 0)
-        return (0);
+    if(len == 0) {
+        retval = 0;
+        CCALL_RETURN(retval);
+    }
     type = port->type;
     switch(type) {
     case COCHANNEL:

@@ -31,10 +31,19 @@
 #ifndef COPORT_CINVOKE_H
 #define COPORT_CINVOKE_H
 
-#define CCALL_RETURN(return_value) (void)(return_value)
+#include <machine/asm.h>
+#include <cheri/cherireg.h>
 
-#define CCALL_RETURNCAP(return_cap) (void)(return_cap)
+#define CCALL_RETURN(return_value) __asm__ ( \
+        "move a0, %[result];\n"\
+        "cinvoke cs6, cs5;\n"\
+        : : [result] "r" (retval))
 
-#define GET_IDC(var) (void)(var)
+#define CCALL_RETURNCAP(return_cap) __asm__ ( \
+        "cmove ca0, %[result];\n"\
+        "cinvoke cs6, cs5;\n"\
+        : : [result] "C" (return_cap))
+
+#define GET_IDC(var) __asm__("cmove %0, c31" : "=C" (var))
 
 #endif
