@@ -59,6 +59,7 @@ void usage(void)
 static size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(coport_typedep_t), COCARRIER_MAX_MSG_LEN};
 static size_t nbuckets = 5;
 
+/* TODO-PBB: Add a cocall allowing a coport "owner" to create send/recv only capabilities */
 
 int main(int argc, char *const argv[])
 {

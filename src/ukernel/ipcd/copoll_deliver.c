@@ -90,8 +90,8 @@ process_coport_event(coport_t *coport)
 		pthread_cond_signal(listener->wakeup);
 	}
 	coport->cd->levent &= ~coport_event;
+	//TODO-PBB: add provision for now-COPORT_CLOSED coports; we should free memory and wake up listeners.
 	atomic_store_explicit(&coport->info->status, status, memory_order_release);
-
 }
 
 static void *
