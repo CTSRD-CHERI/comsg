@@ -60,21 +60,21 @@
  * NS_PERM_OWN:
  * 	+ allows all lesser operations
  * 	+ allows arbitrary deletion of objects without their ns object capabilities
- * 	+ allows deletion of the namespace if the namespace has type EXPLICIT
+ * 	+ allows deletion of the namespace if the namespace
  */
 
-#define NS_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+#define NS_PERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
+	CHERI_PERM_LOAD_CAP )
 
 #define NS_PERMS_OBJ ( 0 )
 #define NS_PERM_RO   ( CHERI_PERM_SW2 )
 #define NS_PERM_WR   ( CHERI_PERM_SW3 )
 #define NS_PERMS_OWN ( CHERI_PERM_SW2 | CHERI_PERM_SW3 ) 
 
-#define NS_PERMS_RO_MASK ( NS_HWPERMS_MASK | NS_PERM_RO )
-#define NS_PERMS_WR_MASK ( NS_HWPERMS_MASK | NS_PERM_WR )
-#define NS_PERMS_OWN_MASK ( NS_HWPERMS_MASK | NS_PERMS_OWN )
-#define NS_PERMS_OBJ_MASK ( NS_HWPERMS_MASK | NS_PERMS_OBJ )
+#define NS_PERMS_RO_MASK ( NS_PERMS_MASK | NS_PERM_RO )
+#define NS_PERMS_WR_MASK ( NS_PERMS_MASK | NS_PERM_WR )
+#define NS_PERMS_OWN_MASK ( NS_PERMS_MASK | NS_PERMS_OWN )
+#define NS_PERMS_OBJ_MASK ( NS_PERMS_MASK | NS_PERMS_OBJ )
 
 #define NS_PERMITS_WRITE(c) ( cheri_getperm(c) & NS_PERM_WR )
 #define NS_PERMITS_READ(c) ( ( cheri_getperm(c) & ( NS_PERM_WR | NS_PERM_RO ) ) != 0)
