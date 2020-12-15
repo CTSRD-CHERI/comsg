@@ -33,6 +33,8 @@
 
 #include <stddef.h>
 
+#define cocall_slow cocall
+
 int cocall_tls(void *target, void *buffer, size_t len);
 int slocall_tls(void *target, void *buffer, size_t len);
 

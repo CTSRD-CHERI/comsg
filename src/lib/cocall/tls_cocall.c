@@ -35,13 +35,13 @@
 #include <threads.h>
 #include <unistd.h>
 
-static thread_local void *code_cap = NULL;
+static thread_local void *cocall_code_cap = NULL;
 static thread_local void *data_cap = NULL;
 
 static 
 void cocall_init(void)
 {
-	int error = cosetup(COSETUP_COCALL, &code_cap, &data_cap);
+	int error = cosetup(COSETUP_COCALL, &cocall_code_cap, &data_cap);
 	if(error)
 		err(errno, "cocall_init: error in cosetup(2)");
 	return;
@@ -49,14 +49,14 @@ void cocall_init(void)
 
 int cocall_tls(void *target, void *buffer, size_t len)
 {
-	if ((code_cap == NULL) || (data_cap == NULL))
+	if ((cocall_code_cap == NULL) || (data_cap == NULL))
 		cocall_init();
-	return (cocall(code_cap, data_cap, target, buffer, len));
+	return (cocall(cocall_code_cap, data_cap, target, buffer, len));
 }
 
 int slocall_tls(void *target, void *buffer, size_t len)
 {
-	if ((code_cap == NULL) || (data_cap == NULL))
+	if ((cocall_code_cap == NULL) || (data_cap == NULL))
 		cocall_init();
-	return (cocall_slow(code_cap, data_cap, target, buffer, len));
+	return (cocall_slow(cocall_code_cap, data_cap, target, buffer, len));
 }

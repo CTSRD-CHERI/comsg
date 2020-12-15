@@ -38,6 +38,10 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
+#define cocall_slow cocall
+#define coaccept_slow coaccept
+
+
 typedef struct _worker_args
 {
 	/* the worker thread */
