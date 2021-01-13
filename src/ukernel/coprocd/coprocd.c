@@ -34,23 +34,26 @@
 #include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 
+#include <err.h>
 #include <stdlib.h>
+#include <sys/errno.h>
 #include <pthread.h>
 
 int main(int argc, char const *argv[])
 {
 	function_map_t *user_prog_mgr;
+	int error;
 	
 	is_ukernel = true;
 	//we can dance if we want to
+	user_prog_mgr = spawn_worker(U_COPROC_INIT, coproc_user_init, NULL);
+	if (user_prog_mgr == NULL)
+		err(EEXIST, "could not start microkernel in this address space. Is an old instance still running?");
 	spawn_daemons();
 
-	for(;;) {
-		user_prog_mgr = spawn_worker(U_COPROC_INIT, coproc_user_init, NULL);
-		pthread_join(user_prog_mgr->workers[0].worker, NULL);
-		free(user_prog_mgr->workers);
-		free(user_prog_mgr);
-	}
+	/* we don't expect this to return */
+	error = pthread_join(user_prog_mgr->workers[0].worker, NULL);
+	err(error, "worker thread terminated early, exiting...");
 
 	return (0);
 }

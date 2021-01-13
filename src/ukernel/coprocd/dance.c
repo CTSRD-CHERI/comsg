@@ -192,7 +192,7 @@ void ukern_init_complete(cocall_args_t *cocall_args, void *token)
 void coproc_user_init(cocall_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	if (atomic_load_explicit(&ukern_inited, memory_order_acquire) == false) {
+	if (!atomic_load_explicit(&ukern_inited, memory_order_acquire)) {
 		/* nsd and coserviced have not yet completed their startup routines */
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
