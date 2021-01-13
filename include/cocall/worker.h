@@ -64,9 +64,9 @@ typedef struct _worker_args
 
 typedef struct _worker_args handler_args_t;
 
-void start_coaccept_worker(worker_args_t *thread_args);
+bool start_coaccept_worker(worker_args_t *thread_args);
 void *coaccept_worker(void *worker_argp);
-void start_sloaccept_worker(worker_args_t *thread_args);
+bool start_sloaccept_worker(worker_args_t *thread_args);
 void *sloaccept_worker(void *worker_argp);
 
 #endif

@@ -28,21 +28,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-//ECATS-BSD
-#include <cocall/cocall_args.h>
-
-#include <coproc/utils.h>
 #include <cocall/worker.h>
+#include <cocall/cocall_args.h>
+#include <coproc/namespace.h>
+#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 
 #include <assert.h>
 #include <err.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/errno.h>
 #include <pthread.h>
+#include <pthread_np.h>
 #include <unistd.h>
 
 static pthread_mutex_t registration_mutex;
@@ -54,6 +55,7 @@ void init_coregister_mutex(void)
     pthread_mutexattr_t mtxattr;
     pthread_mutexattr_init(&mtxattr);
     pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutexattr_setrobust(&mtxattr, PTHREAD_MUTEX_ROBUST);
     pthread_mutex_init(&registration_mutex, &mtxattr);
     pthread_cond_init(&registration_cond, NULL);
 }
@@ -73,21 +75,21 @@ void coaccept_init(
     if (target_name == NULL) {
         //printf("coaccept_init: null target_name\n");
         *target_cap = *data_cap;
-    } else if (target_name[0] == '\0') {
+    } else if (strnlen(target_name, NS_NAME_LEN) == 0) {
         //printf("coaccept_init: empty string target_name\n");
         *target_cap = *data_cap;
     } else {
         //printf("coaccept_init: coregistering as %s\n", target_name);
-        if(coregister(target_name, target_cap) != 0)
-            err(errno, "coaccept_init: could not coregister with name %s", target_name);
+        if(coregister(target_name, target_cap) != 0) {
+            pthread_cond_signal(&registration_cond);
+            pthread_exit(NULL);
+        }
     }
-
     pthread_cond_signal(&registration_cond);
     pthread_mutex_unlock(&registration_mutex);
-    return;
 }
 
-void 
+bool 
 start_coaccept_worker(worker_args_t *thread_args)
 {
     pthread_attr_t thr_attr;
@@ -98,16 +100,23 @@ start_coaccept_worker(worker_args_t *thread_args)
     pthread_mutex_lock(&registration_mutex);
 
     error = pthread_create(&thread_args->worker, &thr_attr, coaccept_worker, thread_args);
-    if (error != 0)
-        err(errno, "start_coaccept_worker: could not spawn thread");
+    if (error != 0) {
+        pthread_mutex_unlock(&registration_mutex);
+        return (false);
+    }
 
-    pthread_cond_wait(&registration_cond, &registration_mutex);
+    error = pthread_cond_wait(&registration_cond, &registration_mutex);
+    if (thread_args->scb_cap == NULL || error == EOWNERDEAD) {
+        assert(pthread_peekjoin_np(thread_args->worker, NULL) == 0);
+        pthread_mutex_unlock(&registration_mutex);
+        return (false);
+    }
     pthread_mutex_unlock(&registration_mutex);
-    return;
+
+    return (true);
 }
 
-
-void 
+bool 
 start_sloaccept_worker(worker_args_t *thread_args)
 {
     pthread_attr_t thr_attr;
@@ -118,18 +127,29 @@ start_sloaccept_worker(worker_args_t *thread_args)
     pthread_mutex_lock(&registration_mutex);
 
     error = pthread_create(&thread_args->worker, &thr_attr, sloaccept_worker, thread_args);
-    if (error != 0)
-        err(errno, "start_sloaccept_worker: could not spawn thread");
+    if (error != 0) {
+        pthread_mutex_unlock(&registration_mutex);
+        return (false);
+    }
 
     pthread_cond_wait(&registration_cond, &registration_mutex);
+    if (thread_args->scb_cap == NULL) {
+        assert(pthread_peekjoin_np(thread_args->worker, NULL) == 0);
+        pthread_mutex_unlock(&registration_mutex);
+        return (false);
+    }
     pthread_mutex_unlock(&registration_mutex);
-    return;
+
+    return (true);
 }
+
+/* The below functions only differ in whether they use the kernel or switcher coaccept */
 
 void *coaccept_worker(void *worker_argp)
 {
 	void *sw, *scb, *cookie;
     void **cookie_cap;
+    worker_args_t *worker_args;
 	cocall_args_t cocall_args, *cocall_args_ptr;
 
     cookie_cap = &cookie;
@@ -140,7 +160,7 @@ void *coaccept_worker(void *worker_argp)
     assert(cheri_local(cocall_args_ptr));
     assert(cheri_getperm(cocall_args_ptr) & CHERI_PERM_STORE_LOCAL_CAP);
 
-	worker_args_t *worker_args = worker_argp;
+	worker_args = worker_argp;
 	coaccept_init(&sw, &scb, worker_args->name, &worker_args->scb_cap);
 	for(;;) {
 		if(coaccept(sw, scb, &cookie, cocall_args_ptr, sizeof(cocall_args_t)) == 0) {

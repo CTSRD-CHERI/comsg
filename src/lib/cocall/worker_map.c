@@ -35,21 +35,18 @@
 
 #include <cheri/cheric.h>
 #include <err.h>
-#include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/errno.h>
 
 
-static
-void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
+static bool
+spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
 {
-    pthread_attr_t thread_attrs;
     worker_args_t *worker_arr;
     worker_args_t *thread_args;
-
-    pthread_attr_init(&thread_attrs);
 
     func_worker_map->nworkers += nworkers;
     if(func_worker_map->workers == NULL) 
@@ -64,19 +61,17 @@ void spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map
         memset(thread_args->name, '\0', NS_NAME_LEN);
         thread_args->validation_function = arg_func;
         thread_args->worker_function = func;
-        start_coaccept_worker(thread_args);
-        
+        if (!start_coaccept_worker(thread_args))
+            return (false);
     }
+    return (true);
 }
 
-static
-void spawn_slow_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
+static bool
+spawn_slow_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * func_worker_map)
 {
-    pthread_attr_t thread_attrs;
     worker_args_t *worker_arr;
     worker_args_t *thread_args;
-
-    pthread_attr_init(&thread_attrs);
 
     func_worker_map->nworkers += nworkers;
     if(func_worker_map->workers == NULL) 
@@ -85,18 +80,26 @@ void spawn_slow_worker_threads(void *func, void* arg_func, int nworkers, functio
         worker_arr = realloc(func_worker_map->workers, (func_worker_map->nworkers * sizeof(worker_args_t)));
     func_worker_map->workers = cheri_andperm(worker_arr, FUNC_MAP_PERMS);
     
-    for(int i = 0; i < nworkers; i++)
-    {
+    for(int i = 0; i < nworkers; i++) {
         thread_args = cheri_setbounds(&worker_arr[i], sizeof(worker_args_t));
         rand_string(thread_args->name, NS_NAME_LEN);
         thread_args->validation_function = arg_func;
         thread_args->worker_function = func;
-        start_sloaccept_worker(thread_args);
-        
+        if (!start_sloaccept_worker(thread_args))
+            return (false);
     }
+    return (true);
 }
 
-function_map_t *new_function_map(void)
+static void
+teardown_function_map(function_map_t *map)
+{
+   free(map->workers);
+   free(map);
+}
+
+static function_map_t *
+new_function_map(void)
 {
     function_map_t *map = malloc(sizeof(function_map_t));
     memset(map, '\0', sizeof(function_map_t));
@@ -104,17 +107,14 @@ function_map_t *new_function_map(void)
 }
 
 /* TODO-PBB: do something nicer than two almost identical functions */
-void
+bool
 spawn_slow_worker_thread(worker_args_t *worker, function_map_t *func_map)
 {
-    int error;
-    pthread_attr_t thread_attrs;
+    int error, idx;
     worker_args_t *worker_arr;
     worker_args_t *thread_args;
 
-    pthread_attr_init(&thread_attrs);
-
-    int idx = atomic_fetch_add(&func_map->nworkers, 1);
+    idx = atomic_fetch_add(&func_map->nworkers, 1);
     if(func_map->workers == NULL)
         worker_arr = calloc(func_map->nworkers, sizeof(worker_args_t));
     else
@@ -127,22 +127,17 @@ spawn_slow_worker_thread(worker_args_t *worker, function_map_t *func_map)
     thread_args->validation_function = worker->validation_function;
     strcpy(thread_args->name, worker->name);
     
-    start_sloaccept_worker(thread_args);
-    
-    return;
+    return (start_sloaccept_worker(thread_args));
 }
 
-void
+bool
 spawn_worker_thread(worker_args_t *worker, function_map_t *func_map)
 {
-    int error;
-    pthread_attr_t thread_attrs;
+    int error, idx;
     worker_args_t *worker_arr;
     worker_args_t *thread_args;
 
-    pthread_attr_init(&thread_attrs);
-
-    int idx = atomic_fetch_add(&func_map->nworkers, 1);
+    idx = atomic_fetch_add(&func_map->nworkers, 1);
     if(func_map->workers == NULL)
         worker_arr = calloc(func_map->nworkers, sizeof(worker_args_t));
     else
@@ -155,31 +150,37 @@ spawn_worker_thread(worker_args_t *worker, function_map_t *func_map)
     thread_args->validation_function = worker->validation_function;
     strncpy(thread_args->name, worker->name, NS_NAME_LEN);
   
-    start_coaccept_worker(thread_args);
-    
-    return;
+    return (start_coaccept_worker(thread_args));
 }
 
-function_map_t *spawn_slow_worker(const char *worker_name, void *func, void *valid)
+function_map_t *
+spawn_slow_worker(const char *worker_name, void *func, void *valid)
 {
     worker_args_t wargs;
-    function_map_t *map = new_function_map();
-    
+    function_map_t *map;
+
+    map = new_function_map();
     memset(&wargs, '\0', sizeof(wargs));
     if(worker_name != NULL)
         strncpy(wargs.name, worker_name, NS_NAME_LEN);
     wargs.worker_function = func;
     wargs.validation_function = valid; 
     
-    spawn_slow_worker_thread(&wargs, map);
+    if (!spawn_slow_worker_thread(&wargs, map)) {
+        teardown_function_map(map);
+        return (NULL);
+    }
+
     return (map);
 }
 
-function_map_t *spawn_worker(const char *worker_name, void *func, void *valid)
+function_map_t *
+spawn_worker(const char *worker_name, void *func, void *valid)
 {
     worker_args_t wargs;
-    function_map_t *map = new_function_map();
-    
+    function_map_t *map;
+
+    map = new_function_map();
     memset(&wargs, '\0', sizeof(wargs));
     if(worker_name != NULL)
         strncpy(wargs.name, worker_name, NS_NAME_LEN);
@@ -187,35 +188,52 @@ function_map_t *spawn_worker(const char *worker_name, void *func, void *valid)
     wargs.worker_function = func;
     wargs.validation_function = valid; 
     
-    spawn_worker_thread(&wargs, map);
+    if (!spawn_worker_thread(&wargs, map)) {
+        teardown_function_map(map);
+        return (NULL);
+    }
+
     return (map);
 }
 
-function_map_t *spawn_workers(void *func, void *arg_func, int nworkers)
+function_map_t *
+spawn_workers(void *func, void *arg_func, int nworkers)
 {
-    function_map_t *func_map = new_function_map();
-   
-    spawn_worker_threads(func, arg_func, nworkers, func_map);
+    function_map_t *func_map;
+
+    func_map = new_function_map();
+    if (!spawn_worker_threads(func, arg_func, nworkers, func_map)) {
+        teardown_function_map(func_map);
+        return (NULL);
+    }
 
     return (func_map);
 }
 
-function_map_t *spawn_slow_workers(void *func, void *arg_func, int nworkers)
+function_map_t *
+spawn_slow_workers(void *func, void *arg_func, int nworkers)
 {
-    function_map_t *func_map = new_function_map();
-   
-    spawn_slow_worker_threads(func, arg_func, nworkers, func_map);
+    function_map_t *func_map;
+
+    func_map = new_function_map();
+   if (!spawn_slow_worker_threads(func, arg_func, nworkers, func_map)) {
+        teardown_function_map(map);
+        return (NULL);
+    }
 
     return (func_map);
 }
 
-void **get_worker_scbs(function_map_t *func)
+void **
+get_worker_scbs(function_map_t *func)
 {
-    int nworkers = func->nworkers;
-    void **scbs = calloc(nworkers, CHERICAP_SIZE);
-    for(int i = 0; i < nworkers; i++) 
+    void ** scbs;
+    int nworkers, i;
+
+    nworkers = func->nworkers;
+    scbs = calloc(nworkers, CHERICAP_SIZE);
+    for(i = 0; i < nworkers; i++) 
         scbs[i] = func->workers[i].scb_cap;
     
-
     return (scbs);
 }
