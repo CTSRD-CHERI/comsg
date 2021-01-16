@@ -35,9 +35,11 @@
 #include <comsg/ukern_calls.h>
 
 #include <err.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <sys/errno.h>
-#include <pthread.h>
+
 
 int main(int argc, char const *argv[])
 {
@@ -54,6 +56,6 @@ int main(int argc, char const *argv[])
 	/* we don't expect this to return */
 	error = pthread_join(user_prog_mgr->workers[0].worker, NULL);
 	err(error, "worker thread terminated early, exiting...");
-
+	/* NOTREACHED */
 	return (0);
 }

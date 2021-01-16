@@ -53,9 +53,9 @@ static void *coselect_scb = NULL;
 static _Atomic bool coproc_inited = false;
 static _Atomic bool ukern_inited = false;
 
-#define NSD_SELECTOR 1
-#define COSERVICED_SELECTOR 2
-#define IPCD_SELECTOR 3
+#define NSD_SELECTOR (1)
+#define COSERVICED_SELECTOR (2)
+#define IPCD_SELECTOR (3)
 
 void
 invalidate_startup_info(void)
@@ -71,8 +71,8 @@ invalidate_startup_info(void)
 }
 
 //TODO-PBB: apply memory ordering that gives something sensible
-static
-int authenticate_dance(cocall_args_t *cocall_args, int selector)
+static int
+authenticate_dance(cocall_args_t *cocall_args, int selector)
 {
 	pid_t caller_pid, daemon_pid;
 	int error;
@@ -96,7 +96,8 @@ int authenticate_dance(cocall_args_t *cocall_args, int selector)
 		return (1);
 }
 
-void nsd_init(cocall_args_t *cocall_args, void *token)
+void 
+nsd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
 		COCALL_ERR(cocall_args, EPERM);
@@ -121,7 +122,8 @@ void nsd_init(cocall_args_t *cocall_args, void *token)
 }
 
 
-void coserviced_init(cocall_args_t *cocall_args, void *token)
+void 
+coserviced_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, COSERVICED_SELECTOR))
 		COCALL_ERR(cocall_args, EPERM);
@@ -142,7 +144,8 @@ void coserviced_init(cocall_args_t *cocall_args, void *token)
 	COCALL_RETURN(cocall_args, 0);
 }
 
-void ipcd_init(cocall_args_t *cocall_args, void *token)
+void 
+ipcd_init(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
 		COCALL_ERR(cocall_args, EPERM);
@@ -165,7 +168,8 @@ void ipcd_init(cocall_args_t *cocall_args, void *token)
 	COCALL_RETURN(cocall_args, 0);
 }
 
-void coproc_init_complete(cocall_args_t *cocall_args, void *token)
+void 
+coproc_init_complete(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
 		COCALL_ERR(cocall_args, EPERM);
@@ -177,7 +181,8 @@ void coproc_init_complete(cocall_args_t *cocall_args, void *token)
 	COCALL_RETURN(cocall_args, 0);
 }
 
-void ukern_init_complete(cocall_args_t *cocall_args, void *token)
+void 
+ukern_init_complete(cocall_args_t *cocall_args, void *token)
 {
 	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
 		COCALL_ERR(cocall_args, EPERM);
@@ -189,7 +194,8 @@ void ukern_init_complete(cocall_args_t *cocall_args, void *token)
 	COCALL_RETURN(cocall_args, 0);
 }
 
-void coproc_user_init(cocall_args_t *cocall_args, void *token)
+void 
+coproc_user_init(cocall_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	if (!atomic_load_explicit(&ukern_inited, memory_order_acquire)) {
