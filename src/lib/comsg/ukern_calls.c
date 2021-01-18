@@ -57,7 +57,7 @@ bool is_ukernel = false;
 
 static pthread_key_t ukern_call_set;
 
-#if 1
+#if 0
 #define err(n, s, ...) do { printf("%s: Errno=%d\n", s, n); kill(getpid(), SIGSEGV); } while(0)
 #endif 
 
@@ -74,6 +74,11 @@ init_new_thread_calls(void)
 {
 	nsobject_t *service_obj;
 
+	/*
+	 * We make cocall targets thread-local to reduce contention between threads in the same process. 
+	 * It is the responsibility of the callee/service manager to manage contention between threads
+	 * from different processes.
+	 */
 	set_cocall_target(ukern_call_set, COCALL_CODISCOVER,  get_global_target(COCALL_CODISCOVER));
 	set_cocall_target(ukern_call_set, COCALL_COSELECT, get_global_target(COCALL_COSELECT));
 	
@@ -104,7 +109,7 @@ ukern_call(int func, cocall_args_t *args)
 		if ((get_global_target(COCALL_CODISCOVER) == NULL) || (get_global_target(COCALL_COSELECT) == NULL))
 			err(ESRCH, "ukern_call: coproc_init either failed or has not been called");
 		else if ((get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL) || (get_cocall_target(ukern_call_set, COCALL_COSELECT) == NULL))
-			init_new_thread_calls();	
+			init_new_thread_calls();
 
 		func_obj = coselect(ukern_func_names[func], COSERVICE, global_ns);
 		if (func_obj == NULL)
@@ -308,8 +313,7 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 		error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
 	if(error){
 		err(errno, "coproc_init: cocall failed");
-	}
-	else if (cocall_args.status == -1) {
+	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
 	}
@@ -336,8 +340,7 @@ coproc_init_done(void)
 	error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT_DONE, &cocall_args, sizeof(coproc_init_args_t));
 	if(error){
 		err(errno, "coproc_init_done: cocall failed");
-	}
-	else if (cocall_args.status == -1) {
+	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (-1);
 	}
@@ -422,23 +425,14 @@ copoll(pollcoport_t *coports, int ncoports, int timeout)
 	int error;
 	int function_variant;
 
-	function_variant = COCALL_COPOLL;
+	function_variant = COCALL_COPOLL; /* Use fastpath by default */
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	cocall_args.ncoports = ncoports;
 	cocall_args.timeout = timeout;
-	/* 
-	 * If there is no chance we will unborrow/go to the slow path, then we can use
-	 * the pointer supplied, as getting something modified in there so quickly
-	 * quickly would be our fault. Otherwise, we map something ourselves to be 
-	 * a bit more confident that that won't happen. Not sure I'm happy with either
-	 * situation.
-	 */
-	if (timeout == 0)
-		cocall_args.coports = coports;
-	else {
-		cocall_args.coports = calloc(ncoports, sizeof(pollcoport_t));
-		memcpy(cocall_args.coports, coports, sizeof(pollcoport_t) * ncoports);
-	}
+
+	/* We don't want this getting modified during the cocall */
+	cocall_args.coports = malloc(ncoports * sizeof(pollcoport_t));
+	memcpy(cocall_args.coports, coports, sizeof(pollcoport_t) * ncoports);
 do_copoll:
 	error = ukern_call(function_variant, &cocall_args);
 	if(error != 0)
@@ -447,16 +441,15 @@ do_copoll:
 		if (cocall_args.error == EWOULDBLOCK && timeout != 0 && function_variant != COCALL_SLOPOLL) {
 			function_variant = COCALL_SLOPOLL;
 			goto do_copoll;
-		}
-		else {
+		} else {
 			errno = cocall_args.error;
+			free(cocall_args.coports);
 			return (-1);
 		}
 	}
-	if (timeout != 0) {
-		memcpy(coports, cocall_args.coports, sizeof(pollcoport_t) * ncoports);
-		free(cocall_args.coports);
-	}
+	memcpy(coports, cocall_args.coports, sizeof(pollcoport_t) * ncoports);
+	free(cocall_args.coports);
+
 	return (cocall_args.status);
 }
 
@@ -474,8 +467,7 @@ coclose(coport_t *coport)
 	if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (-1);
-	}
-	else 
+	} else 
 		return (0);
 
 }
@@ -508,7 +500,7 @@ nsobject_t *coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 
 	error = ukern_call(COCALL_COUPDATE, &cocall_args);
 	if (error != 0) 
-		err(errno, "cupdate: error performing cocall");
+		err(errno, "coupdate: error performing cocall");
 	else if (cocall_args.status == -1) {
 		//TODO-PBB: handle errors better? or leave it to consumers?
 		errno = cocall_args.error;
@@ -529,11 +521,29 @@ int codelete(nsobject_t *nsobj, namespace_t *parent)
 
 	error = ukern_call(COCALL_CODELETE, &cocall_args);
 	if (error != 0) 
-		err(errno, "cupdate: error performing cocall");
+		err(errno, "codelete: error performing cocall");
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 
 	return (cocall_args.status);
 }
 
+int 
+codrop(namespace_t *ns, namespace_t *parent)
+{
+	codrop_args_t cocall_args;
+	int error;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	cocall_args.ns_cap = parent;
+	cocall_args.child_ns_cap = ns;
+
+	error = ukern_call(COCALL_CODROP, &cocall_args);
+	if (error != 0)
+		err(errno, "codrop: error performing cocall");
+	else if (cocall_args.status == -1)
+		errno = cocall_args.error;
+
+	return (cocall_args.status);
+}
 

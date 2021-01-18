@@ -90,6 +90,7 @@ nsobject_t *coselect(const char *name, nsobject_type_t type, namespace_t *ns);
 coservice_t *codiscover(nsobject_t *nsobj, void **scb);
 coservice_t *coprovide(void **worker_scbs, int nworkers);
 namespace_t *cocreate(const char *name, nstype_t type, namespace_t *parent);
+int codrop(namespace_t *ns, namespace_t *parent);
 int codelete(nsobject_t *nsobj, namespace_t *parent);
 nsobject_t *coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject);
 coport_t *coopen(coport_type_t type);
