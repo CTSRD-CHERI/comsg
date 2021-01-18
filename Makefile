@@ -23,14 +23,17 @@ ARCH_EXECS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(UKERNEL_EXECS)))
 TESTS := $(shell find $(SRC_DIR)/tests -mindepth 1 -type d -exec basename {} \;)
 ARCH_TESTS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(TESTS)))
 
-ARCH_TGTS := $(ARCH_LIBS) $(ARCH_EXECS) $(ARCH_TESTS)
+EXAMPLES := $(shell find $(SRC_DIR)/examples -mindepth 1 -type d -exec basename {} \;)
+ARCH_EXAMPLES := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(EXAMPLES)))
+
+ARCH_TGTS := $(ARCH_LIBS) $(ARCH_EXECS) $(ARCH_TESTS) $(ARCH_EXAMPLES)
 
 .PHONY: $(ARCH_TGTS)
 $(ARCH_TGTS):
 	$(eval $@_WORDS	:= $(subst -, ,$@))
 	$(eval $@_ARCH 	:= $(lastword $($@_WORDS)))
 	$(eval $@_TGT	:= $(firstword $($@_WORDS)))
-	$(eval $@_DIR	:= $(patsubst %test,tests,$(patsubst %d,ukernel,$(patsubst lib%,lib,$($@_TGT)))))
+	$(eval $@_DIR	:= $(patsubst $($@_TGT),examples,$(patsubst %test,tests,$(patsubst %d,ukernel,$(patsubst lib%,lib,$($@_TGT))))))
 	$(eval $@_NAME	:= $(patsubst lib%,%,$($@_TGT)))
 	$(MAKE) -C $(SRC_DIR)/$($@_DIR)/$($@_NAME) $($@_TGT) ARCH=$($@_ARCH)
 	@if [ "$($@_DIR)" == "lib" ]; then \
@@ -52,11 +55,19 @@ $(UKERNEL_EXECS): libs $$(addprefix $$@-,$$(ARCHES))
 .PHONY: ukernel
 ukernel : libs $(UKERNEL_EXECS)
 
+.SECONDEXPANSION:
 $(TESTS): libs ukernel $$(addprefix $$@-,$$(ARCHES))
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
 
 .PHONY: tests
 tests : libs ukernel $(TESTS)
+
+.SECONDEXPANSION:
+$(EXAMPLES): libs ukernel $$(addprefix $$@-,$$(ARCHES))
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+
+.PHONY: examples
+examples: libs ukernel $(EXAMPLES)
 
 .PHONY: clean
 clean : 
