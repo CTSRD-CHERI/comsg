@@ -34,11 +34,14 @@
 
 #include <assert.h>
 #include <cheri/cheric.h>
+#include <err.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 #include <sys/mman.h>
 #include <sys/queue.h>
+#include <unistd.h>
 
 typedef struct {
 	coport_t port;

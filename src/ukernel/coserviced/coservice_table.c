@@ -34,6 +34,8 @@
 #include <coproc/coservice.h>
 
 #include <cheri/cheric.h>
+#include <err.h>
+#include <sys/errno.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
