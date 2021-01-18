@@ -37,7 +37,6 @@
 
 #include <err.h>
 #include <machine/sysarch.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sched.h>
@@ -319,10 +318,9 @@ int main(int argc, char *const argv[])
     error = colookup(U_COPROC_INIT, &coproc_init_scb);
     if (error != 0) {
 	    test_pid = getpid();
-	    coprocd_pid = fork();
+	    coprocd_pid = vfork();
 	    if (coprocd_pid == 0)
 	    	coexecve(test_pid, coprocd_args[0], coprocd_args, environ);
- 
 	    do {
 	    	sleep(1);
 	    	error = colookup(U_COPROC_INIT, &coproc_init_scb);

@@ -31,7 +31,7 @@
 #ifndef UKERN_UTILS_H
 #define UKERN_UTILS_H
 
-#define KEYSPACE 62
+#define KEYSPACE (62)
 
 #include <cheri/cheric.h>
 
