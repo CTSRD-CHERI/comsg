@@ -34,13 +34,14 @@
 
 #include <coproc/coport.h>
 #include <stddef.h>
+#include <sys/types.h>
 
 coport_status_t acquire_coport_status(coport_t *port, coport_status_t expected, coport_status_t desired);
 void release_coport_status(coport_t *port, coport_status_t desired);
-int copipe_send(const coport_t *port, const void *buf, size_t len);
-int cochannel_send(const coport_t *port, const void *buf, size_t len);
-int copipe_corecv(const coport_t *port, void *buf, size_t len);
-int cochannel_corecv(const coport_t *port, void *buf, size_t len);
+ssize_t copipe_send(const coport_t *port, const void *buf, size_t len);
+ssize_t cochannel_send(const coport_t *port, const void *buf, size_t len);
+ssize_t copipe_recv(const coport_t *port, void *buf, size_t len);
+ssize_t cochannel_recv(const coport_t *port, void *buf, size_t len);
 coport_t *process_coport_handle(coport_t *port, coport_type_t type);
 
 #endif

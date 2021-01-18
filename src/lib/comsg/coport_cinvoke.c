@@ -46,6 +46,7 @@
 #include <stddef.h>
 #include <sys/errno.h>
 #include <sys/sysctl.h>
+#include <sys/types.h>
 
 static coport_func_ptr _cosend_codecap = NULL;
 static coport_func_ptr _corecv_codecap = NULL;
@@ -55,28 +56,40 @@ const coport_func_ptr *cosend_codecap = &_cosend_codecap;
 const coport_func_ptr *corecv_codecap = &_corecv_codecap;
 const void **return_stack_sealcap = &_stack_sealcap;
 
-static
-int cosend_impl(coport_t *port, void *buf, size_t len)
+
+static inline __always_inline int
+validate_coport_op_args(coport_t *port, void *buf, size_t len)
+{
+    if (cheri_getlen(buf) < len) 
+        return (ENOBUFS);
+    else if (len == 0)
+        return (EINVAL)
+    else 
+        return (0);
+}
+
+
+static ssize_t
+cosend_impl(coport_t *port, void *buf, size_t len)
 {
 	coport_type_t type;
-    int retval;
+    ssize_t retval;
     GET_IDC(port);
-  
-   if(len == 0) {
-        retval = 0;
+
+    retval = validate_coport_op_args(port, buf, len);
+    if (retval != 0)
         CCALL_RETURN(retval);
-    }
     type = port->type;
     switch(type) {
     case COCHANNEL:
-        retval =  (cochannel_send(port, buf, len));
+        retval =  cochannel_send(port, buf, len);
         break;
     case COPIPE:
-        retval = (copipe_send(port, buf, len));
+        retval = copipe_send(port, buf, len);
         break;
-    default:
+    default: 
         errno = EINVAL;
-        retval = (-1);
+        retval = -1;
         break;
     }
     /* XXX-PBB: absent a working calling convention that uses a ccall-based method, this will do */
@@ -85,37 +98,28 @@ int cosend_impl(coport_t *port, void *buf, size_t len)
     return (retval);  /* NOTREACHED */
 }
 
-static
-int corecv_impl(coport_t *port, void **buf, size_t len)
+static ssize_t
+corecv_impl(coport_t *port, void **buf, size_t len)
 {
 	void *msg;
     coport_type_t type;
-    int retval;
+    ssize_t retval;
     GET_IDC(port);
 
-    if(len == 0) {
-        retval = 0;
+    retval = validate_coport_op_args(port, buf, len);
+    if (retval != 0)
         CCALL_RETURN(retval);
-    }
     type = port->type;
     switch(type) {
     case COCHANNEL:
-        retval = cochannel_corecv(port, *buf, len);
-        break;
-    case COCARRIER:
-        msg = cocarrier_recv(port, len);
-        if(msg == NULL)
-            retval = -1;
-        else {
-            *buf = msg;
-            retval = cheri_getlen(buf);
-        }
+        retval = cochannel_recv(port, *buf, len);
         break;
     case COPIPE:
         retval = copipe_corecv(port, *buf, len);
         break;
-    default:
-        err(1, "corecv: invalid coport type");
+    default: 
+        errno = EINVAL; 
+        retval = -1;
         break;
     }
     CCALL_RETURN(retval);

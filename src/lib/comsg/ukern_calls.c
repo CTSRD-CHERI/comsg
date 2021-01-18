@@ -296,6 +296,7 @@ cocreate(const char *name, nstype_t type, namespace_t *parent)
 namespace_t *
 coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, void *codiscover_scb)
 {
+	/* badly in need of some rework/wrapper */
 	int error;
 	
 	coproc_init_args_t cocall_args;

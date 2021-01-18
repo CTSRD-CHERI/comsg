@@ -33,22 +33,23 @@
 
 #include <coproc/coport.h>
 #include <stddef.h>
+#include <sys/types.h>
 
-typedef int (*coport_func_ptr)(coport_t *, void *, size_t);
+typedef ssize_t (*coport_func_ptr)(coport_t *, void *, size_t);
 
 extern const coport_func_ptr *cosend_codecap;
 extern const coport_func_ptr *corecv_codecap;
 extern const void **return_stack_sealcap;
 
-extern int coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
+extern ssize_t coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
 
-static inline __always_inline int 
+static inline __always_inline ssize_t 
 cosend_cinvoke(coport_t *port, void *buffer, size_t length)
 {
 	return (coport_cinvoke(*cosend_codecap, port, buffer, (*return_stack_sealcap), length));
 } 
 
-static inline __always_inline int 
+static inline __always_inline ssize_t 
 corecv_cinvoke(coport_t *port, void *buffer, size_t length)
 {
 	return (coport_cinvoke(*corecv_codecap, port, buffer, (*return_stack_sealcap), length));

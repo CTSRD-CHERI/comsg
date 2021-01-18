@@ -123,6 +123,7 @@ acquire_coport_status(coport_t *port, coport_status_t expected, coport_status_t 
     coport_status_t status_val;
     int i;
 
+    i = 0;
     status_val = expected;
     for(;;) {
         if(atomic_compare_exchange_strong_explicit(&port->info->status, &status_val, desired, memory_order_acq_rel, memory_order_relaxed))
@@ -135,7 +136,7 @@ acquire_coport_status(coport_t *port, coport_status_t expected, coport_status_t 
             status_val = expected;
             break;
         }
-        if(multicore == 0 || (i % 30) == 0) 
+        if(multicore == 0 || (i % 3) == 0) 
             sched_yield(); 
         i++;
     }
@@ -148,11 +149,17 @@ release_coport_status(coport_t *port, coport_status_t desired)
     atomic_store_explicit(&port->info->status, desired, memory_order_release);
 }
 
-int
+ssize_t
 copipe_send(const coport_t *port, const void *buf, size_t len)
 {
     void *out_buffer;
-    acquire_coport_status(port, COPORT_READY, COPORT_BUSY);
+    coport_status_t status;
+
+    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
+    if (status & (COPORT_CLOSING | COPORT_CLOSED) != 0) {
+        errno = EPIPE;
+        return (-1);
+    }
     
     out_buffer = port->buffer->buf;
     if(!cheri_gettag(out_buffer)) {
@@ -167,11 +174,12 @@ copipe_send(const coport_t *port, const void *buf, size_t len)
     }
     memcpy(out_buffer, buf, len);
     port->info->length = len;
+
     release_coport_status(port, COPORT_DONE);
-    return (len);
+    return ((ssize_t) len);
 }
 
-int
+ssize_t
 cochannel_send(const coport_t *port, const void *buf, size_t len)
 {
     size_t port_size, port_start, old_end, new_end, new_len;
@@ -185,8 +193,10 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
         return (-1);
     }
 
-    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0)
+    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+        errno = EPIPE;
         return (-1);
+    }
 
     event = port->info->event;
     port_start = port->info->start;
@@ -217,24 +227,26 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
 
     release_coport_status(port, COPORT_OPEN);
 
-    return (len);
+    return ((ssize_t) len);
 }
 
-int
-cochannel_corecv(const coport_t *port, void *buf, size_t len)
+ssize_t
+cochannel_recv(const coport_t *port, void *buf, size_t len)
 {
     char *out_buffer, *port_buffer;
     size_t port_size, old_start, port_end, new_start, len_to_end, new_len;
     coport_eventmask_t event;
 
     port_size = port->info->length;
-    if (port_size < len) {
-        err(EMSGSIZE, "corecv: expected message length %lu larger than contents of buffer", len);
+    if (cheri_getlen(buf) < len) {
+        errno = EMSGSIZE;
         return (-1);
     }
     new_len = port_size - len;
-    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0)
+    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+        errno = EPIPE;
         return (-1);
+    }
     
     event = port->info->event;
     if ((event & COPOLL_IN) == 0) {
@@ -264,31 +276,37 @@ cochannel_corecv(const coport_t *port, void *buf, size_t len)
     port->info->event = event;
 
     release_coport_status(port, COPORT_OPEN);
-    return (len);
+    return ((ssize_t) len);
 }
 
-int
-copipe_corecv(const coport_t *port, void *buf, size_t len)
+ssize_t
+copipe_recv(const coport_t *port, void *buf, size_t len)
 {
-    size_t received_len;
+    coport_status_t status;
+    ssize_t received_len;
 
     if (cheri_getlen(buf) < len)
         buf = cheri_setbounds(buf, len);
     buf = cheri_andperm(buf, COPIPE_RECVBUF_PERMS);
 
-    acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
+    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
+    if (status & (COPORT_CLOSING | COPORT_CLOSED) != 0) {
+        errno = EPIPE;
+        return (-1);
+    }
 
     port->buffer->buf = buf;
 
     release_coport_status(port, COPORT_READY);
     acquire_coport_status(port, COPORT_DONE, COPORT_BUSY);
 
+    received_len = (ssize_t)port->info->length;
     port->buffer->buf = NULL;
-    received_len = port->info->length;
+    port->info->length = 0;
 
     release_coport_status(port, COPORT_OPEN);
 
-    return (cheri_getlen(buf));
+    return (received_len);
 }
 
 
@@ -308,7 +326,7 @@ coport_ipc_utils_init(void)
     assert((cheri_gettag(sealroot) != 0));    
     assert(cheri_getlen(sealroot) != 0);
     assert((cheri_getperm(sealroot) & CHERI_PERM_SEAL) != 0);
-    /* TODO-PBB: simulate a divided otype space, pending type manager */
+    /* TODO-PBB: simulate a divided otype space, pending a type manager */
     sealroot = cheri_incoffset(sealroot, 32);
 
     sealroot = make_otypes(sealroot, 1, allocated_otypes);

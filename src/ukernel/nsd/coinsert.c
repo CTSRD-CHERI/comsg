@@ -101,7 +101,7 @@ void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 	 * which is stripped once the handle is stored. Using handles after this point becomes 
 	 * tricky however. Microkernel calls might need to be special to allow this.
 	 * It also requires the cocall_args to be allocated with PERMIT_STORE_LOCAL_CAPABILITY
-	 * which should be fine so long as we make it a local variable everywhere.
+	 * which should be fine so long as we make sure it's a local capability everywhere.
 	 */
 	cocall_args->nsobj = obj;
 	

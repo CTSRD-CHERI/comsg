@@ -55,13 +55,26 @@
 nsobject_t *
 open_named_coport(const char *coport_name, coport_type_t type, namespace_t *ns)
 {
+    int error, save_errno;
     coport_t *port;
     nsobject_t *port_obj, *cosend_obj, *corecv_obj;
 
     port = coopen(type);
+    if (port == NULL)
+        return (NULL);
     port = process_coport_handle(port, type);
 
     port_obj = coinsert(coport_name, COPORT, port, ns);
+    if (port_obj == NULL) {
+        save_errno = errno;
+        error = coclose(port);
+        if (error != 0)
+            err(errno, "open_named_coport: coinsert failed and coclose failed");
+        else {
+            errno = save_errno;
+            return (NULL);
+        }
+    }
 
     return (port_obj);
 }
@@ -72,53 +85,61 @@ open_coport(coport_type_t type)
     coport_t *port;
 
     port = coopen(type);
+    if (port == NULL)
+        return (NULL);
     process_coport_handle(port, type);
     return (port);
 }
 
-int
+ssize_t
 cosend(const coport_t *port, const void *buf, size_t len)
 {
     coport_type_t type;
-    int retval;
-  
-    if(len == 0)
-        return (0);
+    ssize_t retval;
 
     type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
     case COPIPE:
-        retval = cosend_cinvoke(port, buf, len);
+        if (len == 0) {
+            errno = EINVAL;
+            retval = -1;
+        } else
+            retval = cosend_cinvoke(port, buf, len);
         break;
     case COCARRIER:
+        /* len is an optional hint here, so we're not so worried */
         retval = cocarrier_send(port, buf, len);
         break;
     default:
         errno = EINVAL;
+        retval = -1;
         break;
     }
     return (retval);
 }
 
-int 
+ssize_t 
 corecv(const coport_t *port, void **buf, size_t len)
 {
     void *msg;
     coport_type_t type;
-    int retval;
+    ssize_t retval;
 
-    if(len == 0)
-        return (0);
     type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
     case COPIPE:
-        retval = corecv_cinvoke(port, buf, len);
+        if (len == 0) {
+            errno = EINVAL;
+            retval = -1;
+        } else
+            retval = corecv_cinvoke(port, buf, len);
         break;
     case COCARRIER:
+        /* len is an optional hint here, so we're not so worried */
         msg = cocarrier_recv(port, len);
-        if(msg == NULL)
+        if (msg == NULL)
             retval = -1;
         else {
             *buf = msg;
@@ -126,7 +147,8 @@ corecv(const coport_t *port, void **buf, size_t len)
         }
         break;
     default:
-        err(1, "corecv: invalid coport type");
+        errno = EINVAL;
+        retval = -1;
         break;
     }
     return (retval);

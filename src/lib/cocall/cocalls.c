@@ -42,6 +42,8 @@ typedef struct call_set {
 	int ncalls;
 } call_set_t;
 
+/* TODO-PBB: completely rework this, pthread_key_t is making me sad.*/ 
+
 static int default_ncalls = 32;
 static pthread_key_t last_key = -1;
 static int last_ncalls = 0;
