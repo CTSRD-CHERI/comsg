@@ -206,6 +206,8 @@ unseal_ns(namespace_t *ns_cap)
 	if (cheri_getsealed(ns_cap) == 0)
 		return (ns_cap);
 	type = get_ns_type(ns_cap);
+	if (type == INVALID_NS)
+		return (NULL);
 	unseal_cap = get_ns_unsealcap(type);
 	ns_cap = cheri_unseal(ns_cap, unseal_cap);
 	return (ns_cap);
@@ -220,6 +222,8 @@ seal_ns(namespace_t *ns_cap)
 	if (cheri_getsealed(ns_cap) == 1)
 		return (ns_cap);
 	type = ns_cap->type;
+	if (type == INVALID_NS)
+		return (NULL);
 	seal_cap = get_ns_sealcap(type);
 	ns_cap = cheri_seal(ns_cap, seal_cap);
 	return (ns_cap);
@@ -234,7 +238,7 @@ unseal_nsobj(nsobject_t *nsobj_cap)
 	if (cheri_getsealed(nsobj_cap) == 0)
 		return (nsobj_cap);
 	type = get_nsobject_type(nsobj_cap);
-	if (type == INVALID_NS)
+	if (type == INVALID_NSOBJ)
 		return (NULL);
 	unseal_cap = get_nsobj_unsealcap(type);
 	return (cheri_unseal(nsobj_cap, unseal_cap));
@@ -249,6 +253,8 @@ seal_nsobj(nsobject_t *nsobj_cap)
 	if (cheri_getsealed(nsobj_cap) == 1)
 		return (nsobj_cap);
 	type = nsobj_cap->type;
+	if (type == INVALID_NSOBJ)
+		return (NULL);
 	seal_cap = get_nsobj_sealcap(type);
 	return (cheri_seal(nsobj_cap, seal_cap));
 }

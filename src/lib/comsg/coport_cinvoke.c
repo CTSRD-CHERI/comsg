@@ -77,8 +77,11 @@ cosend_impl(coport_t *port, void *buf, size_t len)
     GET_IDC(port);
 
     retval = validate_coport_op_args(port, buf, len);
-    if (retval != 0)
+    if (retval != 0) {
+        errno = retval;
+        retval = -1;
         CCALL_RETURN(retval);
+    }
     type = port->type;
     switch(type) {
     case COCHANNEL:
@@ -106,9 +109,12 @@ corecv_impl(coport_t *port, void **buf, size_t len)
     ssize_t retval;
     GET_IDC(port);
 
-    retval = validate_coport_op_args(port, buf, len);
-    if (retval != 0)
+    retval = validate_coport_op_args(port, *buf, len);
+    if (retval != 0) {
+        errno = retval;
+        retval = -1;
         CCALL_RETURN(retval);
+    }
     type = port->type;
     switch(type) {
     case COCHANNEL:

@@ -29,10 +29,10 @@
  * SUCH DAMAGE.
  */
 #include <comsg/coport_ipc.h>
+#include <comsg/ukern_calls.h>
+#include <coproc/coport.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
-#include <coproc/coport.h>
-#include <comsg/ukern_calls.h>
 
 #include <err.h>
 #include <stdio.h>
@@ -42,15 +42,37 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+extern char **environ;
+
 static int verbose_flag = 0;
+
+static char *coprocd_args[] = {"/usr/bin/coprocd", NULL};
+static char *sender_path = "/usr/bin/copipe-ipc2";
 
 const static char *ns_name = "coport_example_namespace";
 const static char *port_name = "example_copipe";
 
 #define DEBUG(...) do { if (verbose_flag) printf(__VA_ARGS__); } while(0)
 
+static pid_t 
+spawn_sender(void)
+{
+	pid_t recv_pid, send_pid;
+	char *send_args[2];
+
+	send_args[0] = strdup(sender_path);
+	send_args[1] = NULL;
+	recv_pid = getpid();
+
+	send_pid = vfork();
+	if (send_pid == 0)
+		coexecve(recv_pid, send_args[0], send_args, environ);
+
+	return (send_pid);
+}
+
 static void
-init_microkernel_access(void)
+start_microkernel(void)
 {
 	int error;
 	pid_t recv_pid, coprocd_pid;
@@ -59,13 +81,24 @@ init_microkernel_access(void)
 	error = colookup(U_COPROC_INIT, &coproc_init);
 	if (error == 0) {
 		set_ukern_target(COCALL_COPROC_INIT, coproc_init);
-	} else 
-		err(EINVAL, "init_microkernel: coprocd is not running.");
+		return;
+	}
+
+	DEBUG("coprocd does not appear to be running in this address space. starting it now...\n");
+	recv_pid = getpid();
+	coprocd_pid = vfork();
+	if (coprocd_pid == 0)
+		coexecve(recv_pid, coprocd_args[0], coprocd_args, environ);
+	do {
+		sleep(1);
+		error = colookup(U_COPROC_INIT, &coproc_init);
+	} while(error != 0);
+	set_ukern_target(COCALL_COPROC_INIT, coproc_init);
+	DEBUG("coprocd started.\n");
 }
 
 static namespace_t *ipc_ns;
 static nsobject_t *port_obj;
-static coport_t *port;
 
 static void
 setup_coport_ipc(void)
@@ -75,28 +108,47 @@ setup_coport_ipc(void)
 	if (ipc_ns == NULL)
 		err(errno, "setup_coport_ipc: could not create namespace %s", ns_name);
 	/* create coport + add a named handle to it in our ipc namespace */
-	port_obj = coselect(port_name, COPORT, ipc_ns);
+	port_obj = open_named_coport(port_name, COPIPE, ipc_ns);
 	if (port_obj == NULL)
 		err(errno, "setup_coport_ipc: could not create coport %s", port_name);
+
 }
 
 static void 
-do_send(void)
+do_recv(void)
 {
 	char *msg_buf;
-	ssize_t sent_len;
+	ssize_t recv_len;
 	size_t msg_len;
 
 	msg_len = 1024;
 
 	msg_buf = malloc(msg_len);
-	memset(msg_buf, '1', msg_len);
-	sent_len = cosend(port, msg_buf, msg_len);
-	if (sent_len == -1)
-		err(errno, "do_send: error in cosend");
+	memset(msg_buf, '\0', cheri_getlen(msg_buf));
+	recv_len = corecv(port_obj->coport, &msg_buf, cheri_getlen(msg_buf));
+	if (recv_len == -1)
+		err(errno, "do_recv: error in corecv");
 	
-	printf("do_send: sent %ld bytes", sent_len);
+	printf("%s: do_recv: received %ld bytes\n", getprogname(), recv_len);
 	free(msg_buf);
+}
+
+static void 
+teardown_coport_ipc(void)
+{
+	int error;
+
+	error = coclose(port_obj->coport);
+	if (error != 0)
+		err(errno, "teardown_coport_ipc: could not close coport");
+	
+	error = codelete(port_obj, ipc_ns);
+	if (error != 0)
+		err(errno, "teardown_coport_ipc: could not delete coport nsobj");
+
+	/* error = codrop(ipc_ns, global_ns);
+	if (error != 0)
+		err(errno, "teardown_coport_ipc: could not delete ipc namespace"); */
 }
 
 static void 
@@ -108,7 +160,7 @@ usage(void)
 int main(int argc, char *const argv[])
 {
 	int error, opt;
-	pid_t sender, recver;
+	pid_t sender;
 
 	while((opt = getopt(argc, argv, "")) != -1) {
 		switch (opt) {
@@ -121,11 +173,18 @@ int main(int argc, char *const argv[])
 			break;
 		}
 	}
-	init_microkernel_access();
-	global_ns = coproc_init(NULL, NULL, NULL, NULL);
+	start_microkernel();
+	do {
+		global_ns = coproc_init(NULL, NULL, NULL, NULL);
+		if (errno == EAGAIN)
+			sched_yield();
+	} while (global_ns == NULL);
 
 	setup_coport_ipc();
-	do_send();
-	
+
+	sender = spawn_sender();
+
+	do_recv();
+	teardown_coport_ipc();
 	return (0);
 }

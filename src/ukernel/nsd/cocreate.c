@@ -77,7 +77,7 @@ void namespace_create(cocreate_args_t *cocall_args, void *token)
 			COCALL_ERR(cocall_args, EEXIST);
 		else if (ns->type == PRIVATE) 
 			COCALL_ERR(cocall_args, EEXIST);
-		else if (ns->type != PUBLIC && get_ns_type(parent_ns))
+		else if (ns->type != PUBLIC && get_ns_type(parent_ns) != GLOBAL)
 			COCALL_ERR(cocall_args, EEXIST);
 		else {
 			ns = cheri_andperm(ns, NS_PERMS_WR_MASK);
