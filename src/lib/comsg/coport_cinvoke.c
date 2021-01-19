@@ -63,7 +63,7 @@ validate_coport_op_args(coport_t *port, void *buf, size_t len)
     if (cheri_getlen(buf) < len) 
         return (ENOBUFS);
     else if (len == 0)
-        return (EINVAL)
+        return (EINVAL);
     else 
         return (0);
 }
@@ -115,7 +115,7 @@ corecv_impl(coport_t *port, void **buf, size_t len)
         retval = cochannel_recv(port, *buf, len);
         break;
     case COPIPE:
-        retval = copipe_corecv(port, *buf, len);
+        retval = copipe_recv(port, *buf, len);
         break;
     default: 
         errno = EINVAL; 

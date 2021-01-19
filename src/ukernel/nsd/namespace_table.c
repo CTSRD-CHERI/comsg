@@ -109,8 +109,7 @@ new_namespace_entry(void)
 	if (full) {
 		warn("new_namespace_entry: namespace table exhausted");
 		return (NULL);
-	}
-	else {
+	} else {
 		index = atomic_fetch_sub(&namespace_table.next_namespace, 1);
 		if(index == 0) {
 			warn("new_namespace_entry: namespace table exhausted. further attempts to create namespaces will fail.");
@@ -176,13 +175,12 @@ namespace_t *
 allocate_namespace(namespace_t *parent, nstype_t type)
 {
 	struct _ns_member *obj_cap;
-	if(type == GLOBAL) {
+	if (type == GLOBAL) {
 		assert(parent == NULL);
 		assert(global_namespace == NULL);
 		global_namespace = new_namespace_entry();
 		return (global_namespace);
-	}
-	else {
+	} else {
 		assert(NS_PERMITS_WRITE(parent));
 	}
 	obj_cap = cocall_malloc(sizeof(struct _ns_member));

@@ -217,7 +217,7 @@ spawn_slow_workers(void *func, void *arg_func, int nworkers)
 
     func_map = new_function_map();
    if (!spawn_slow_worker_threads(func, arg_func, nworkers, func_map)) {
-        teardown_function_map(map);
+        teardown_function_map(func_map);
         return (NULL);
     }
 

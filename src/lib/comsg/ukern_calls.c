@@ -312,7 +312,7 @@ coproc_init(namespace_t *global_ns_cap, void *coinsert_scb, void *coselect_scb, 
 		error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
 	else 
 		error = targeted_cocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
-	if(error){
+	if (error != 0){
 		err(errno, "coproc_init: cocall failed");
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;

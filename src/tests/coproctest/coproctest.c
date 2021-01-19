@@ -68,7 +68,7 @@ static void *
 do_copipe_recv(void *argp)
 {
 	corecv_thr_args_t *args = argp;
-	*args->result_ptr = corecv_cinvoke(args->port, args->dest_buf, args->len);
+	*args->result_ptr = corecv(args->port, args->dest_buf, args->len);
 	return (NULL);
 }
 
@@ -94,13 +94,13 @@ do_cocarrier(void *argp)
 		printf("coproctest: polling coport... \t\t\tsuccess!\n");
 	pthread_mutex_lock(&start);
 	printf("coproctest: receiving message...");
-	*args->dest_buf = cocarrier_recv(args->port, cheri_getlen(test_str));
+	error = corecv(args->port, args->dest_buf, cheri_getlen(test_str));
 	*args->result_ptr = cheri_getlen(*args->dest_buf);
 	result_str = (char **)args->dest_buf;
 	if (cheri_gettag(args->dest_buf))
 		printf("\t\tsuccess!\ncoproctest: (received \"%s\")\n", (*result_str));
 	else
-		err(errno, "coproctest: do_tests: cocarrier_recv failed");
+		err(errno, "coproctest: do_tests: corecv failed");
 	pthread_mutex_unlock(&start);
 	return (NULL);
 }
@@ -163,19 +163,19 @@ cocreate_lbl:
 	port = port_obj->coport;
 	
 	printf("coproctest: sending message...");
-	sent = cosend_cinvoke(port_obj->coport, test_str, strlen(test_str));
+	sent = cosend(port_obj->coport, test_str, strlen(test_str));
 	if (sent > 0)
 		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\")\n", test_str);
 	else
-		err(errno, "coproctest: do_tests: cosend_cinvoke failed");
+		err(errno, "coproctest: do_tests: cosend failed");
 	
 	printf("coproctest: receiving message...");
 	recv = malloc(strlen(test_str)+1);
-	recvd = corecv_cinvoke(port_obj->coport, (void **)&recv, strlen(test_str));
+	recvd = corecv(port_obj->coport, (void **)&recv, strlen(test_str));
 	if (recvd > 0)
 		printf("\t\tsuccess!\ncoproctest: (received \"%s\")\n", recv);
 	else
-		err(errno, "coproctest: do_tests: corecv_cinvoke failed");
+		err(errno, "coproctest: do_tests: corecv failed");
 	free(recv);
 	
 	printf("coproctest: deleting ns object...");
@@ -223,18 +223,18 @@ cocreate_lbl:
 	recvr_args->result_ptr = &recvd;
 	recvd = 0;
 	pthread_create(&recvr, NULL, do_copipe_recv, recvr_args);
-	sent = cosend_cinvoke(port_obj->coport, test_str, strlen(test_str));
+	sent = cosend(port_obj->coport, test_str, strlen(test_str));
 	if (sent > 0)
 		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\")\n", test_str);
 	else
-		err(errno, "coproctest: do_tests: cosend_cinvoke failed");
+		err(errno, "coproctest: do_tests: cosend failed");
 	
 	printf("coproctest: receiving message...");
 	pthread_join(recvr, NULL);
 	if (recvd > 0)
 		printf("\t\tsuccess!\ncoproctest: (received \"%s\")\n", recv);
 	else
-		err(errno, "coproctest: do_tests: corecv_cinvoke failed");
+		err(errno, "coproctest: do_tests: corecv failed");
 	free(recv);
 	recv = NULL;
 
@@ -286,11 +286,11 @@ cocreate_lbl:
 	/* Still racey, but mildly less so. */
 	pthread_yield();
 	printf("coproctest: sending message...");
-	sent = cocarrier_send(port_obj->coport, test_str, cheri_getlen(test_str));
+	sent = cosend(port_obj->coport, test_str, cheri_getlen(test_str));
 	if (sent > 0)
 		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\")\n", test_str);
 	else
-		err(errno, "coproctest: do_tests: cocarrier_send failed");
+		err(errno, "coproctest: do_tests: cosend failed");
 	
 	pthread_join(recvr, NULL);
 	

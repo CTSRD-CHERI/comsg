@@ -34,31 +34,33 @@
 #include <coproc/coport.h>
 #include <comsg/ukern_calls.h>
 
+#include <err.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-extern char **environ;
-
 static int verbose_flag = 0;
 
-const static char ns_name = "coport_example_namespace";
-const static char port_name = "example_copipe";
+const static char *ns_name = "coport_example_namespace";
+const static char *port_name = "example_copipe";
 
 #define DEBUG(...) do { if (verbose_flag) printf(__VA_ARGS__); } while(0)
 
 static void
-init_microkernel(void)
+init_microkernel_access(void)
 {
 	int error;
 	pid_t recv_pid, coprocd_pid;
 	void *coproc_init;
 
-	error = colookup(U_COPROC_INIT, &coproc_init_scb);
+	error = colookup(U_COPROC_INIT, &coproc_init);
 	if (error == 0) {
 		set_ukern_target(COCALL_COPROC_INIT, coproc_init);
 	} else 
-		err(EINVAL, "init_microkernel: coprocd is not running.")
+		err(EINVAL, "init_microkernel: coprocd is not running.");
 }
 
 static namespace_t *ipc_ns;
@@ -119,7 +121,7 @@ int main(int argc, char *const argv[])
 			break;
 		}
 	}
-	start_microkernel();
+	init_microkernel_access();
 	global_ns = coproc_init(NULL, NULL, NULL, NULL);
 
 	setup_coport_ipc();

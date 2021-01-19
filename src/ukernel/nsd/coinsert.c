@@ -62,10 +62,10 @@ void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 	namespace_t *ns;
 	nsobject_type_t type;
 
-	ns = unseal_ns(cocall_args->ns_cap);
-	if (!NS_PERMITS_WRITE(cocall_args->ns_cap)) 
+	ns = cocall_args->ns_cap;
+	if (!NS_PERMITS_WRITE(ns)) 
 		COCALL_ERR(cocall_args, EACCES);
-	else if(in_namespace(cocall_args->nsobj_name, ns)) 
+	else if (in_namespace(cocall_args->nsobj_name, ns)) 
 		COCALL_ERR(cocall_args, EEXIST);
 
 	type = cocall_args->nsobj_type;

@@ -56,7 +56,7 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 {
 	assert(valid_ns_name(name));
 	assert(VALID_NS_TYPE(type));
-	if(type!=GLOBAL) {
+	if(type != GLOBAL) {
 		valid_namespace_cap(parent);
 		assert(NS_PERMITS_WRITE(parent));
 		parent = unseal_ns(parent);
@@ -122,13 +122,11 @@ namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *pare
 	ns_ptr->type = type;
 	strncpy(ns_ptr->name, name, NS_NAME_LEN);
 
-	if(type == GLOBAL) {
+	if (type == GLOBAL) {
 		ns_ptr->parent = NULL;
 		global_ns = ns_ptr;
-	}
-	else {
-		if (cheri_getsealed(parent)) 
-			parent_cap = unseal_ns(parent);
+	} else {
+		parent_cap = unseal_ns(parent);	
 		parent_cap = cheri_andperm(parent_cap, NS_PERMS_OBJ_MASK);
 		parent_cap = seal_ns(parent_cap);
 

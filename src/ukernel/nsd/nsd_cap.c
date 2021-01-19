@@ -35,11 +35,12 @@
 #include <coproc/namespace_object.h>
 #include <coproc/utils.h>
 
-#include <err.h>
-#include <sys/errno.h>
-#include <stdio.h>
 #include <cheri/cheric.h>
+#include <err.h>
+#include <stdio.h>
+#include <sys/errno.h>
 #include <sys/sysctl.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 static struct object_type global_nscap, app_nscap, private_nscap, public_nscap, library_nscap;
@@ -188,7 +189,7 @@ static nstype_t
 get_ns_type(namespace_t *ns)
 {
 	long otype;
-	if (!cheri_getsealed(ns))
+	if (cheri_getsealed(ns) == 0)
 		return (ns->type);
 	otype = cheri_gettype(ns);
 	return (ns_otype_to_type(otype));
@@ -199,42 +200,56 @@ get_ns_type(namespace_t *ns)
 namespace_t *
 unseal_ns(namespace_t *ns_cap)
 {
-	if (!cheri_getsealed(ns_cap))
+	otype_t unseal_cap;
+	nstype_t type;
+
+	if (cheri_getsealed(ns_cap) == 0)
 		return (ns_cap);
-	nstype_t type = get_ns_type(ns_cap);
-	otype_t unseal_cap = get_ns_unsealcap(type);
-	return (cheri_unseal(ns_cap, unseal_cap));
+	type = get_ns_type(ns_cap);
+	unseal_cap = get_ns_unsealcap(type);
+	ns_cap = cheri_unseal(ns_cap, unseal_cap);
+	return (ns_cap);
 }
 
 namespace_t *
 seal_ns(namespace_t *ns_cap)
 {
-	if (cheri_getsealed(ns_cap))
+	otype_t seal_cap;
+	nstype_t type;
+
+	if (cheri_getsealed(ns_cap) == 1)
 		return (ns_cap);
-	nstype_t type = ns_cap->type;
-	otype_t seal_cap = get_ns_sealcap(type);
-	return (cheri_seal(ns_cap, seal_cap));
+	type = ns_cap->type;
+	seal_cap = get_ns_sealcap(type);
+	ns_cap = cheri_seal(ns_cap, seal_cap);
+	return (ns_cap);
 }
 
 nsobject_t *
 unseal_nsobj(nsobject_t *nsobj_cap)
 {
-	if (!cheri_getsealed(nsobj_cap))
+	otype_t unseal_cap;
+	nsobject_type_t type; 
+
+	if (cheri_getsealed(nsobj_cap) == 0)
 		return (nsobj_cap);
-	nsobject_type_t type = get_nsobject_type(nsobj_cap);
+	type = get_nsobject_type(nsobj_cap);
 	if (type == INVALID_NS)
 		return (NULL);
-	otype_t unseal_cap = get_nsobj_unsealcap(type);
+	unseal_cap = get_nsobj_unsealcap(type);
 	return (cheri_unseal(nsobj_cap, unseal_cap));
 }
 
 nsobject_t *
 seal_nsobj(nsobject_t *nsobj_cap)
 {
-	if (cheri_getsealed(nsobj_cap))
+	otype_t seal_cap;
+	nsobject_type_t type;
+
+	if (cheri_getsealed(nsobj_cap) == 1)
 		return (nsobj_cap);
-	nsobject_type_t type = nsobj_cap->type;
-	otype_t seal_cap = get_nsobj_sealcap(type);
+	type = nsobj_cap->type;
+	seal_cap = get_nsobj_sealcap(type);
 	return (cheri_seal(nsobj_cap, seal_cap));
 }
 
@@ -243,23 +258,19 @@ valid_namespace_cap(namespace_t *ns_cap)
 {
 	vaddr_t cap_addr = cheri_getaddress(ns_cap);
 	if (!cheri_gettag(ns_cap)) {
-		printf("untagged ns cap\n");
+		//printf("untagged ns cap\n");
 		return (0);
-	}
-	else if (sizeof(namespace_t) > cheri_getlen(ns_cap)) {
-		printf("ns cap too small\n");
+	} else if (sizeof(namespace_t) > cheri_getlen(ns_cap)) {
+		//printf("ns cap too small\n");
 		return (0);
-	}
-	else if (!cheri_is_address_inbounds(ns_cap, cap_addr)) {
-		printf("cap address out of bounds\n");
+	} else if (!cheri_is_address_inbounds(ns_cap, cap_addr)) {
+		//printf("cap address out of bounds\n");
 		return (0);
-	}
-	else if (!in_ns_table(ns_cap)) {
-		printf("ns cap not in ns table\n");
+	} else if (!in_ns_table(ns_cap)) {
+		//printf("ns cap not in ns table\n");
 		return (0);
-	}
-	else if (get_ns_type(ns_cap) == INVALID_NS) {
-		printf("cap has invalid type\n");
+	} else if (get_ns_type(ns_cap) == INVALID_NS) {
+		//printf("cap has invalid type\n");
 		return (0);
 	}
 	else

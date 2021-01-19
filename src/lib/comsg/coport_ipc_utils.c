@@ -60,11 +60,12 @@ coport_type_t
 coport_gettype(coport_t *port)
 {
     long port_otype;
-    if(!cheri_getsealed(port))
+    
+    if (cheri_getsealed(port) == 0)
         return (INVALID_COPORT);
 
     port_otype = cheri_gettype(port);
-    if(port_otype == cocarrier_otype.otype)
+    if (port_otype == cocarrier_otype.otype)
         return (COCARRIER);
      else if (port_otype == cochannel_otype.otype)
         return (COCHANNEL);
@@ -155,14 +156,14 @@ copipe_send(const coport_t *port, const void *buf, size_t len)
     void *out_buffer;
     coport_status_t status;
 
-    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
-    if (status & (COPORT_CLOSING | COPORT_CLOSED) != 0) {
+    status = acquire_coport_status(port, COPORT_READY, COPORT_BUSY);
+    if ((status & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
         errno = EPIPE;
         return (-1);
     }
     
     out_buffer = port->buffer->buf;
-    if(!cheri_gettag(out_buffer)) {
+    if(cheri_gettag(out_buffer) == 0) {
         release_coport_status(port, COPORT_DONE);
         errno = EPROT;
         return (-1);
@@ -290,7 +291,7 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
     buf = cheri_andperm(buf, COPIPE_RECVBUF_PERMS);
 
     status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
-    if (status & (COPORT_CLOSING | COPORT_CLOSED) != 0) {
+    if ((status & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
         errno = EPIPE;
         return (-1);
     }

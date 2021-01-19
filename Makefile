@@ -23,7 +23,7 @@ ARCH_EXECS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(UKERNEL_EXECS)))
 TESTS := $(shell find $(SRC_DIR)/tests -mindepth 1 -type d -exec basename {} \;)
 ARCH_TESTS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(TESTS)))
 
-EXAMPLES := $(shell find $(SRC_DIR)/examples -mindepth 1 -type d -exec basename {} \;)
+EXAMPLES := $(shell find $(SRC_DIR)/examples -mindepth 1 -maxdepth 1 -type d -exec basename {} \;)
 ARCH_EXAMPLES := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(EXAMPLES)))
 
 ARCH_TGTS := $(ARCH_LIBS) $(ARCH_EXECS) $(ARCH_TESTS) $(ARCH_EXAMPLES)
@@ -64,7 +64,8 @@ tests : libs ukernel $(TESTS)
 
 .SECONDEXPANSION:
 $(EXAMPLES): libs ukernel $$(addprefix $$@-,$$(ARCHES))
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+	$(eval $@_BIN_NAME	:= $(subst _,-,$@))
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$($@_BIN_NAME) $(CHERI_ROOT)/extra-files/usr/bin
 
 .PHONY: examples
 examples: libs ukernel $(EXAMPLES)

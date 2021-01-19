@@ -34,7 +34,11 @@
 #include <coproc/coport.h>
 #include <comsg/ukern_calls.h>
 
+#include <err.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -45,8 +49,8 @@ static int verbose_flag = 0;
 static char *coprocd_args[] = {"/usr/bin/coprocd", NULL};
 static char *sender_path = "/usr/bin/cosender";
 
-const static char ns_name = "coport_example_namespace";
-const static char port_name = "example_copipe";
+const static char *ns_name = "coport_example_namespace";
+const static char *port_name = "example_copipe";
 
 #define DEBUG(...) do { if (verbose_flag) printf(__VA_ARGS__); } while(0)
 
@@ -60,11 +64,11 @@ spawn_sender(void)
 	send_args[1] = NULL;
 	recv_pid = getpid();
 
-	sender_pid = vfork();
-	if (sender_pid == 0)
+	send_pid = vfork();
+	if (send_pid == 0)
 		coexecve(recv_pid, send_args[0], send_args, environ);
-	else
-		return (sender_pid);
+
+	return (send_pid);
 }
 
 static void
@@ -121,7 +125,7 @@ do_recv(void)
 
 	msg_buf = malloc(msg_len);
 	memset(msg_buf, '\0', msg_len);
-	recv_len = corecv(port, msg_buf, msg_len);
+	recv_len = corecv(port, &msg_buf, msg_len);
 	if (recv_len == -1)
 		err(errno, "do_recv: error in corecv");
 	
@@ -156,7 +160,7 @@ usage(void)
 int main(int argc, char *const argv[])
 {
 	int error, opt;
-	pid_t sender, recver;
+	pid_t sender;
 
 	while((opt = getopt(argc, argv, "")) != -1) {
 		switch (opt) {
@@ -173,7 +177,7 @@ int main(int argc, char *const argv[])
 	global_ns = coproc_init(NULL, NULL, NULL, NULL);
 	setup_coport_ipc();
 
-	sender_pid = spawn_sender();
+	sender = spawn_sender();
 
 	do_recv();
 	teardown_coport_ipc();

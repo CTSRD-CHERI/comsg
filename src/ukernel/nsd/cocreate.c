@@ -58,7 +58,8 @@ void namespace_create(cocreate_args_t *cocall_args, void *token)
 	UNUSED(token);
 	namespace_t *ns, *parent_ns;
 
-	if(!NS_PERMITS_WRITE(cocall_args->ns_cap)) 
+	parent_ns = cocall_args->ns_cap;
+	if(!NS_PERMITS_WRITE(parent_ns)) 
 		COCALL_ERR(cocall_args, EACCES);
 	/*
 	 * XXX-PBB: The access control model implemented here is incorrect/incomplete.
@@ -67,10 +68,10 @@ void namespace_create(cocreate_args_t *cocall_args, void *token)
 	 * where normally only PUBLIC should be allowed. Once we have linker assistance, 
 	 * or passing capabilities after vfork+coexecve, we can do the right thing. 
      */
-	parent_ns = unseal_ns(cocall_args->ns_cap);
+	
 	ns = lookup_namespace(cocall_args->ns_name, parent_ns);
 	if (ns != NULL) {
-		if (!NS_PERMITS_READ(cocall_args->ns_cap))
+		if (!NS_PERMITS_READ(parent_ns))
 			COCALL_ERR(cocall_args, EACCES);
 		else if (ns->type != cocall_args->ns_type)
 			COCALL_ERR(cocall_args, EEXIST);
