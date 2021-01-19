@@ -60,8 +60,8 @@ void init_coregister_mutex(void)
     pthread_cond_init(&registration_cond, NULL);
 }
 
-static
-void coaccept_init(
+static void 
+coaccept_init(
     void **code_cap,
     void **data_cap, 
     const char *target_name,

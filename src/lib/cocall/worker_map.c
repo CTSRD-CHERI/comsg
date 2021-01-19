@@ -125,7 +125,7 @@ spawn_slow_worker_thread(worker_args_t *worker, function_map_t *func_map)
     
     thread_args->worker_function = worker->worker_function;
     thread_args->validation_function = worker->validation_function;
-    strcpy(thread_args->name, worker->name);
+    strncpy(thread_args->name, worker->name, NS_NAME_LEN);
     
     return (start_sloaccept_worker(thread_args));
 }
