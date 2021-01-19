@@ -110,7 +110,7 @@ int main(int argc, char *const argv[])
 	}
 	ccmalloc_init(buckets, nbuckets);
 	//we can dance if we want to
-	global_ns = create_namespace("coproc", GLOBAL, NULL);
+	global_ns = new_namespace("coproc", GLOBAL, NULL);
 	
 	
 	init_services();

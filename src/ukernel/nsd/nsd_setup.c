@@ -103,7 +103,7 @@ static void
 init_service(coservice_provision_t *service_prov, const char * name,  void *func, void *validate)
 {
 	service_prov->function_map = spawn_workers(func, validate, NSD_NWORKERS);
-	service_prov->nsobj = create_nsobject(name, RESERVATION, global_ns);
+	service_prov->nsobj = new_nsobject(name, RESERVATION, global_ns);
 }
 
 void init_services(void)

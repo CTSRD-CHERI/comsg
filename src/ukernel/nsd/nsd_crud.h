@@ -35,8 +35,8 @@
 #include <coproc/namespace_object.h>
 
 
-namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *parent);
-nsobject_t *create_nsobject(const char *name, nsobject_type_t type, namespace_t *parent);
+namespace_t *new_namespace(const char *name, nstype_t type, namespace_t *parent);
+nsobject_t *new_nsobject(const char *name, nsobject_type_t type, namespace_t *parent);
 
 int update_nsobject(nsobject_t *nsobj, void *handle, nsobject_type_t new_type);
 

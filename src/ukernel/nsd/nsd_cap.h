@@ -54,4 +54,6 @@ int valid_namespace_cap(namespace_t *ns_cap);
 int valid_nsobject_cap(nsobject_t *obj_cap);
 int valid_reservation_cap(nsobject_t *obj_cap);
 
+nstype_t get_ns_type(namespace_t *ns);
+
 #endif //_NSD_CAP_H

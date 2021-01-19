@@ -76,7 +76,7 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 		case PUBLIC:
 			break;
 		default:
-			err(EINVAL, "create_namespace: invalid type supplied");
+			err(EINVAL, "new_namespace: invalid type supplied");
 			break;
 	}
 }
@@ -107,7 +107,7 @@ init_ns_members(namespace_t *ns_cap)
 	target->max_namespaces = -1;
 }
 
-namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *parent)
+namespace_t *new_namespace(const char *name, nstype_t type, namespace_t *parent)
 {
 	namespace_t *ns_ptr;
 	namespace_t *parent_cap;
@@ -140,7 +140,7 @@ namespace_t *create_namespace(const char *name, nstype_t type, namespace_t *pare
 	return (ns_ptr);
 }
 
-nsobject_t *create_nsobject(const char *name, nsobject_type_t type, namespace_t *parent)
+nsobject_t *new_nsobject(const char *name, nsobject_type_t type, namespace_t *parent)
 {
 	validate_nsobjcreate_params(name, type, parent);
 	

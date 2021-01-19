@@ -185,7 +185,7 @@ get_nsobject_type(nsobject_t *nsobj)
 
 
 
-static nstype_t 
+nstype_t 
 get_ns_type(namespace_t *ns)
 {
 	long otype;

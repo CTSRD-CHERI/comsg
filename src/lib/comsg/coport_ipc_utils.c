@@ -93,13 +93,13 @@ process_coport_handle(coport_t *port, coport_type_t type)
 {
     switch (type) {
     case COPIPE:
-        if(cheri_getsealed(port))
+        if (cheri_getsealed(port) == 1)
             break;
         port = cheri_clearperm(port, CHERI_PERM_GLOBAL);
         port = cheri_seal(port, copipe_otype.sc);
         break;
     case COCHANNEL:
-        if(cheri_getsealed(port))
+        if (cheri_getsealed(port) == 1)
             break;
         port = cheri_clearperm(port, CHERI_PERM_GLOBAL);
         port = cheri_seal(port, cochannel_otype.sc);

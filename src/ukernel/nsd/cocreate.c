@@ -77,15 +77,15 @@ void namespace_create(cocreate_args_t *cocall_args, void *token)
 			COCALL_ERR(cocall_args, EEXIST);
 		else if (ns->type == PRIVATE) 
 			COCALL_ERR(cocall_args, EEXIST);
-		else if (ns->type != PUBLIC && parent_ns->type != GLOBAL)
-			COCALL_ERR(cocall_args, EACCES);
+		else if (ns->type != PUBLIC && get_ns_type(parent_ns))
+			COCALL_ERR(cocall_args, EEXIST);
 		else {
 			ns = cheri_andperm(ns, NS_PERMS_WR_MASK);
 			cocall_args->child_ns_cap = seal_ns(ns);
 			COCALL_RETURN(cocall_args, 0);
 		}
 	} else {
-		cocall_args->child_ns_cap = create_namespace(cocall_args->ns_name, cocall_args->ns_type, parent_ns);
+		cocall_args->child_ns_cap = new_namespace(cocall_args->ns_name, cocall_args->ns_type, parent_ns);
 		COCALL_RETURN(cocall_args, 0);
 	}
 }

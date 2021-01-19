@@ -50,8 +50,7 @@ int validate_coinsert_args(coinsert_args_t *cocall_args)
 	if (cocall_args->obj != NULL) {
 		if ((cheri_getperm(cocall_args->obj) & CHERI_PERM_GLOBAL) == 1)
 			return (0);
-	}
-	else if (cocall_args->nsobj_type != RESERVATION)
+	} else if (cocall_args->nsobj_type != RESERVATION)
 		return (0);
 	return (1);
 }
@@ -70,7 +69,7 @@ void namespace_object_insert(coinsert_args_t *cocall_args, void *token)
 
 	type = cocall_args->nsobj_type;
 	/* create object */
-	obj = create_nsobject(cocall_args->nsobj_name, type, ns);
+	obj = new_nsobject(cocall_args->nsobj_name, type, ns);
 	switch(type) {
 	case COMMAP:
 		obj->obj = cocall_args->obj;

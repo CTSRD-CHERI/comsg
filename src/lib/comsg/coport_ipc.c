@@ -62,7 +62,6 @@ open_named_coport(const char *coport_name, coport_type_t type, namespace_t *ns)
     port = coopen(type);
     if (port == NULL)
         return (NULL);
-    port = process_coport_handle(port, type);
 
     port_obj = coinsert(coport_name, COPORT, port, ns);
     if (port_obj == NULL) {
@@ -75,6 +74,7 @@ open_named_coport(const char *coport_name, coport_type_t type, namespace_t *ns)
             return (NULL);
         }
     }
+    port = process_coport_handle(port, type);
 
     return (port_obj);
 }
