@@ -258,7 +258,7 @@ empty_buckets(void *args)
 				freed = batch->freed;
 				if (allocated != freed)
 					continue;
-				error = free(batch->mem);
+				free(batch->mem);
 				atomic_store_explicit(&batch->status, FREED, memory_order_release);
 			}
 		}
