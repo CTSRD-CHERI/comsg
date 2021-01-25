@@ -33,24 +33,18 @@
 #include <coproc/utils.h>
 
 #include <assert.h>
-#include <err.h>
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
+#include <err.h>
 #include <pthread.h>
-
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
 #include <sys/errno.h>
-#include <sys/mman.h>
 #include <sys/queue.h>
-
-#define BUCKET_FLAGS ( MAP_ANON | MAP_ALIGNED_CHERI )
-#define BUCKET_PROT ( PROT_READ | PROT_WRITE )
+#include <unistd.h>
 
 typedef enum {FREED = 0, MAPPED = 1, INUSE = 2} batch_status_t ;
 
@@ -203,9 +197,9 @@ new_batch(struct bucket *bucket)
 	struct batch *batch, *expected;
 	void *mem;
 
-	mem = mmap(NULL, alloc_size, BUCKET_PROT, BUCKET_FLAGS, -1, 0);
-	if(mem == MAP_FAILED)
-		err(errno, "new_bucket_batch: mmap failed");
+	mem = malloc(alloc_size);
+	if (mem == NULL)
+		err(errno, "new_bucket_batch: malloc failed");
 	memset(mem, '\0', cheri_getlen(mem)); /* fault in via zero */
 
 	batch = calloc(1, sizeof(struct batch));
@@ -215,7 +209,7 @@ new_batch(struct bucket *bucket)
 	batch->mem = mem;
 	expected = NULL;
 	if(!atomic_compare_exchange_strong_explicit(&bucket->spare, &expected, batch, memory_order_acq_rel, memory_order_acquire)) {
-		munmap(mem, cheri_getlen(mem));
+		free(mem);
 		free(batch);
 	}
 }
@@ -264,9 +258,7 @@ empty_buckets(void *args)
 				freed = batch->freed;
 				if (allocated != freed)
 					continue;
-				error = munmap(batch->mem, cheri_getlen(batch->mem));
-				if (error != 0)
-					err(errno, "unmap: failed to unmap batch");
+				error = free(batch->mem);
 				atomic_store_explicit(&batch->status, FREED, memory_order_release);
 			}
 		}
