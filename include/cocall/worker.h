@@ -57,7 +57,7 @@ typedef struct _worker_args
 	 */
 	int (*validation_function)(cocall_args_t *);
 	/* name to coregister under */
-	char name[NS_NAME_LEN];
+	char *name;
 	/* result of coregister */
 	void *scb_cap;
 } worker_args_t;

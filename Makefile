@@ -1,5 +1,5 @@
 COMSG_DIR ?= 	$(CURDIR)
-ARCHES := riscv mips 
+ARCHES := riscv 
 DEFAULT_ARCH ?= riscv
 BUILD_DIR := 	$(COMSG_DIR)/build
 OUT_DIR := 		$(COMSG_DIR)/output

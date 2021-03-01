@@ -58,7 +58,7 @@ spawn_worker_threads(void *func, void* arg_func, int nworkers, function_map_t * 
     for(int i = 0; i < nworkers; i++)
     {
         thread_args = cheri_setbounds(&worker_arr[i], sizeof(worker_args_t));
-        memset(thread_args->name, '\0', NS_NAME_LEN);
+        thread_args->name = NULL;
         thread_args->validation_function = arg_func;
         thread_args->worker_function = func;
         if (!start_coaccept_worker(thread_args))
@@ -82,7 +82,7 @@ spawn_slow_worker_threads(void *func, void* arg_func, int nworkers, function_map
     
     for(int i = 0; i < nworkers; i++) {
         thread_args = cheri_setbounds(&worker_arr[i], sizeof(worker_args_t));
-        rand_string(thread_args->name, NS_NAME_LEN);
+        thread_args->name = NULL;
         thread_args->validation_function = arg_func;
         thread_args->worker_function = func;
         if (!start_sloaccept_worker(thread_args))
@@ -125,7 +125,7 @@ spawn_slow_worker_thread(worker_args_t *worker, function_map_t *func_map)
     
     thread_args->worker_function = worker->worker_function;
     thread_args->validation_function = worker->validation_function;
-    strncpy(thread_args->name, worker->name, NS_NAME_LEN);
+    thread_args->name = worker->name;
     
     return (start_sloaccept_worker(thread_args));
 }
@@ -148,7 +148,7 @@ spawn_worker_thread(worker_args_t *worker, function_map_t *func_map)
     
     thread_args->worker_function = worker->worker_function;
     thread_args->validation_function = worker->validation_function;
-    strncpy(thread_args->name, worker->name, NS_NAME_LEN);
+    thread_args->name = worker->name;
   
     return (start_coaccept_worker(thread_args));
 }
@@ -161,8 +161,10 @@ spawn_slow_worker(const char *worker_name, void *func, void *valid)
 
     map = new_function_map();
     memset(&wargs, '\0', sizeof(wargs));
-    if(worker_name != NULL)
+    if(worker_name != NULL) {
+        wargs.name = calloc(1, NS_NAME_LEN);
         strncpy(wargs.name, worker_name, NS_NAME_LEN);
+    }
     wargs.worker_function = func;
     wargs.validation_function = valid; 
     
@@ -179,11 +181,14 @@ spawn_worker(const char *worker_name, void *func, void *valid)
 {
     worker_args_t wargs;
     function_map_t *map;
+    size_t name_len;
 
     map = new_function_map();
     memset(&wargs, '\0', sizeof(wargs));
-    if(worker_name != NULL)
+    if(worker_name != NULL) {
+        wargs.name = calloc(1, NS_NAME_LEN);
         strncpy(wargs.name, worker_name, NS_NAME_LEN);
+    }
 
     wargs.worker_function = func;
     wargs.validation_function = valid; 

@@ -35,28 +35,68 @@
 #include <threads.h>
 #include <unistd.h>
 
-static thread_local void *code_cap = NULL;
-static thread_local void *data_cap = NULL;
+static void *coaccept_cap = NULL;
+static void *cocall_cap = NULL;
+static thread_local void *scb_cap = NULL;
 
-static 
-void cocall_init(void)
+
+static void
+cocall_init(int target)
 {
-	int error = cosetup(COSETUP_COCALL, &code_cap, &data_cap);
-	if(error)
+	int error;
+
+	switch (target) {
+	case COSETUP_COCALL:
+		error = _cosetup(COSETUP_COCALL, &cocall_cap, &scb_cap);
+		break;
+	case COSETUP_COACCEPT:
+		error = _cosetup(COSETUP_COACCEPT, &coaccept_cap, &scb_cap);
+		break;
+	default:
+		err(EINVAL, "cocall_init: invalid target for cosetup %d", target);
+		break;
+	}
+
+	if(error != 0)
 		err(errno, "cocall_init: error in cosetup(2)");
-	return;
 }
 
-int cocall_tls(void *target, void *buffer, size_t len)
+void *
+get_scb(void)
 {
-	if ((code_cap == NULL) || (data_cap == NULL))
-		cocall_init();
-	return (cocall(code_cap, data_cap, target, buffer, len));
+	if (scb_cap == NULL)
+		cocall_init(COSETUP_COACCEPT);
+	return (scb_cap);
 }
 
-int slocall_tls(void *target, void *buffer, size_t len)
+int
+cocall_tls(void *target, void *buffer, size_t len)
 {
-	if ((code_cap == NULL) || (data_cap == NULL))
-		cocall_init();
-	return (cocall_slow(code_cap, data_cap, target, buffer, len));
+	if ((cocall_cap == NULL) || (scb_cap == NULL))
+		cocall_init(COSETUP_COCALL);
+	return (_cocall(cocall_cap, scb_cap, target, buffer, len, buffer, len));
+}
+
+int
+slocall_tls(void *target, void *buffer, size_t len)
+{
+	if ((cocall_cap == NULL) || (scb_cap == NULL))
+		cocall_init(COSETUP_COCALL);
+	return (cocall_slow(target, buffer, len, buffer, len));
+}
+
+int
+coaccept_tls(void **tokenp, void *buffer, size_t len)
+{
+	if ((coaccept_cap == NULL) || (scb_cap == NULL))
+		cocall_init(COSETUP_COACCEPT);
+	return (_coaccept(coaccept_cap, scb_cap, tokenp, buffer, len, buffer, len));
+}
+
+int
+sloaccept_tls(void **tokenp, void *buffer, size_t len)
+{
+	if ((coaccept_cap == NULL) || (scb_cap == NULL))
+		cocall_init(COSETUP_COACCEPT);
+	return (coaccept_slow(tokenp, buffer, len, buffer, len));
 }

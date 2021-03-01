@@ -33,7 +33,12 @@
 
 #include <stddef.h>
 
+void *get_scb(void);
+
 int cocall_tls(void *target, void *buffer, size_t len);
 int slocall_tls(void *target, void *buffer, size_t len);
+
+int coaccept_tls(void **tokenp, void *buffer, size_t len);
+int sloaccept_tls(void **tokenp, void *buffer, size_t len);
 
 #endif //!defined(_COCALL_TLS_H)
