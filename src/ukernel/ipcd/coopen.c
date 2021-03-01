@@ -53,7 +53,7 @@ int validate_coopen_args(coopen_args_t *cocall_args)
 }
 
 static
-void init_coport(coport_type_t type, coport_t *port) 
+void init_coport(coport_t *port, coport_type_t type) 
 {
 	port->type = type;
 	
@@ -94,21 +94,18 @@ void coport_open(coopen_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	//Brain-sludge is making me forget whether static is redundant here
-	static _Thread_local coport_t *port_handle = NULL;
+	coport_t *port_handle = NULL;
 
 	if (port_handle == NULL) {
 		if(!can_allocate_coport(cocall_args->coport_type) && port_handle == NULL)
 			COCALL_ERR(cocall_args, ENOMEM);
 		port_handle = allocate_coport(cocall_args->coport_type);
 	}
-	assert(cheri_getperm(port_handle) & CHERI_PERM_CCALL);
-	init_coport(cocall_args->coport_type, port_handle);
+	init_coport(port_handle, cocall_args->coport_type);
 
 	port_handle = cheri_andperm(port_handle, COPORT_PERMS);
 	port_handle = seal_coport(port_handle);
-	assert(cheri_getperm(port_handle) & CHERI_PERM_CCALL);
 	cocall_args->port = port_handle;
-	port_handle = NULL;
 
 	COCALL_RETURN(cocall_args, 0);
 }
