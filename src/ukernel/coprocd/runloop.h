@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,34 +28,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coproc.h"
+#ifndef _COPROCD_RUNLOOP_H
+#define _COPROCD_RUNLOOP_H
 
-#include "launch.h"
-#include "runloop.h"
+#include "daemon.h"
 
-#include <comsg/ukern_calls.h>
+void mark_module_for_restart(struct ukernel_module *, struct ukernel_daemon *);
+void mark_daemon_for_restart(struct ukernel_daemon *);
 
-#include <stdbool.h>
+void enter_runloop(void);
 
-
-static _Thread_local bool main_thread = false;
-
-bool is_main_thread(void)
-{
-	return (main_thread);
-}
-
-int main(int argc, char const *argv[])
-{
-	int error;
-	
-	is_ukernel = true;
-	main_thread = true;
-	//we can dance if we want to
-	
-	init_microkernel();
-	enter_runloop();
-
-	/* NOTREACHED */
-	return (0);
-}
+#endif //!defined(_COPROCD_RUNLOOP_H)

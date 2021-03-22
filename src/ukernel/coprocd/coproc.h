@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,34 +28,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coproc.h"
-
-#include "launch.h"
-#include "runloop.h"
-
-#include <comsg/ukern_calls.h>
+#ifndef _COPROCD_H
+#define _COPROCD_H
 
 #include <stdbool.h>
 
+bool is_main_thread(void);
 
-static _Thread_local bool main_thread = false;
-
-bool is_main_thread(void)
-{
-	return (main_thread);
-}
-
-int main(int argc, char const *argv[])
-{
-	int error;
-	
-	is_ukernel = true;
-	main_thread = true;
-	//we can dance if we want to
-	
-	init_microkernel();
-	enter_runloop();
-
-	/* NOTREACHED */
-	return (0);
-}
+#endif //!defined(_COPROCD_H)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,34 +28,46 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coproc.h"
+#ifndef _COMSG_CORE_DAEMONS_H
+#define _COMSG_CORE_DAEMONS_H
 
-#include "launch.h"
-#include "runloop.h"
+#include "../daemon.h"
 
-#include <comsg/ukern_calls.h>
+#include <cocall/cocall_args.h>
 
-#include <stdbool.h>
+void ipcd_setup(cocall_args_t *, void *);
+void ipcd_setup_complete(cocall_args_t *, void *);
+
+void nsd_setup(cocall_args_t *, void *);
+void nsd_setup_complete(cocall_args_t *, void *);
+
+void coserviced_setup(cocall_args_t *, void *);
+
+void coproc_user_init(cocall_args_t *, void *);
+
+void core_init_start(struct ukernel_module *);
+void core_init_complete(void);
+
+extern daemon_setup_info coprocd_init;
+extern daemon_setup_info nsd_init;
+extern daemon_setup_info coserviced_init;
+extern daemon_setup_info ipcd_init;
+
+extern module_setup_info core_init;
+
+#define CORE_DAEMON(NAME) \
+    DAEMON(NAME, "/usr/bin/" #NAME,  &NAME##_init, HCF, 0)
+
+#define FOR_EACH_CORE_DAEMON(F) \
+	F(coprocd), \
+	F(coserviced), \
+	F(nsd), \
+	F(ipcd), 
+
+#define CORE_FLAGS (0)
+#define CORE_INIT (&core_init)
+#define CORE_FINI (NULL)
+#define N_CORE_DAEMONS (4)
 
 
-static _Thread_local bool main_thread = false;
-
-bool is_main_thread(void)
-{
-	return (main_thread);
-}
-
-int main(int argc, char const *argv[])
-{
-	int error;
-	
-	is_ukernel = true;
-	main_thread = true;
-	//we can dance if we want to
-	
-	init_microkernel();
-	enter_runloop();
-
-	/* NOTREACHED */
-	return (0);
-}
+#endif //!defined(_COMSG_CORE_DAEMONS_H)

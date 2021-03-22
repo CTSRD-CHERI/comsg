@@ -17,7 +17,7 @@ export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS
 LIBS := $(addprefix lib,$(shell find $(SRC_DIR)/lib -mindepth 1 -maxdepth 1 -type d -exec basename {} \;))
 ARCH_LIBS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(LIBS)))
 
-UKERNEL_EXECS := $(shell find $(SRC_DIR)/ukernel -mindepth 1 -type d -exec basename {} \;)
+UKERNEL_EXECS := $(shell find $(SRC_DIR)/ukernel -mindepth 1 -maxdepth 1 -type d -exec basename {} \;)
 ARCH_EXECS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(UKERNEL_EXECS)))
 
 TESTS := $(shell find $(SRC_DIR)/tests -mindepth 1 -type d -exec basename {} \;)

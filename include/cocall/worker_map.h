@@ -38,9 +38,7 @@
 
 #define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
 
-typedef struct _worker_map_entry
-{
-	nsobject_t *func_name;
+typedef struct {
 	_Atomic int nworkers;
 	worker_args_t *workers;
 } function_map_t;

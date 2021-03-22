@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,34 +28,74 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coproc.h"
+#include "util.h"
 
-#include "launch.h"
-#include "runloop.h"
-
-#include <comsg/ukern_calls.h>
-
+#include <assert.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sysexits.h>
+#include <unistd.h>
 
 
-static _Thread_local bool main_thread = false;
+static _Thread_local sigset_t oldmask;
+static _Thread_local bool set_oldmask = false;
 
-bool is_main_thread(void)
+void 
+set_sigmask(int signo)
 {
-	return (main_thread);
+    int error;
+    sigset_t newmask;
+
+    error = pthread_sigmask(SIG_SETMASK, NULL, &oldmask);
+
+    error = sigemptyset(&newmask);
+    error = sigorset(&newmask, &oldmask, &newmask);
+    error = sigaddset(&newmask, signo);
+
+    error = pthread_sigmask(SIG_SETMASK, &newmask, &oldmask);
+    set_oldmask = true;
 }
 
-int main(int argc, char const *argv[])
+void
+add_sigmask(int signo)
 {
-	int error;
-	
-	is_ukernel = true;
-	main_thread = true;
-	//we can dance if we want to
-	
-	init_microkernel();
-	enter_runloop();
+    int error;
+    sigset_t newmask;
 
-	/* NOTREACHED */
-	return (0);
+    if (!set_oldmask) {
+        set_sigmask(signo);
+    } else {
+        error = sigemptyset(&newmask);
+        error = sigaddset(&newmask, signo);
+        error = pthread_sigmask(SIG_BLOCK, &newmask, NULL);
+    }
+}
+
+void
+clear_sigmask(void)
+{
+    int error;
+
+    assert(set_oldmask);
+    error = pthread_sigmask(SIG_SETMASK, &oldmask, NULL);
+}
+
+char *
+pid_to_str(pid_t pid)
+{
+    char *str; 
+    char *retval;
+
+    //allocate enough to represent it in hex so we have more than enough for dec
+    str = calloc(2, sizeof(pid));
+    snprintf(str, (2 * sizeof(pid)) - 1, "%d", pid);
+    retval = strdup(str);
+    free(str);
+
+    return (retval);
 }

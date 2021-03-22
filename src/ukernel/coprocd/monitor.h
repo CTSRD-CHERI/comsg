@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,17 +28,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _DANCE_H
-#define _DANCE_H
+#ifndef _COPROCD_MONITOR_H
+#define _COPROCD_MONITOR_H
 
-#include <cocall/cocall_args.h>
+#include <signal.h>
+#include <ucontext.h>
 
-void nsd_init(cocall_args_t *cocall_args, void *token);
-void coserviced_init(cocall_args_t * cocall_args, void *token);
-void ipcd_init(cocall_args_t * cocall_args, void *token);
-void coproc_init_complete(cocall_args_t *cocall_args, void *token);
-void ukern_init_complete(cocall_args_t *cocall_args, void *token);
-void coproc_user_init(cocall_args_t *cocall_args, void *token);
-void invalidate_startup_info(void);
+void daemon_died(int, siginfo_t *, ucontext_t *);
+void set_sigchld_handler(void *);
 
-#endif
+#endif //!defined(_COPROCD_MONITOR_H)

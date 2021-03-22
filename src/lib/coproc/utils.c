@@ -70,11 +70,9 @@ rand_string(char *buf, size_t len)
     int rand_no;
     char c;
 
-    
-    //last character should contain a NULL
+    //last character should contain '\0'
     len = MIN(len + 1, cheri_getlen(buf) - 1);
-    for (i = 0; i < len; i++)
-    {
+    for (i = 0; i < len; i++) {
         rand_no = rand() % KEYSPACE;
         c = alphanum[rand_no];
         buf[i] = c;

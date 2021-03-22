@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2020, 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,9 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "core.h"
 
-#include "daemons.h"
-#include "dance.h"
+#include "../daemon.h"
 
 #include <cocall/cocall_args.h>
 #include <coproc/utils.h>
@@ -42,6 +42,26 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+daemon_setup_info coprocd_init = { 
+	coproc_user_init, NULL 
+};
+
+daemon_setup_info nsd_init = {
+	nsd_setup, nsd_setup_complete
+};
+
+daemon_setup_info coserviced_init = {
+	coserviced_setup, NULL
+};
+
+daemon_setup_info ipcd_init = {
+	ipcd_setup, ipcd_setup_complete
+};
+
+module_setup_info core_init = {
+	core_init_start, core_init_complete
+};
+
 /* Provided by coservice daemon*/
 static _Atomic(void *)codiscover_scb = NULL;
 
@@ -50,6 +70,9 @@ static _Atomic(namespace_t *) global_namespace = NULL;
 static void *coinsert_scb = NULL;
 static void *coselect_scb = NULL;
 
+static void *done_worker_scb = NULL;
+static void *done2_worker_scb = NULL;
+
 static _Atomic bool coproc_inited = false;
 static _Atomic bool ukern_inited = false;
 
@@ -57,8 +80,24 @@ static _Atomic bool ukern_inited = false;
 #define COSERVICED_SELECTOR (2)
 #define IPCD_SELECTOR (3)
 
+struct ukernel_daemon *nsd, *coserviced, *ipcd;
+
+void core_init_start(struct ukernel_module *m)
+{
+	coserviced = &m->daemons[1];
+	nsd = &m->daemons[2];
+	ipcd = &m->daemons[3];
+}
+
+void core_init_complete(void)
+{
+	done_worker_scb = nsd->setup_state->done_worker->scb_cap;
+	done2_worker_scb = ipcd->setup_state->done_worker->scb_cap;
+}
+
+/* unused */
 void
-invalidate_startup_info(void)
+core_fini(void)
 {
 	coinsert_scb = NULL;
 	coselect_scb = NULL;
@@ -80,28 +119,34 @@ authenticate_dance(cocall_args_t *cocall_args, int selector)
 	error = cogetpid(&caller_pid);
 	switch (selector) {
 		case NSD_SELECTOR:
-			daemon_pid = get_nsd_pid();
+			daemon_pid = nsd->pid;
 			break;
 		case COSERVICED_SELECTOR:
-			daemon_pid = get_coserviced_pid();
+			daemon_pid = coserviced->pid;
 			break;
 		case IPCD_SELECTOR:
-			daemon_pid = get_ipcd_pid();
+			daemon_pid = ipcd->pid;
 			break;
 	}
 	
-	if (daemon_pid == 0 || caller_pid != daemon_pid) 
+	if (daemon_pid == 0) 
+		return (-1);
+	else if (caller_pid != daemon_pid)
 		return (0);
 	else
 		return (1);
 }
 
 void 
-nsd_init(cocall_args_t *cocall_args, void *token)
+nsd_setup(cocall_args_t *cocall_args, void *token)
 {
-	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
-		COCALL_ERR(cocall_args, EPERM);
+	int error;
 
+	error = authenticate_dance(cocall_args, NSD_SELECTOR);
+	if(error == 0)
+		COCALL_ERR(cocall_args, EPERM);
+	else if (error == -1)
+		COCALL_ERR(cocall_args, EAGAIN);
 	
 	/* clear old codiscover; whether valid or not it refers to the old universe */
 	codiscover_scb = NULL;
@@ -123,10 +168,15 @@ nsd_init(cocall_args_t *cocall_args, void *token)
 
 
 void 
-coserviced_init(cocall_args_t *cocall_args, void *token)
+coserviced_setup(cocall_args_t *cocall_args, void *token)
 {
-	if(!authenticate_dance(cocall_args, COSERVICED_SELECTOR))
+	int error;
+
+	error = authenticate_dance(cocall_args, COSERVICED_SELECTOR);
+	if(error == 0)
 		COCALL_ERR(cocall_args, EPERM);
+	else if (error == -1)
+		COCALL_ERR(cocall_args, EAGAIN);
 
 	while((cocall_args->ns_cap = atomic_load_explicit(&global_namespace, memory_order_acquire)) == NULL) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
@@ -145,10 +195,15 @@ coserviced_init(cocall_args_t *cocall_args, void *token)
 }
 
 void 
-ipcd_init(cocall_args_t *cocall_args, void *token)
+ipcd_setup(cocall_args_t *cocall_args, void *token)
 {
-	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
+	int error;
+
+	error = authenticate_dance(cocall_args, IPCD_SELECTOR);
+	if(error == 0)
 		COCALL_ERR(cocall_args, EPERM);
+	else if (error == -1)
+		COCALL_ERR(cocall_args, EAGAIN);
 
 	while((atomic_load_explicit(&coproc_inited, memory_order_acquire) == false)) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
@@ -169,27 +224,44 @@ ipcd_init(cocall_args_t *cocall_args, void *token)
 }
 
 void 
-coproc_init_complete(cocall_args_t *cocall_args, void *token)
+nsd_setup_complete(cocall_args_t *cocall_args, void *token)
 {
-	if(!authenticate_dance(cocall_args, NSD_SELECTOR))
+	int error;
+
+	error = authenticate_dance(cocall_args, NSD_SELECTOR);
+	if(error == 0)
 		COCALL_ERR(cocall_args, EPERM);
-	else if (atomic_load_explicit(&coproc_inited, memory_order_acquire) == true)
+	else if (error == -1)
+		COCALL_ERR(cocall_args, EAGAIN);
+	
+	if (atomic_load_explicit(&coproc_inited, memory_order_acquire) == true)
 		COCALL_ERR(cocall_args, EAGAIN);
 
 	atomic_store_explicit(&coproc_inited, true, memory_order_release);
+	
+	nsd->status = RUNNING;
+	coserviced->status = RUNNING;
 
 	COCALL_RETURN(cocall_args, 0);
 }
 
 void 
-ukern_init_complete(cocall_args_t *cocall_args, void *token)
+ipcd_setup_complete(cocall_args_t *cocall_args, void *token)
 {
-	if(!authenticate_dance(cocall_args, IPCD_SELECTOR))
+	int error;
+
+	error = authenticate_dance(cocall_args, IPCD_SELECTOR);
+	if(error == 0)
 		COCALL_ERR(cocall_args, EPERM);
-	else if (atomic_load_explicit(&ukern_inited, memory_order_acquire) == true)
+	else if (error == -1)
+		COCALL_ERR(cocall_args, EAGAIN);
+	
+	if (atomic_load_explicit(&ukern_inited, memory_order_acquire) == true)
 		COCALL_ERR(cocall_args, EAGAIN);
 
 	atomic_store_explicit(&ukern_inited, true, memory_order_release);
+
+	ipcd->status = RUNNING;
 
 	COCALL_RETURN(cocall_args, 0);
 }

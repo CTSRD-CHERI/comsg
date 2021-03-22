@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,34 +28,68 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coproc.h"
-
-#include "launch.h"
 #include "runloop.h"
 
-#include <comsg/ukern_calls.h>
+#include "daemon.h"
+#include "module.h"
 
+#include <assert.h>
+#include <pthread.h>
 #include <stdbool.h>
+#include <signal.h>
+#include <sysexits.h>
+#include <unistd.h>
 
+static struct ukernel_daemon *daemon_restart = NULL;
+static struct ukernel_module *module_restart = NULL;
 
-static _Thread_local bool main_thread = false;
+static void runloop(void);
 
-bool is_main_thread(void)
+void
+mark_module_for_restart(struct ukernel_module *m, struct ukernel_daemon *d)
 {
-	return (main_thread);
+    if (daemon_restart != NULL || module_restart != NULL)
+        _exit(EX_SOFTWARE);
+    module_restart = m;
+    daemon_restart = d;
 }
 
-int main(int argc, char const *argv[])
+void
+mark_daemon_for_restart(struct ukernel_daemon *d)
 {
-	int error;
-	
-	is_ukernel = true;
-	main_thread = true;
-	//we can dance if we want to
-	
-	init_microkernel();
-	enter_runloop();
+    if (daemon_restart != NULL || module_restart != NULL)
+        _exit(EX_SOFTWARE);
+    module_restart = NULL; //redundant
+    daemon_restart = d;
+}
 
-	/* NOTREACHED */
-	return (0);
+void
+enter_runloop(void)
+{
+    runloop();
+}
+
+static void
+runloop(void)
+{
+    int error;
+    sigset_t mask, oldmask;
+
+    error = sigemptyset(&mask);
+    error = sigaddset(&mask, SIGCHLD);
+
+    pthread_sigmask(SIG_BLOCK, &mask, &oldmask);
+    for (;;) {
+        if (module_restart != NULL) {
+            assert(daemon_restart != NULL);
+            restart_module(module_restart, daemon_restart);
+            module_restart = NULL;
+            daemon_restart = NULL;
+        } else if (daemon_restart != NULL) {
+            assert(module_restart == NULL);
+            restart_daemon(daemon_restart);
+            daemon_restart = NULL;
+        }
+        sigsuspend(&oldmask);
+    }
 }

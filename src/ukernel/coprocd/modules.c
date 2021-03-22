@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,18 +28,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _DAEMONS_H
-#define _DAEMONS_H
 
-#include <sys/types.h>
+#include "modules.h"
 
-void spawn_daemons(void);
-pid_t get_coserviced_pid(void);
-pid_t get_ipcd_pid(void);
-pid_t get_nsd_pid(void);
-void kill_daemons(void);
+#include "daemon.h"
 
-extern void *done_worker_scb;
-extern void *done2_worker_scb;
-
-#endif
+struct ukernel_module modules[] = {
+	DECLARE_MODULES
+};

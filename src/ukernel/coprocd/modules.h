@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,34 +28,63 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coproc.h"
+#ifndef _MODULE_TABLE_H
+#define _MODULE_TABLE_H
 
-#include "launch.h"
-#include "runloop.h"
+/* Module table */
 
-#include <comsg/ukern_calls.h>
+#include "daemon.h"
 
-#include <stdbool.h>
+/*
+ * To add a module, include a header that defines the necessary macros here,
+ */
+#include "modules/core.h"
 
+/* 
+ * then add it to the modules macro here,
+ */
+#define DECLARE_MODULES \
+    MODULE(core, CORE, N_CORE_DAEMONS, CORE_FLAGS, CORE_INIT, CORE_FINI, FOR_EACH_CORE_DAEMON, CORE_DAEMON)
 
-static _Thread_local bool main_thread = false;
+/*
+ and increment the value of N_MODULES accordingly.
+ */
+#define N_MODULES (1)
 
-bool is_main_thread(void)
+extern struct ukernel_module modules[] __attribute__((aligned (0x400)));
+
+/* Module table utility functions */
+
+#include <stdint.h>
+#include <sys/types.h>
+
+/* 
+ * This is used to get module struct address from address of daemon struct.
+ * Only works when the base of the modules table is aligned to the size of 
+ * struct ukernel module, and while the size of the module matches the mask.
+ */
+#define MODULE_MASK (~1024)
+
+static inline struct ukernel_daemon *
+find_daemon(pid_t dpid)
 {
-	return (main_thread);
+    int i, j;
+    struct ukernel_module *m;
+    for (i = 0; i < N_MODULES; i++) {
+        m = &modules[i];
+        for (j = 0; j < m->ndaemons; j++) {
+            if (m->daemons[j].pid == dpid)
+                return (&m->daemons[j]);
+        }
+    }
+    return (NULL);
 }
 
-int main(int argc, char const *argv[])
+static inline struct ukernel_module *
+module_from_daemon(struct ukernel_daemon *dptr)
 {
-	int error;
-	
-	is_ukernel = true;
-	main_thread = true;
-	//we can dance if we want to
-	
-	init_microkernel();
-	enter_runloop();
-
-	/* NOTREACHED */
-	return (0);
+    return (__builtin_cheri_address_set(&modules, ((uintptr_t)dptr & MODULE_MASK)));
 }
+
+
+#endif //!defined(_MODULE_TABLE_H)
