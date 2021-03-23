@@ -41,6 +41,7 @@
 #include <err.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/errno.h>
 #include <pthread.h>
@@ -70,15 +71,18 @@ coaccept_init(
 {
     pthread_mutex_lock(&registration_mutex);
 
-    if (target_name == NULL) 
-        *target_cap = get_scb();
-    else {
-        printf("coaccept_init: coregistering as %s\n", target_name);
-        if(coregister(target_name, target_cap) != 0) {
-            pthread_cond_signal(&registration_cond);
-            pthread_exit(NULL);
-        }
+    if (target_name != NULL)  {
+        assert(cheri_getlen(target_name) > 0);
+        assert(strnlen(target_name, 1) == 1);
+        /*printf("%s: %s: coregistering as %s\n", getprogname(), __func__, target_name);*/
+    } /*else 
+        printf("%s: %s: coregistering anonymously\n", getprogname(), __func__);*/
+        
+    if(coregister(target_name, target_cap) != 0) {
+        pthread_cond_signal(&registration_cond);
+        pthread_exit(NULL);
     }
+    
     pthread_cond_signal(&registration_cond);
     pthread_mutex_unlock(&registration_mutex);
 }

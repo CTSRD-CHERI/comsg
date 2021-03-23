@@ -33,8 +33,6 @@
 
 #include <stddef.h>
 
-void *get_scb(void);
-
 int cocall_tls(void *target, void *buffer, size_t len);
 int slocall_tls(void *target, void *buffer, size_t len);
 

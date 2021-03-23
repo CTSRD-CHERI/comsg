@@ -31,29 +31,31 @@
 #include <cocall/tls_cocall.h>
 
 #include <err.h>
+#include <stdbool.h>
 #include <sys/errno.h>
 #include <threads.h>
 #include <unistd.h>
 
-static void *coaccept_cap = NULL;
-static void *cocall_cap = NULL;
-static thread_local void *scb_cap = NULL;
+static thread_local bool did_cocall_setup = false;
+static thread_local bool did_coaccept_setup = false;
 
 
 static void
-cocall_init(int target)
+cocall_init(int what)
 {
 	int error;
 
-	switch (target) {
+	switch (what) {
 	case COSETUP_COCALL:
-		error = _cosetup(COSETUP_COCALL, &cocall_cap, &scb_cap);
+		error = cosetup(COSETUP_COCALL);
+		did_cocall_setup = true;
 		break;
 	case COSETUP_COACCEPT:
-		error = _cosetup(COSETUP_COACCEPT, &coaccept_cap, &scb_cap);
+		error = cosetup(COSETUP_COACCEPT);
+		did_coaccept_setup = true;
 		break;
 	default:
-		err(EINVAL, "cocall_init: invalid target for cosetup %d", target);
+		err(EINVAL, "cocall_init: invalid target for cosetup %d", what);
 		break;
 	}
 
@@ -61,26 +63,18 @@ cocall_init(int target)
 		err(errno, "cocall_init: error in cosetup(2)");
 }
 
-void *
-get_scb(void)
-{
-	if (scb_cap == NULL)
-		cocall_init(COSETUP_COACCEPT);
-	return (scb_cap);
-}
-
 int
 cocall_tls(void *target, void *buffer, size_t len)
 {
-	if ((cocall_cap == NULL) || (scb_cap == NULL))
+	if (!did_cocall_setup) 
 		cocall_init(COSETUP_COCALL);
-	return (_cocall(cocall_cap, scb_cap, target, buffer, len, buffer, len));
+	return (cocall(target, buffer, len, buffer, len));
 }
 
 int
 slocall_tls(void *target, void *buffer, size_t len)
 {
-	if ((cocall_cap == NULL) || (scb_cap == NULL))
+	if (!did_cocall_setup) 
 		cocall_init(COSETUP_COCALL);
 	return (cocall_slow(target, buffer, len, buffer, len));
 }
@@ -88,15 +82,15 @@ slocall_tls(void *target, void *buffer, size_t len)
 int
 coaccept_tls(void **tokenp, void *buffer, size_t len)
 {
-	if ((coaccept_cap == NULL) || (scb_cap == NULL))
+	if (!did_coaccept_setup) 
 		cocall_init(COSETUP_COACCEPT);
-	return (_coaccept(coaccept_cap, scb_cap, tokenp, buffer, len, buffer, len));
+	return (coaccept(tokenp, buffer, len, buffer, len));
 }
 
 int
 sloaccept_tls(void **tokenp, void *buffer, size_t len)
 {
-	if ((coaccept_cap == NULL) || (scb_cap == NULL))
+	if (!did_coaccept_setup) 
 		cocall_init(COSETUP_COACCEPT);
 	return (coaccept_slow(tokenp, buffer, len, buffer, len));
 }
