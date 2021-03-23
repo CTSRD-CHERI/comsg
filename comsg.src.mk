@@ -11,19 +11,26 @@ ifdef DEP_LIBS
 LDFLAGS +=	$(addprefix -l,$(DEP_LIBS))
 endif
 
-$(BUILD_DIR)/$(ARCH):
-	mkdir $(BUILD_DIR)/$(ARCH)
+.PRECIOUS: $(BUILD_PATH)/. $(BUILD_PATH)%/.
 
-$(BUILD_PATH): | $(BUILD_DIR)/$(ARCH)
-	mkdir $(BUILD_PATH)
+$(BUILD_DIR)/$(ARCH):
+	mkdir -p $@
+
+$(BUILD_PATH)/.: | $(BUILD_DIR)/$(ARCH)
+	mkdir -p $@
+
+$(BUILD_PATH)%/.: | $(BUILD_PATH)
+	mkdir -p $@
 
 $(OUT_PATH):
-	mkdir $(OUT_PATH)
+	mkdir -p $@
 
-$(BUILD_PATH)/%.c.o: %.c | $(BUILD_PATH)
+.SECONDEXPANSION:
+$(BUILD_PATH)/%.c.o: %.c | $(BUILD_PATH)/. $$(@D)/.
 	$(CC) $(CONFIG) $(INC_FLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD_PATH)/%.S.o: %.S | $(BUILD_PATH)
+.SECONDEXPANSION:
+$(BUILD_PATH)/%.S.o: %.S | $(BUILD_PATH)/. $$(@D)/.
 	$(CC) $(CONFIG) $(INC_FLAGS) $(CFLAGS) -c $< -o $@
 
 $(TGT): $(OBJS) | $(OUT_PATH)
