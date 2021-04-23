@@ -48,17 +48,37 @@ int
 init_module(struct ukernel_module *module)
 {
     struct ukernel_daemon *d;
+    bool expect_setpgrp;
     int i;
-    pid_t daemon_pid;
+    int error;
 
+    expect_setpgrp = false;
     if (module->init->start != NULL)
         module->init->start(module);
+
     for (i = 0; i < module->ndaemons; i++) {
         d = &module->daemons[i];
-        daemon_pid = init_daemon(module, d);
-        if (daemon_pid == -1)
+
+        /* check flags */
+        if ((d->flags & LEADER) != 0) {
+            if (i == 0) {
+                expect_setpgrp = true;
+                if ((d->flags & SETPGRP) == 0)
+                    err(EINVAL, "%s: %s: daemon flag LEADER set without SETPGRP for daemon %s in module %s", getprogname(), __func__, daemon->name, module->module_name);
+            } else
+                err(EINVAL, "%s: %s: daemon flag LEADER set on daemon %s at non-zero index in module %s", getprogname(), __func__, daemon->name, module->module_name);
+        } else if (((d->flags & SETPGRP) != 0) && !expect_setpgrp)
+            err(EINVAL, "%s: %s: daemon flag SETPGRP set on daemon %s without specifying a pgrp leader in module %s", getprogname(), __func__, daemon->name, module->module_name);
+        else if (((d->flags & SETPGRP) == 0) && expect_setpgrp)
+            err(EINVAL, "%s: %s: daemon flag SETPGRP not set on daemon %s but pgrp leader set in module %s", getprogname(), __func__, daemon->name, module->module_name);
+        else if ((d->flags & ON_DEMAND) != 0)
+            continue; 
+
+        error = init_daemon(module, d);
+        if (error == -1)
             return (-1);
     }
+
     if (module->init->complete != NULL)
         module->init->complete();
 
