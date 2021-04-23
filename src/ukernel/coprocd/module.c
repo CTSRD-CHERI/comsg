@@ -127,7 +127,7 @@ kill_and_reap_module(struct ukernel_module *m, struct ukernel_daemon *d)
     struct ukernel_daemon *kd;
     int i;
     int status;
-    int ndaemons, nkilled;
+    int nkilled;
     pid_t killed;
     
     nkilled = kill_module(m, d);
@@ -137,7 +137,7 @@ kill_and_reap_module(struct ukernel_module *m, struct ukernel_daemon *d)
         i = 1;
     else if (nkilled == 0)
         return;
-    for (; i < ndaemons; i++) {
+    for (; i < m->ndaemons; i++) {
         kd = &m->daemons[i];
         killed = waitpid(kd->pid, &status, (WNOHANG | WEXITED));
         if (killed > 0) {
@@ -150,8 +150,10 @@ kill_and_reap_module(struct ukernel_module *m, struct ukernel_daemon *d)
             if (kd != d)
                 kd->status = DIED;
             continue; 
-        } else if (killed == -1)
-            err(errno, "%s: error in waitpid", __func__);
+        } else if (killed == -1) {
+            if (errno != EINVAL) //already reaped
+                err(errno, "%s: error in waitpid", __func__);
+        }
     }
 }
 
