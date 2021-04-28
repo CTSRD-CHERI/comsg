@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,31 +28,30 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_H
-#define _COSERVICE_H
+#ifndef _COCALL_FUNCTION_H
+#define _COCALL_FUNCTION_H
 
-#include <cheri/cherireg.h>
-#include <stdatomic.h>
-#include <sys/cdefs.h>
+#include <sys/queue.h>
 
-#define COSERVICE_CODISCOVER_PERMS (-1)
-#define COSERVICE_PROVIDE_PERMS (-1)
-#define COSERVICE_MAX_WORKERS (128)
+struct _scb_entry {
+	SLIST_ENTRY(_scb_entry) entries;
+	void *scb;
+};
 
-typedef struct _coservice {
-	char *name;
-	void **worker_scbs;
-	_Atomic int next_worker;
-} coservice_t;
+SLIST_HEAD(scb_list, _scb_entry);
 
-/* Wrapper functions should marshall arguments */
-/* Wrapper can return a value directly, or a status code */
-/* */
+#define DECL_COCALL(name) \
+	extern struct scb_list name##_scb_list;\
+	extern thread_local struct _scb_entry *cur_##name_scb;
 
-__BEGIN_DECLS
+#define CUR_SCB_ENTRY(name) (cur_##name_scb)
+#define CUR_SCB(name) (cur_##name_scb->scb)
+#define SCB_LIST(name) (&##name_scb_list)
 
-void *get_coservice_scb(coservice_t *);
+/* TODO-PBB: address thread safety issues */
+#define FIRST_SCB_ENTRY(name) SLIST_FIRST(SCB_LIST(name))
+#define NEXT_SCB_ENTRY(name) SLIST_NEXT(CUR_SCB(name), entries)
+#define ADD_SCB_ENTRY(name, scb_entry) SLIST_INSERT_HEAD(SCB_LIST(name), scb_entry, entries)
 
-__END_DECLS
 
-#endif //!defined(_COSERVICE_H)
+#endif //!defined(_COCALL_FUNCTION_H)

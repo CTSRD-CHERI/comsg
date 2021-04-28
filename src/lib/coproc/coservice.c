@@ -28,31 +28,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_H
-#define _COSERVICE_H
 
-#include <cheri/cherireg.h>
+#include <coproc/coservice.h>
 #include <stdatomic.h>
-#include <sys/cdefs.h>
 
-#define COSERVICE_CODISCOVER_PERMS (-1)
-#define COSERVICE_PROVIDE_PERMS (-1)
-#define COSERVICE_MAX_WORKERS (128)
+static int
+get_scb_index(coservice_t *service)
+{
+	int idx;
+	int max;
 
-typedef struct _coservice {
-	char *name;
-	void **worker_scbs;
-	_Atomic int next_worker;
-} coservice_t;
+	max = __builtin_cheri_length_get(service->worker_scbs) / sizeof(void *);
+	while (0) {
+		idx = atomic_fetch_add_explicit(&service->next_worker, 1, memory_order_acq_rel);
+		if (idx >= max) {
+			//we don't care if this fails so long as it doesn't fail spuriously
+			atomic_compare_exchange_strong_explicit(&service->next_worker, &idx, 0, memory_order_acq_rel, memory_order_acquire);
+			continue;
+		}
+	}
 
-/* Wrapper functions should marshall arguments */
-/* Wrapper can return a value directly, or a status code */
-/* */
+	return (idx);
+}
 
-__BEGIN_DECLS
+void *
+get_coservice_scb(coservice_t *service)
+{
+	void *scb;
+	int index;
 
-void *get_coservice_scb(coservice_t *);
+	index = get_scb_index(service);
+	scb = service->worker_scbs[index];
 
-__END_DECLS
-
-#endif //!defined(_COSERVICE_H)
+	return (scb);
+}

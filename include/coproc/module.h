@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,31 +28,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_H
-#define _COSERVICE_H
+#ifndef _COPROC_MODULE_H
+#define _COPROC_MODULE_H
 
-#include <cheri/cherireg.h>
-#include <stdatomic.h>
-#include <sys/cdefs.h>
+struct _provider {
+	pid_t pid;
+	char *exec_path;
+	long signature; /* exec signature taken at first runtime */
+};
 
-#define COSERVICE_CODISCOVER_PERMS (-1)
-#define COSERVICE_PROVIDE_PERMS (-1)
-#define COSERVICE_MAX_WORKERS (128)
+typedef struct _module {
+	struct _provider *provider;
+	coservice_t *services;
+	int nservices;
+} comodule_t;
 
-typedef struct _coservice {
-	char *name;
-	void **worker_scbs;
-	_Atomic int next_worker;
-} coservice_t;
+coservice_t *get_coservice(comodule_t *, char *)
 
-/* Wrapper functions should marshall arguments */
-/* Wrapper can return a value directly, or a status code */
+void add_dependency(char *, char *);
+
 /* */
+#define coproc_deps_register __attribute__((constructor(103)))
+#define coproc_module_initializer __attribute__((constructor(102)))
+#define coproc_deps_initalizer __attribute__((constructor(101)))
 
-__BEGIN_DECLS
+#define	DECLARE_DEPENDENCY(m_name, s_name)\
+	static coproc_module_initializer void\
+	register_dependency(void)\
+	{\
+		add_dependency(m_name, s_name);\
+	}
 
-void *get_coservice_scb(coservice_t *);
-
-__END_DECLS
-
-#endif //!defined(_COSERVICE_H)
+#endif //!defined(_COPROC_MODULE_H)
