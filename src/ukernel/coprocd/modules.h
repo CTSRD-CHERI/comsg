@@ -41,7 +41,7 @@
 #include "modules/core.h"
 
 /* 
- * then add it to the modules macro here,
+ * then add it to the DECLARE_MODULES macro here,
  */
 #define DECLARE_MODULES \
     MODULE(core, CORE, N_CORE_DAEMONS, CORE_FLAGS, CORE_INIT, CORE_FINI, FOR_EACH_CORE_DAEMON, CORE_DAEMON)

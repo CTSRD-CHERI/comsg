@@ -43,6 +43,7 @@
 #include <comsg/ukern_calls.h>
 
 #include <err.h>
+#include <sys/auxv.h>
 #include <sys/errno.h>
 
 
@@ -61,11 +62,30 @@ init_service(coservice_provision_t *serv, void *func, void *valid)
 	return;
 }
 
+static void
+process_capvec(void)
+{
+	int error;
+	struct coserviced_capvec *capvec;
+	void **capv;
+
+	//todo-pbb: add checks to ensure these are valid
+	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+	capvec = (struct coserviced_capvec *)capv;
+	set_ukern_target(COCALL_COPROC_INIT, capvec->coproc_init);
+	set_ukern_target(COCALL_COINSERT, capvec->coinsert);
+	set_ukern_target(COCALL_COSELECT, capvec->coselect);
+	global_ns = capvec->global_ns;
+}
+
 void 
 coserviced_startup(void)
 {
 	void *codiscover_scb;
 	coservice_t *coservice_cap;
+
+	//install scb and global ns capabilities
+	process_capvec();
 	//init own services
 	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args);
 	init_service(&coprovide_serv, provide_coservice, validate_coprovide_args);

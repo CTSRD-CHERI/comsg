@@ -61,4 +61,10 @@ int validate_coinsert_args(coinsert_args_t *cocall_args);
 //TODO-PBB: revisit
 #define NSD_NWORKERS 12
 
+/* Must match the capv coprocd provides exactly */
+struct nsd_capvec {
+	void *coproc_init;
+	void *coproc_init_done;
+};
+
 #endif //!defined(_NSD_H)

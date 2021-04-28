@@ -55,8 +55,8 @@ size_t nbuckets = 1;
 
 static const int nworkers = 16;
 
-static 
-void usage(void)
+static void
+usage(void)
 {
 	//todo
 	//should be called with lookup string
@@ -64,11 +64,9 @@ void usage(void)
 	exit(0);
 }
 
-
 int main(int argc, char *const argv[])
 {
 	int opt, error;
-	void *init_cap;
 	
 	is_ukernel = true;
 
@@ -79,16 +77,6 @@ int main(int argc, char *const argv[])
 			usage();
 			break;
 		}
-	}
-	if(argc >= 2) {
-		error = colookup(argv[argc-1], &init_cap);
-		if(error)
-			err(errno, "main: colookup of init %s failed", argv[argc-1]);
-		set_ukern_target(COCALL_COPROC_INIT, init_cap);
-	}
-	else {
-		printf("Missing lookup string for init\n");
-		usage();
 	}
 	ccmalloc_init(buckets, nbuckets);
 	coserviced_startup();

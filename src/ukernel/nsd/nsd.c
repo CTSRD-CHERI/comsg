@@ -98,21 +98,9 @@ int main(int argc, char *const argv[])
 			break;
 		}
 	}
-	if(argc >= 2) {
-		lookup_string = strdup(argv[argc - 1]);
-		error = colookup(lookup_string, &init_cap);
-		if(error)
-			err(errno, "main: colookup of init %s failed", lookup_string);
-		set_ukern_target(COCALL_COPROC_INIT, init_cap);
-	} else {
-		printf("Missing lookup string for init\n");
-		usage();
-	}
 	ccmalloc_init(buckets, nbuckets);
 	//we can dance if we want to
 	global_ns = new_namespace("coproc", GLOBAL, NULL);
-	
-	
 	init_services();
 
 	for (int i = 0; i < coinsert_serv.function_map->nworkers; i++)

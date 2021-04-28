@@ -46,8 +46,17 @@ struct ukernel_module;
 //and contents of module_from_daemon() to match.
 #define MAX_MODULE_DAEMONS (12) 
 
-//Slow cocall provided bootstrapper. May vanish soon.
+/* 
+ * Cocall provided bootstrapper. May vanish soon. 
+ * Each daemon may have two: "setup", and "done", which
+ * commence startup and signal its completion respectively.
+ * Setup usage is expected to be uncommon, with the recommended
+ * pattern being capvec + done, with prior dependencies marked
+ * synchronous.
+ */
 typedef void (*daemon_init_func)(cocall_args_t *, void *);
+/* Puts module/daemon specific caps into supplied array */
+typedef void (*daemon_capv_func)(void **);
 /* 
  * Performs actions required for bootstrappers to work.
  * Called on module start, clean_restart, or on_demand start
@@ -79,15 +88,18 @@ typedef enum {HCF, KILL, DIRTY_RESTART, CLEAN_RESTART, CONTINUE,} daemon_failure
 /*
  * daemon_flags contains information about the daemon coprocd should know
  *
- * SETPGRP   will not be in coprocd's process group
- * LEADER    Leader of the process group for a module of SETPGRP daemons.
- *           Only one daemon per module should set this flag, which should 
- *           be at index 0 in the array of daemons. If this is set, SETPGRP
- *           must also be set for all daemons in the module.
- * SETUID    is a setuid executable
+ * SETPGRP      will not be in coprocd's process group
+ * LEADER       Leader of the process group for a module of SETPGRP daemons.
+ *              Only one daemon per module should set this flag, which should 
+ *              be at index 0 in the array of daemons. If this is set, SETPGRP
+ *              must also be set for all daemons in the module.
+ * SETUID       is a setuid executable
+ * ON_DEMAND    daemon should not be started at module init
+ * SYNCHRONOUS  should wait until daemon state is CONTINUING or RUNNING before 
+ *              starting next daemon in the module
  */
-typedef enum {SETPGRP, LEADER, SETUID} daemon_flags;
-typedef enum {PENDING, STARTING, RUNNING, KILLED, DIED} daemon_status;
+typedef enum {SETPGRP, LEADER, SETUID, ON_DEMAND, SYNCHRONOUS} daemon_flags;
+typedef enum {PENDING, STARTING, CONTINUING, RUNNING, KILLED, DIED} daemon_status;
 typedef daemon_status module_status;
 
 
@@ -95,6 +107,8 @@ typedef daemon_status module_status;
 typedef struct {
     daemon_init_func setup;
     daemon_init_func done;
+    daemon_capv_func get_capv;
+    ssize_t n_caps; /* not including SCBs to setup and done */
 } daemon_setup_info;
 
 /* Contains dynamic information about this daemon's instantiated setup routines */

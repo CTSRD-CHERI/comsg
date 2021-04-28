@@ -49,9 +49,13 @@
 #include <unistd.h>
 
 static bool core_loaded = false;
+static bool launched_setpgrp = false;
 
 pid_t ukernel_sid = 0;
 struct ukernel_daemon *process_manager = NULL;
+
+static void init_core(void);
+static void kill_setpgrp_modules(void);
 
 static void
 init_core(void)
@@ -98,6 +102,20 @@ init_core(void)
     core_loaded = true;
 }
 
+static void
+kill_setpgrp_modules(void)
+{
+    struct ukernel_module *m;
+    int i;
+
+    for (i = 1; i < N_MODULES; i++) {
+        m = &modules[i];
+        if ((m->daemons[0].flags & SETPGRP) == 0)
+            continue;
+        kill_and_reap_module(m, NULL);
+    }
+}
+
 void 
 init_microkernel(void)
 {
@@ -115,12 +133,20 @@ init_microkernel(void)
 
     for (i = 1; i < N_MODULES; i++) {
         m = &modules[i];
+        if (m->type == ON_DEMAND)
+            continue;
         if (init_module(m) == -1) {
             if (m->type == CORE) {
-                err(errno, "failed to start core microkernel module %s", m->module_name);
+                warnc(errno, "failed to start core microkernel module %s", m->module_name);
+                if (launched_setpgrp)
+                    kill_setpgrp_modules();
+                kill(-getpid(), KILL);
+                exit(EX_SOFTWARE);
             } else
                 warn("failed to start microkernel module %s", m->module_name);
         }
+        if ((m->daemons[0].flags & SETPGRP) != 0)
+            launched_setpgrp = true;
     }
     
     clear_sigmask();

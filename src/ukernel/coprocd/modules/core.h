@@ -35,7 +35,6 @@
 
 #include <cocall/cocall_args.h>
 
-void ipcd_setup(cocall_args_t *, void *);
 void ipcd_setup_complete(cocall_args_t *, void *);
 
 void nsd_setup(cocall_args_t *, void *);

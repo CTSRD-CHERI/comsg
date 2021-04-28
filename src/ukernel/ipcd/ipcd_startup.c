@@ -49,6 +49,7 @@
 #include <assert.h>
 #include <cheri/cheric.h>
 #include <err.h>
+#include <sys/auxv.h>
 #include <sys/errno.h>
 
 static 
@@ -70,6 +71,23 @@ void init_slow_service(coservice_provision_t *serv, void *func, void *valid, con
 	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
 	if (serv->nsobj == NULL)
 		err(errno, "init_service: error inserting %s into global namespace", name);
+}
+
+static void
+process_capvec(void)
+{
+	int error;
+	struct ipcd_capvec *capvec;
+	void **capv;
+
+	//todo-pbb: add checks to ensure these are valid
+	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+	capvec = (struct ipcd_capvec *)capv;
+	set_ukern_target(COCALL_COPROC_INIT_DONE, capvec->coproc_init_done);
+	set_ukern_target(COCALL_CODISCOVER, capvec->codiscover);
+	set_ukern_target(COCALL_COINSERT, capvec->coinsert);
+	set_ukern_target(COCALL_COSELECT, capvec->coselect);
+	global_ns = capvec->global_ns;
 }
 
 void ipcd_startup(void)

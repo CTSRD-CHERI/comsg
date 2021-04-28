@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,26 +28,32 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICED_H
-#define _COSERVICED_H
+#ifndef _LIBCOCALL_CAPVEC_H
+#define _LIBCOCALL_CAPVEC_H
 
-#ifndef COPROC_UKERN
-#define COPROC_UKERN 1
-#endif
+#include <stdatomic.h>
+#include <stddef.h>
 
-#include <cocall/worker_map.h>
-
-extern coservice_provision_t codiscover_serv, coprovide_serv;
-
-/* Must match the capv coprocd provides exactly */
-struct coserviced_capvec {
-	void *coproc_init;
-	namespace_t *global_ns;
-	void *coinsert;
-	void *coselect;
+struct coexecve_capvec {
+	void **capv;
+	ssize_t length;
+	_Atomic ssize_t index;
 };
 
-//TODO-PBB: Revisit
-#define COSERVICED_NWORKERS 12
+struct coexecve_capvec *capvec_allocate(ssize_t);
+void capvec_free(struct coexecve_capvec *);
 
-#endif
+void capvec_append(struct coexecve_capvec *, void *);
+void **capvec_finalize(struct coexecve_capvec *);
+
+inline ssize_t capvec_getmaxlen(struct coexecve_capvec *capvec)
+{
+	return (capvec->length);
+}
+
+inline ssize_t capvec_getcurlen(struct coexecve_capvec *capvec);
+{
+	return (atomic_load_explicit(&capvec->index, memory_order_acquire));
+}
+
+#endif //!defined(_LIBCOCALL_CAPVEC_H)

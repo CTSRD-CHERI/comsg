@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,26 +28,68 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICED_H
-#define _COSERVICED_H
+#include <cocall/capvec.h>
 
-#ifndef COPROC_UKERN
-#define COPROC_UKERN 1
-#endif
+#include <assert.h>
+#include <stdatomic.h>
+#include <stddef.h>
+#include <stdlib.h>
 
-#include <cocall/worker_map.h>
+struct coexecve_capvec *
+capvec_allocate(ssize_t maxlen)
+{
+	struct coexecve_capvec *capvec;
 
-extern coservice_provision_t codiscover_serv, coprovide_serv;
+	assert(maxlen > 0);
 
-/* Must match the capv coprocd provides exactly */
-struct coserviced_capvec {
-	void *coproc_init;
-	namespace_t *global_ns;
-	void *coinsert;
-	void *coselect;
-};
+	capvec = calloc(1, sizeof(struct coexecve_capvec));
+	capvec->capv = calloc(maxlen + 1, sizeof(void **));
 
-//TODO-PBB: Revisit
-#define COSERVICED_NWORKERS 12
+	capvec->length = maxlen + 1;
+	atomic_store_explicit(&capvec->index, 0, memory_order_release);
 
-#endif
+	return (capvec);
+}
+
+void
+capvec_append(struct coexecve_capvec *capvec, void *cap)
+{
+	ssize_t i, l;
+	
+	i = atomic_load_explicit(&capvec->index, memory_order_acquire);
+	l = capvec->length;
+	
+	assert(i != -1);
+	assert(i + 1 < l);
+
+	assert(atomic_compare_exchange_strong_explicit(&capvec->index, &i, i + 1, memory_order_acq_rel, memory_order_acquire));
+
+	capvec->capv[i] = cap; 
+}
+
+void
+capvec_free(struct coexecve_capvec *capvec)
+{
+	free(capvec);
+}
+
+void **
+capvec_finalize(struct coexecve_capvec *capvec)
+{
+	void **capv;
+	ssize_t i, l;
+
+	i = atomic_load_explicit(&capvec->index, memory_order_acquire);
+	l = capvec->length;
+
+	assert(i != -1);
+	assert(i + 1 < l);
+
+	atomic_store_explicit(&capvec->index, -1, memory_order_release);
+
+	capv = capvec->capv;
+	capv[i] = NULL;
+	capv = cheri_setbounds(capv, capv + i + 1);
+
+	return (capv);
+}

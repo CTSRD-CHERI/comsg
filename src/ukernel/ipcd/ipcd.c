@@ -51,8 +51,6 @@ static
 void usage(void)
 {
 	//todo
-	//should be called with lookup string
-	//e.g "coserviced lookup_string"
 	exit(0);
 }
 
@@ -75,15 +73,6 @@ int main(int argc, char *const argv[])
 			usage();
 			break;
 		}
-	}
-	if(argc >= 2) {
-		error = colookup(argv[argc-1], &init_cap);
-		if(error)
-			err(error, "main: colookup of init %s failed", argv[argc-1]);
-		set_ukern_target(COCALL_COPROC_INIT, init_cap);
-	} else {
-		printf("Missing lookup string for init\n");
-		usage();
 	}
 	ccmalloc_init(buckets, nbuckets);
 	ipcd_startup();

@@ -47,6 +47,7 @@
 #include <coproc/namespace_object.h>
 
 #include <err.h>
+#include <sys/auxv.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
 #include <sys/time.h>
@@ -67,21 +68,24 @@ void startup_dance(void)
 	void **coinsert_scbs, **coselect_scbs;
 	nsobject_t *coprovide_nsobj;
 	namespace_t *unsealed_global_ns;
-	
+
 	unsealed_global_ns  = get_global_namespace();
-	
+
 	global_ns = seal_ns(unsealed_global_ns);
-	
+
 	coinsert_scbs = get_worker_scbs(coinsert_serv.function_map);
 	coselect_scbs = get_worker_scbs(coselect_serv.function_map);
-	
+
+	/* codiscover no longer returned from coproc_init */
+	/* this wrecks load balancing by putting all main threads on the first worker */
+
 	//connect to process daemon and do the startup dance (we can dance if we want to)
 	if (coproc_init(global_ns, coinsert_scbs[0], coselect_scbs[0], NULL) == NULL)
 		err(errno, "startup_dance: cocall failed");
 
 	/* Once coprovide has been inserted into the global namespace, we can make progress */
 	while(lookup_coservice(U_COPROVIDE, global_ns) == NULL)
-		sched_yield();
+		sched_yield(); /* would microsleep be better? or proper event delivery? */
 
 	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, global_ns);
 	discover_ukern_func(coprovide_nsobj, COCALL_COPROVIDE);
@@ -104,6 +108,20 @@ init_service(coservice_provision_t *service_prov, const char * name,  void *func
 {
 	service_prov->function_map = spawn_workers(func, validate, NSD_NWORKERS);
 	service_prov->nsobj = new_nsobject(name, RESERVATION, global_ns);
+}
+
+static void
+process_capvec(void)
+{
+	int error;
+	struct nsd_capvec *capvec;
+	void **capv;
+
+	//todo-pbb: add checks to ensure these are valid
+	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+	capvec = (struct nsd_capvec *)capv;
+	set_ukern_target(COCALL_COPROC_INIT, capvec->coproc_init);
+	set_ukern_target(COCALL_COPROC_INIT_DONE, capvec->coproc_init_done);
 }
 
 void init_services(void)

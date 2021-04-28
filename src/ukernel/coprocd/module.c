@@ -77,6 +77,15 @@ init_module(struct ukernel_module *module)
         error = init_daemon(module, d);
         if (error == -1)
             return (-1);
+        if ((d->flags & SYNCHRONOUS) != 0) {
+            while (d->status != CONTINUING && d->status != RUNNING) {
+                if (d->status != STARTING) {
+                    warn("%d status is not STARTING, CONTINUING, or RUNNING", d->name);
+                    return (-1);
+                }
+                sched_yield();
+            }
+        }
     }
 
     if (module->init->complete != NULL)

@@ -34,6 +34,7 @@
 #include "launch.h"
 #include "util.h"
 
+#include <cocall/capvec.h>
 #include <cocall/worker_map.h>
 #include <coproc/utils.h>
 
@@ -161,21 +162,19 @@ spawn_daemon_initializer(struct ukernel_daemon *daemon)
     } else 
         setup_state = daemon->setup_state;
 
-    init_lookup = calloc(1, NS_NAME_LEN);
-    rand_string(init_lookup, NS_NAME_LEN);
-
     //TODO-PBB: this, and the worker spawning functions in libcocall
     //need a major cleanup, esp. WRT failure modes.
-    init_map = spawn_slow_worker(init_lookup, setup_info->setup, NULL);
-    setup_state->setup_worker = &init_map->workers[0];
-    free(init_map);
-
-    if (setup_info->done == NULL)
-        return (0);
-
-    init_map = spawn_slow_worker(NULL, setup_info->done, NULL);
-    setup_state->done_worker = &init_map->workers[0];
-    free(init_map);
+    if (setup_info->setup != NULL) {
+        init_map = spawn_slow_worker(NULL, setup_info->setup, NULL);
+        setup_state->setup_worker = &init_map->workers[0];
+        free(init_map);
+    }
+    
+    if (setup_info->done != NULL) {
+        init_map = spawn_slow_worker(NULL, setup_info->done, NULL);
+        setup_state->done_worker = &init_map->workers[0];
+        free(init_map);
+    }
 
     return (0);
 }
@@ -184,16 +183,33 @@ static void
 set_daemon_args(char **argv, struct ukernel_module *m, struct ukernel_daemon *d)
 {
     argv[0] = strdup(d->exec_path);
-    argv[1] = strdup(d->setup_state->setup_worker->name); /* Will go away with coexecvec */
-
-    if ((d->flags & (SETPGRP)) && (d->flags & (~LEADER))) {
-        assert((m->daemons[0].flags & LEADER ) && (m->daemons[0].flags & SETPGRP));
-        argv[2] = pid_to_str(m->daemons[0].pid);
-        argv[3] = NULL;
-    } else {
+    if (((d->flags & SETPGRP) != 0) && ((d->flags & LEADER) == 0)) {
+        argv[1] = m->daemons[0].pid; /* module pgrp leader */
         argv[2] = NULL;
-        argv[3] = NULL;
-    }
+    } else
+        argv[1] = NULL;
+}
+
+static void **
+build_daemon_capvec(struct ukernel_module *m, struct ukernel_daemon *d)
+{
+    void **capv;
+    struct coexecve_capvec *capvec;
+    ssize_t n_caps;
+
+    n_caps = d->setup_info->n_caps + 2; /* allocate space for setup and done too */
+    capvec = capvec_allocate(n_caps);
+
+    if (d->setup_state->setup_worker != NULL)
+        capvec_append(capvec, d->setup_state->setup_worker->scb_cap);
+    if (d->setup_state->done_worker != NULL)
+        capvec_append(capvec, d->setup_state->done_worker->scb_cap);
+    if (d->setup_info->get_capv != NULL)
+        d->setup_info->get_capv(capvec);
+    capv = capvec_finalize(capvec);
+    capvec_free(capvec);
+
+    return (capv);
 }
 
 static void
@@ -208,28 +224,32 @@ free_daemon_args(char **argv)
 static pid_t
 spawn_daemon_proc(struct ukernel_module *module, struct ukernel_daemon *daemon)
 {
-    char *daemon_args[4];
+    char *daemon_args[3];
+    void **capv;
     pid_t pid, daemon_pid;
     int status;
     int error;
 
     set_daemon_args(daemon_args, module, daemon);
+    capv = build_daemon_capvec(module, daemon);
     daemon_pid = rfork(RFSPAWN);
     if (daemon_pid == 0) {
-        error = coexecve(process_manager->pid, daemon_args[0], daemon_args, environ);
+        error = coexecvec(process_manager->pid, daemon_args[0], daemon_args, environ, capv);
         _exit(EX_UNAVAILABLE); /* Should not reach unless error */
     } else if (daemon_pid == -1) {
         warn("%s: rfork failed", __func__);
         return (-1);
     }
     free_daemon_args(daemon_args);
+    free(capv);
 
+    /* check that the daemon actually started */
     pid = waitpid(daemon_pid, &status, (WNOHANG | WEXITED));
     if (pid > 0) {
         assert(WIFEXITED(status));
         errno = ECHILD;
         return (-1);
-    } else if (pid == -1) 
+    } else if (pid == -1)
         return (-1);
 
     return (daemon_pid);

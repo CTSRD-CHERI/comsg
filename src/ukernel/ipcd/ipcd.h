@@ -42,4 +42,13 @@ extern coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_ser
 //TODO-PBB: Revisit
 #define IPCD_NWORKERS 12
 
+/* Must match the capv coprocd provides exactly */
+struct ipcd_capvec {
+	void *coproc_init_done;
+	namespace_t *global_ns;
+	void *codiscover;
+	void *coinsert;
+	void *coselect;
+};
+
 #endif //!defined(_IPCD_H)

@@ -62,3 +62,4 @@ build
 *.dat
 *.cvtrace
 *.core
+__pycache__

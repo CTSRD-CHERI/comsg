@@ -35,6 +35,7 @@
 #include <cocall/cocall_args.h>
 #include <coproc/utils.h>
 
+#include <assert.h>
 #include <err.h>
 #include <sys/errno.h>
 #include <stdatomic.h>
@@ -43,19 +44,19 @@
 #include <unistd.h>
 
 daemon_setup_info coprocd_init = { 
-	coproc_user_init, NULL 
+	coproc_user_init, NULL, NULL, 0
 };
 
 daemon_setup_info nsd_init = {
-	nsd_setup, nsd_setup_complete
+	nsd_setup, nsd_setup_complete, NULL, 0
 };
 
 daemon_setup_info coserviced_init = {
-	coserviced_setup, NULL
+	coserviced_setup, NULL, get_coserviced_capv, 3
 };
 
 daemon_setup_info ipcd_init = {
-	ipcd_setup, ipcd_setup_complete
+	NULL, ipcd_setup_complete, get_ipcd_capv, 4
 };
 
 module_setup_info core_init = {
@@ -63,15 +64,12 @@ module_setup_info core_init = {
 };
 
 /* Provided by coservice daemon*/
-static _Atomic(void *)codiscover_scb = NULL;
+static _Atomic(void *) codiscover_scb = NULL;
 
 /* Provided by namespace daemon */
 static _Atomic(namespace_t *) global_namespace = NULL;
 static void *coinsert_scb = NULL;
 static void *coselect_scb = NULL;
-
-static void *done_worker_scb = NULL;
-static void *done2_worker_scb = NULL;
 
 static _Atomic bool coproc_inited = false;
 static _Atomic bool ukern_inited = false;
@@ -82,17 +80,18 @@ static _Atomic bool ukern_inited = false;
 
 struct ukernel_daemon *nsd, *coserviced, *ipcd;
 
-void core_init_start(struct ukernel_module *m)
+void
+core_init_start(struct ukernel_module *m)
 {
 	coserviced = &m->daemons[1];
 	nsd = &m->daemons[2];
 	ipcd = &m->daemons[3];
 }
 
-void core_init_complete(void)
+void
+core_init_complete(void)
 {
-	done_worker_scb = nsd->setup_state->done_worker->scb_cap;
-	done2_worker_scb = ipcd->setup_state->done_worker->scb_cap;
+	return;
 }
 
 /* unused */
@@ -109,131 +108,43 @@ core_fini(void)
 	atomic_store_explicit(&coproc_inited, false, memory_order_release);
 }
 
-//TODO-PBB: apply memory ordering that gives something sensible
-static int
-authenticate_dance(cocall_args_t *cocall_args, int selector)
-{
-	pid_t caller_pid, daemon_pid;
-	int error;
-
-	error = cogetpid(&caller_pid);
-	switch (selector) {
-		case NSD_SELECTOR:
-			daemon_pid = nsd->pid;
-			break;
-		case COSERVICED_SELECTOR:
-			daemon_pid = coserviced->pid;
-			break;
-		case IPCD_SELECTOR:
-			daemon_pid = ipcd->pid;
-			break;
-	}
-	
-	if (daemon_pid == 0) 
-		return (-1);
-	else if (caller_pid != daemon_pid)
-		return (0);
-	else
-		return (1);
-}
-
-void 
+void
 nsd_setup(cocall_args_t *cocall_args, void *token)
 {
-	int error;
-
-	error = authenticate_dance(cocall_args, NSD_SELECTOR);
-	if(error == 0)
-		COCALL_ERR(cocall_args, EPERM);
-	else if (error == -1)
-		COCALL_ERR(cocall_args, EAGAIN);
-	
+	UNUSED(token);
 	/* clear old codiscover; whether valid or not it refers to the old universe */
 	codiscover_scb = NULL;
 	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) and lookup nsobj (coselect) */
 	coinsert_scb = cocall_args->coinsert;
 	coselect_scb = cocall_args->coselect;
 	atomic_store_explicit(&global_namespace, cocall_args->ns_cap, memory_order_release);
+
+	nsd->status = CONTINUING;
 	
-	/* Wait until coserviced is (re) ininitalized */
-	/* You give me: scb capabilities for codiscover and coprovide */
-	while((cocall_args->codiscover = atomic_load_explicit(&codiscover_scb, memory_order_acquire)) == NULL) {
-		/* TODO-PBB: should consider returning and having two calls here instead */
-		// this implementation may not do what we want (priority inversion?)
-		sched_yield();
-	}
-	cocall_args->done_scb = done_worker_scb;
 	COCALL_RETURN(cocall_args, 0);
 }
 
-
-void 
+void
 coserviced_setup(cocall_args_t *cocall_args, void *token)
 {
-	int error;
-
-	error = authenticate_dance(cocall_args, COSERVICED_SELECTOR);
-	if(error == 0)
-		COCALL_ERR(cocall_args, EPERM);
-	else if (error == -1)
-		COCALL_ERR(cocall_args, EAGAIN);
-
+	UNUSED(token);
 	while((cocall_args->ns_cap = atomic_load_explicit(&global_namespace, memory_order_acquire)) == NULL) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
 		// this implementation may not do what we want (priority inversion?)
 		sched_yield();
 	}
 	/* 
-	 * You give me: a capability for the global namespace, and scbs for coinsert and coselect 
 	 * I give you: scb capability for codiscover 
 	 */
-	cocall_args->coinsert = coinsert_scb;
-	cocall_args->coselect = coselect_scb;
 	atomic_store_explicit(&codiscover_scb, cocall_args->codiscover, memory_order_release);
 
 	COCALL_RETURN(cocall_args, 0);
 }
 
-void 
-ipcd_setup(cocall_args_t *cocall_args, void *token)
-{
-	int error;
-
-	error = authenticate_dance(cocall_args, IPCD_SELECTOR);
-	if(error == 0)
-		COCALL_ERR(cocall_args, EPERM);
-	else if (error == -1)
-		COCALL_ERR(cocall_args, EAGAIN);
-
-	while((atomic_load_explicit(&coproc_inited, memory_order_acquire) == false)) {
-		/* TODO-PBB: should consider returning and having two calls here instead */
-		// this implementation may not do what we want (priority inversion?)
-		sched_yield();
-	}
-	/* 
-	 * You give me: a capability for the global namespace, scb capabilities for codiscover, coinsert and coselect
-	 */ 
-	cocall_args->ns_cap = global_namespace;
-	cocall_args->codiscover = codiscover_scb;
-	cocall_args->coinsert = coinsert_scb;
-	cocall_args->coselect = coselect_scb;
-
-	cocall_args->done_scb = done2_worker_scb;
-	
-	COCALL_RETURN(cocall_args, 0);
-}
-
-void 
+void
 nsd_setup_complete(cocall_args_t *cocall_args, void *token)
 {
-	int error;
-
-	error = authenticate_dance(cocall_args, NSD_SELECTOR);
-	if(error == 0)
-		COCALL_ERR(cocall_args, EPERM);
-	else if (error == -1)
-		COCALL_ERR(cocall_args, EAGAIN);
-	
+	UNUSED(token);
 	if (atomic_load_explicit(&coproc_inited, memory_order_acquire) == true)
 		COCALL_ERR(cocall_args, EAGAIN);
 
@@ -245,17 +156,10 @@ nsd_setup_complete(cocall_args_t *cocall_args, void *token)
 	COCALL_RETURN(cocall_args, 0);
 }
 
-void 
+void
 ipcd_setup_complete(cocall_args_t *cocall_args, void *token)
 {
-	int error;
-
-	error = authenticate_dance(cocall_args, IPCD_SELECTOR);
-	if(error == 0)
-		COCALL_ERR(cocall_args, EPERM);
-	else if (error == -1)
-		COCALL_ERR(cocall_args, EAGAIN);
-	
+	UNUSED(token);
 	if (atomic_load_explicit(&ukern_inited, memory_order_acquire) == true)
 		COCALL_ERR(cocall_args, EAGAIN);
 
@@ -266,7 +170,7 @@ ipcd_setup_complete(cocall_args_t *cocall_args, void *token)
 	COCALL_RETURN(cocall_args, 0);
 }
 
-void 
+void
 coproc_user_init(cocall_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
@@ -281,4 +185,31 @@ coproc_user_init(cocall_args_t *cocall_args, void *token)
 	cocall_args->coselect = coselect_scb;
 	
 	COCALL_RETURN(cocall_args, 0);
+}
+
+void
+get_coserviced_capv(struct coexecve_capvec *capvec)
+{
+	assert(global_namespace != NULL);
+	assert(coinsert_scb != NULL);
+	assert(coselect_scb != NULL);
+
+	capvec_append(capvec, global_namespace);
+	capvec_append(capvec, coinsert_scb);
+	capvec_append(capvec, coselect_scb);
+}
+
+void
+get_ipcd_capv(struct coexecve_capvec *capvec)
+{
+	assert(coproc_inited);
+	assert(global_namespace != NULL);
+	assert(codiscover_scb != NULL);
+	assert(coinsert_scb != NULL);
+	assert(coselect_scb != NULL);
+
+	capvec_append(capvec, global_namespace);
+	capvec_append(capvec, codiscover_scb);
+	capvec_append(capvec, coinsert_scb);
+	capvec_append(capvec, coselect_scb);
 }
