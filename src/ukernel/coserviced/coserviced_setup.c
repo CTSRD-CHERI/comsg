@@ -86,15 +86,14 @@ coserviced_startup(void)
 
 	//install scb and global ns capabilities
 	process_capvec();
+	if (global_ns == NULL)
+		err(EINVAL, "coserviced_startup: incorrect capvec");
 	//init own services
 	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args);
 	init_service(&coprovide_serv, provide_coservice, validate_coprovide_args);
 	
 	codiscover_scb = get_coservice_scb(codiscover_serv.service);
 	//connect to process daemon and do the startup dance (we can dance if we want to)
-	global_ns = coproc_init(NULL, NULL, NULL, codiscover_scb);
-	if (global_ns == NULL)
-		err(errno, "coserviced_startup: cocall failed");
 
 	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, create_coservice_handle(codiscover_serv.service), global_ns);
 	if (codiscover_serv.nsobj == NULL)
@@ -102,4 +101,6 @@ coserviced_startup(void)
 	coprovide_serv.nsobj = coinsert(U_COPROVIDE, COSERVICE, create_coservice_handle(coprovide_serv.service), global_ns);
 	if (coprovide_serv.nsobj == NULL)
 		err(errno, "coserviced_startup: error coinserting coprovide into global namespace");
+
+	coproc_init(NULL, NULL, NULL, codiscover_scb);
 }

@@ -39,44 +39,9 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 
-static struct object_type coservice_obj;
-
-static const struct object_type *global_object_types[] = {&coservice_obj};
-static const int required_otypes = 1;
-
-__attribute__ ((constructor)) static 
-void setup_otypes(void)
-{
-    void *sealroot;
-    size_t len;
-
-    len = sizeof(sealroot);
-    if (sysctlbyname("security.cheri.sealcap", &sealroot, &len,
-        NULL, 0) < 0) {
-        err(errno, "setup_otypes: error in sysarch - could not get sealroot");
-    }
-    sealroot = cheri_incoffset(sealroot, 64);
-    sealroot = make_otypes(sealroot, required_otypes, global_object_types);
-}
-
-coservice_t *seal_coservice(coservice_t *service_handle)
-{
-	if (cheri_getsealed(service_handle))
-		return (service_handle);
-	return (cheri_seal(service_handle, coservice_obj.sc));
-}
-
-coservice_t *unseal_coservice(coservice_t *service_handle)
-{
-	if (!cheri_getsealed(service_handle))
-		return (service_handle);
-	return (cheri_unseal(service_handle, coservice_obj.usc));
-}
-
 coservice_t *create_coservice_handle(coservice_t *service)
 {
-	if (cheri_getsealed(service))
-		return (service);
 	service = cheri_clearperm(service, CHERI_PERM_GLOBAL);
-	return (seal_coservice(service));
+	service = cheri_setboundsexact(service, sizeof(coservice_t));
+	return ((service));
 }

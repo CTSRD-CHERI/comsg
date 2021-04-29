@@ -30,6 +30,8 @@
  */
 #include <cocall/capvec.h>
 
+#include <cheri/cheric.h>
+
 #include <assert.h>
 #include <stdatomic.h>
 #include <stddef.h>
@@ -83,13 +85,14 @@ capvec_finalize(struct coexecve_capvec *capvec)
 	l = capvec->length;
 
 	assert(i != -1);
-	assert(i + 1 < l);
+	assert(i + 1 <= l);
 
 	atomic_store_explicit(&capvec->index, -1, memory_order_release);
 
 	capv = capvec->capv;
 	capv[i] = NULL;
-	capv = cheri_setbounds(capv, capv + i + 1);
+	l = sizeof(void *) * (i+1);
+	capv = cheri_setbounds(capv, l);
 
 	return (capv);
 }

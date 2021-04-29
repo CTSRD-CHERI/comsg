@@ -65,7 +65,9 @@ static
 void startup_dance(void)
 {
 	//init own services
+	void *codiscover_scb;
 	void **coinsert_scbs, **coselect_scbs;
+	coservice_t *codiscover_service;
 	nsobject_t *coprovide_nsobj;
 	namespace_t *unsealed_global_ns;
 
@@ -86,6 +88,9 @@ void startup_dance(void)
 	/* Once coprovide has been inserted into the global namespace, we can make progress */
 	while(lookup_coservice(U_COPROVIDE, global_ns) == NULL)
 		sched_yield(); /* would microsleep be better? or proper event delivery? */
+
+	codiscover_service = lookup_coservice(U_CODISCOVER, global_ns);
+	set_ukern_target(COCALL_CODISCOVER, get_coservice_scb(codiscover_service));
 
 	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, global_ns);
 	discover_ukern_func(coprovide_nsobj, COCALL_COPROVIDE);
@@ -126,6 +131,8 @@ process_capvec(void)
 
 void init_services(void)
 {
+	process_capvec();
+
 	init_service(&coinsert_serv, U_COINSERT, namespace_object_insert, validate_coinsert_args);
 	init_service(&coupdate_serv, U_COUPDATE, namespace_object_update, validate_coupdate_args);
 	init_service(&codelete_serv, U_CODELETE, namespace_object_delete, validate_codelete_args);

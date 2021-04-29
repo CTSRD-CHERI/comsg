@@ -44,6 +44,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -96,6 +97,14 @@ init_core(void)
         daemon_pid = init_daemon(core_module, d);
         if (daemon_pid == -1) 
             err(errno, "failed to start microkernel core daemon %s", d->name);
+        if ((d->flags & SYNCHRONOUS) != 0) {
+            while (d->status != CONTINUING && d->status != RUNNING) {
+                if (d->status != STARTING) {
+                    warn("%s status is not STARTING, CONTINUING, or RUNNING", d->name);
+                }
+                sched_yield();
+            }
+        }
     }
     core_module->init->complete();
 

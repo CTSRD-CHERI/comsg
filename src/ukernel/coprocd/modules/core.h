@@ -36,11 +36,13 @@
 #include <cocall/cocall_args.h>
 
 void ipcd_setup_complete(cocall_args_t *, void *);
+void get_ipcd_capv(struct coexecve_capvec *);
 
 void nsd_setup(cocall_args_t *, void *);
 void nsd_setup_complete(cocall_args_t *, void *);
 
 void coserviced_setup(cocall_args_t *, void *);
+void get_coserviced_capv(struct coexecve_capvec *);
 
 void coproc_user_init(cocall_args_t *, void *);
 
@@ -55,12 +57,12 @@ extern daemon_setup_info ipcd_init;
 extern module_setup_info core_init;
 
 #define CORE_DAEMON(NAME) \
-    DAEMON(NAME, "/usr/bin/" #NAME,  &NAME##_init, HCF, 0)
+    DAEMON(NAME, "/usr/bin/" #NAME,  &NAME##_init, HCF, SYNCHRONOUS)
 
 #define FOR_EACH_CORE_DAEMON(F) \
 	F(coprocd), \
-	F(coserviced), \
 	F(nsd), \
+	F(coserviced), \
 	F(ipcd), 
 
 #define CORE_FLAGS (0)

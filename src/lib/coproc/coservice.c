@@ -32,21 +32,22 @@
 #include <coproc/coservice.h>
 #include <stdatomic.h>
 
+#include <stddef.h>
+
 static int
 get_scb_index(coservice_t *service)
 {
 	int idx;
 	int max;
 
-	max = __builtin_cheri_length_get(service->worker_scbs) / sizeof(void *);
-	while (0) {
+	max = service->nworkers;
+	do {
 		idx = atomic_fetch_add_explicit(&service->next_worker, 1, memory_order_acq_rel);
 		if (idx >= max) {
-			//we don't care if this fails so long as it doesn't fail spuriously
-			atomic_compare_exchange_strong_explicit(&service->next_worker, &idx, 0, memory_order_acq_rel, memory_order_acquire);
+			atomic_store_explicit(&service->next_worker, 0, memory_order_release);
 			continue;
 		}
-	}
+	} while (0);
 
 	return (idx);
 }

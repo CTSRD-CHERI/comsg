@@ -138,6 +138,7 @@ start_sloaccept_worker(worker_args_t *thread_args)
     if (thread_args->scb_cap == NULL) {
         assert(pthread_peekjoin_np(thread_args->worker, NULL) == 0);
         pthread_mutex_unlock(&registration_mutex);
+        pthread_mutex_unlock(&worker_creation_mutex);
         return (false);
     }
     pthread_mutex_unlock(&registration_mutex);

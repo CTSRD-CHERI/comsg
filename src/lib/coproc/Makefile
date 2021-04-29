@@ -2,6 +2,7 @@ LIB := coproc
 
 SRCS :=	namespace.c		\
 	namespace_object.c		\
+	coservice.c		\
 	utils.c		
 
 SHLIB_MAJOR=	1

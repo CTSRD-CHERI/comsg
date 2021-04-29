@@ -80,7 +80,7 @@ init_module(struct ukernel_module *module)
         if ((d->flags & SYNCHRONOUS) != 0) {
             while (d->status != CONTINUING && d->status != RUNNING) {
                 if (d->status != STARTING) {
-                    warn("%d status is not STARTING, CONTINUING, or RUNNING", d->name);
+                    warn("%s status is not STARTING, CONTINUING, or RUNNING", d->name);
                     return (-1);
                 }
                 sched_yield();

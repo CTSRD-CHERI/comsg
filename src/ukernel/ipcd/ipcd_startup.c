@@ -95,11 +95,12 @@ void ipcd_startup(void)
 	nsobject_t *coprovide_nsobj;
 	void *coprovide_scb;
 
-	setup_copoll_notifiers();
-	
-	global_ns = coproc_init(NULL, NULL, NULL, NULL);
+	//install scbs and global ns capabilities
+	process_capvec();
 	if (global_ns == NULL)
 		err(errno, "ipcd_startup: cocall failed");
+
+	setup_copoll_notifiers();	
 
 	do {
 		coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, global_ns);

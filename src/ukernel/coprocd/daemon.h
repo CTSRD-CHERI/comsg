@@ -31,6 +31,7 @@
 #ifndef _UKERN_DAEMON_H
 #define _UKERN_DAEMON_H
 
+#include <cocall/capvec.h>
 #include <cocall/cocall_args.h>
 #include <cocall/worker.h>
 
@@ -56,7 +57,7 @@ struct ukernel_module;
  */
 typedef void (*daemon_init_func)(cocall_args_t *, void *);
 /* Puts module/daemon specific caps into supplied array */
-typedef void (*daemon_capv_func)(void **);
+typedef void (*daemon_capv_func)(struct coexecve_capvec *);
 /* 
  * Performs actions required for bootstrappers to work.
  * Called on module start, clean_restart, or on_demand start
@@ -74,7 +75,7 @@ typedef void (*module_fini_func)(void);
 
 /* Defines behaviour if startup fails. */
 typedef enum {CORE, PERIPHERAL} module_type;
-typedef enum {ON_DEMAND} module_flags;
+typedef enum {DEFERRED} module_flags;
 /*
  * daemon_failure_mode specifies preferred action if a daemon dies
  *

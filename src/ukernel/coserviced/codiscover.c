@@ -68,7 +68,6 @@ void discover_coservice(codiscover_args_t *cocall_args, void *token)
 
 	service = cocall_args->nsobj->coservice;
 	cocall_args->coservice = service;
-	service = unseal_coservice(service);
 
 	cocall_args->scb_cap = get_coservice_scb(service);
 	

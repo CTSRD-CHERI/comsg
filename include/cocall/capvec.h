@@ -32,7 +32,7 @@
 #define _LIBCOCALL_CAPVEC_H
 
 #include <stdatomic.h>
-#include <stddef.h>
+#include <stdio.h> 
 
 struct coexecve_capvec {
 	void **capv;
@@ -51,7 +51,7 @@ inline ssize_t capvec_getmaxlen(struct coexecve_capvec *capvec)
 	return (capvec->length);
 }
 
-inline ssize_t capvec_getcurlen(struct coexecve_capvec *capvec);
+inline ssize_t capvec_getcurlen(struct coexecve_capvec *capvec)
 {
 	return (atomic_load_explicit(&capvec->index, memory_order_acquire));
 }

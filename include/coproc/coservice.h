@@ -42,6 +42,7 @@
 typedef struct _coservice {
 	char *name;
 	void **worker_scbs;
+	int nworkers;
 	_Atomic int next_worker;
 } coservice_t;
 

@@ -81,7 +81,7 @@ coservice_t *allocate_coservice(void)
 	return (ptr);
 }
 
-void *get_coservice_scb(coservice_t *service)
+/*void *get_coservice_scb(coservice_t *service)
 {
 	int new_index, index, nworkers;
 
@@ -92,7 +92,7 @@ void *get_coservice_scb(coservice_t *service)
 	} while(atomic_compare_exchange_strong_explicit(&service->next_worker, &index, new_index, memory_order_acq_rel, memory_order_acquire) == 0);
 	
 	return (service->worker_scbs[new_index]);
-}
+}*/
 
 int in_table(coservice_t *ptr)
 {

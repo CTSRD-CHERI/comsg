@@ -83,8 +83,8 @@ struct ukernel_daemon *nsd, *coserviced, *ipcd;
 void
 core_init_start(struct ukernel_module *m)
 {
-	coserviced = &m->daemons[1];
-	nsd = &m->daemons[2];
+	nsd = &m->daemons[1];
+	coserviced = &m->daemons[2];
 	ipcd = &m->daemons[3];
 }
 

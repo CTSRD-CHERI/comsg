@@ -131,9 +131,10 @@ discover_ukern_func(nsobject_t *service_obj, int function)
 	if (get_cocall_target(ukern_call_set, function) != NULL)
 		return;
 
-    service = codiscover(service_obj, &scb);
+    service = service_obj->coservice;
     if (service == NULL)
-    	err(errno, "discover_ukern_func: codiscover failed");
+    	err(errno, "discover_ukern_func: invalid service_obj");
+    scb = get_coservice_scb(service);
     set_cocall_target(ukern_call_set, function, scb);
 }
 
@@ -226,7 +227,7 @@ codiscover(nsobject_t *nsobj, void **scb)
 	if (error == -1)
 		err(errno, "codiscover: error performing cocall to codiscover");
 	else if (cocall_args.status == -1) {
-		err(errno, "codiscover: error performing cocall to codiscover");
+		err(errno, "codiscover: error during cocall to codiscover");
 		errno = cocall_args.error;
 		return (NULL);
 	}

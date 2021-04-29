@@ -35,7 +35,6 @@
 
 coservice_t *allocate_coservice(void);
 
-void *get_coservice_scb(coservice_t *service);
 int in_table(coservice_t *ptr);
 
 #endif

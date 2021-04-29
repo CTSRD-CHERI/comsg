@@ -3,7 +3,8 @@ LIB := cocall
 SRCS :=	cocalls.c		\
 	tls_cocall.c		\
 	worker.c		\
-	worker_map.c
+	worker_map.c 	\
+	capvec.c
 
 DEP_LIBS := pthread coproc
 
