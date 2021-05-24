@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -32,18 +32,42 @@
 int
 validate_cocallback_install(cocall_args_t *cocall_args)
 {
-	return (1);
+	if (!validate_coevent(cocall_args->coevent))
+		return (0);
+	else
+		return (1);
+}
+
+static coevent_t *
+get_coevent_from_handle(coevent_t *coevent)
+{
+	//placeholder
+	return (coevent);
 }
 
 /*
- * scb - subject
- * scb - cocallback function
+ * ccb_func - cocallback function
  * ccb_args - arguments to be passed to cocallback
  * coevent - event that cocallback should be assigned to
  */
 void 
 install_cocallback(cocall_args_t *cocall_args, void *token)
 {
+	cocallback_t *cocallback;
+	coevent_t *coevent;
+	pid_t target_pid;
+
+	coevent = get_coevent_from_handle(cocall_args->coevent);
+	switch (coevent->event) {
+	case PROCESS_DEATH:
+		lock_coevent(coevent); /* can block */
+		cocallback = add_cocallback(coevent, cocall_args->ccb_func, &cocall_args->ccb_args);
+		unlock_coevent(coevent);
+		break;
+	default: 
+		COCALL_ERR(cocall_args, EINVAL);
+		break; //NOTREACHED
+	}
 
 	COCALL_RETURN(cocall_args, 0);
 }

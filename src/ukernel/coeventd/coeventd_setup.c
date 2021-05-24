@@ -28,11 +28,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coeventd.h"
+
 #include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 #include <coproc/namespace_object.h>
 
 #include <err.h>
+#include <sys/auxv.h>
 #include <unistd.h>
 
 #define COEVENTD_WORKERS (12)
@@ -58,10 +61,28 @@ init_slow_service(coservice_provision_t *serv, void *func, void *valid, const ch
 		err(errno, "init_service: error inserting %s into global namespace", name);
 }
 
-void
+static void
 init_callback_tables(void)
 {
+	init_cocallback_func_utils();
 	setup_procdeath_table();
+}
+
+static void
+process_capvec(void)
+{
+	int error;
+	struct coeventd_capvec *capvec;
+	void **capv;
+
+	//todo-pbb: add checks to ensure these are valid
+	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+	capvec = (struct ipcd_capvec *)capv;
+	set_ukern_target(COCALL_COPROC_INIT_DONE, capvec->coproc_init_done);
+	set_ukern_target(COCALL_CODISCOVER, capvec->codiscover);
+	set_ukern_target(COCALL_COINSERT, capvec->coinsert);
+	set_ukern_target(COCALL_COSELECT, capvec->coselect);
+	global_ns = capvec->global_ns;
 }
 
 void
@@ -69,7 +90,7 @@ coeventd_startup(void)
 {
 	init_callback_tables();
 
-	global_ns = coproc_init(NULL, NULL, NULL, NULL);
+	process_capvec();
 	if (global_ns == NULL)
 		err(errno, "coeventd_startup: cocall failed");
 
@@ -84,5 +105,7 @@ coeventd_startup(void)
 	codiscover(coprovide_nsobj, &coprovide_scb);
 	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
 
-	init_service(); /* register monitoring for process */
+	init_service(&ccb_install_serv, install_cocallback, validate_cocallback_install, U_CCB_INSTALL); /* register monitoring for process */
+	init_service(&ccb_register_serv, cocallback_register, validate_cocallback_register, U_CCB_REGISTER); /* register monitoring for process */
+	init_service(&coevent_listen_serv, add_event_listener, validate_colisten, U_COLISTEN); /* register monitoring for process */
 }

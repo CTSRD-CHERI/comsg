@@ -28,50 +28,52 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coeventd.h"
-#include "coeventd_setup.h"
-#include <comsg/ukern_calls.h>
 
-#include <ccmalloc.h>
-#include <err.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-static void
-usage(void)
+int
+validate_colisten(cocall_args_t *cocall_args)
 {
-	//todo
-	//should be called with lookup string
-	//e.g "coserviced lookup_string"
-	exit(0);
+	return (1);
 }
 
-static size_t buckets[] = {sizeof(struct cocallback), sizeof(struct cocallback_func)};
-static size_t nbuckets = 2;
-
-coservice_provision_t ccb_install_serv, ccb_register_serv, coevent_listen_serv;
-
-int main(int argc, char *const argv[])
+static coevent_t *
+make_coevent_handle(coevent_t *coevent)
 {
-	int opt, error;
-	void *init_cap;
-	
-	is_ukernel = true;
+	//placeholder
+	return (coevent);
+}
 
-	while((opt = getopt(argc, argv, "")) != -1) {
-		switch (opt) {
-		case '?':
-		default: 
-			usage();
-			break;
-		}
+/*
+ * coevent_type_t
+ * union coevent_subject
+ * 
+ * NOTE-PBB: requiring both a valid scb and the pid ensures:
+ * 		* there is no information leakage regarding processes that might be OS invisible
+ 		  to the caller, as it already is coprocess aware that it exists
+ 		* it limits process death monitoring to processes in the caller's address space
+ */
+void 
+add_event_listener(cocall_args_t *cocall_args, void *token)
+{
+	covent_t *coevent;
+	pid_t target_pid;
+	union coevent_subject *subject;
+
+	coevent = NULL;
+	subject = cocall_args->subject;
+	switch (cocall_args->event) {
+	case PROCESS_DEATH:
+		target_pid = scb_getpid(subject.ces_scb);
+		if (target_pid == -1)
+			COCALL_ERR(cocall_args, EINVAL);
+		else if (target_pid != subject.ces_pid)
+			COCALL_ERR(cocall_args, EACCES);
+		coevent = allocate_procdeath_event(pid);
+		break;
+	default:
+		COCALL_ERR(cocall_args, EINVAL);
 	}
-	ccmalloc_init(buckets, nbuckets);
-	coeventd_startup();
+	assert(coevent != NULL); /* should return prior to this point if we fail */
+	cocall_args->coevent = make_coevent_handle(coevent);
 
-	/* when new event types are added, this will likely need to change */
-	handle_proc_events();
-
-	return (0);
+	COCALL_RETURN(cocall_args, 0);
 }

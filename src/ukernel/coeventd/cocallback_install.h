@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,36 +28,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _CCB_INSTALL_H
+#define _CCB_INSTALL_H
 
-#include <cheri/cheric.h>
-#include <coproc/coevent.h>
+int validate_cocallback_install(cocall_args_t *);
+void install_cocallback(cocall_args_t *, void *);
 
-static pid_t mypid;
-
-struct cocallback_func *
-register_cocallback(pid_t provider, void *scb, cocallback_flags_t flags)
-{
-	struct cocallback_func *func;
-	if ((provider != mypid) && (cheri_gettag(scb) != 1))
-		return (NULL);
-	func = cocall_malloc(sizeof(struct cocallback_func));
-	
-	func->pid = pid;
-	func->scb = scb;
-	func->flags = flags;
-	func->consumers = 0;
-
-	return (func);
-}
-
-int 
-flag_dead_provider(struct cocallback_func **funcs, size_t nfuncs)
-{
-	size_t i;
-
-	for (i = 0; i < nfuncs; i++) {
-		funcs[i]->flags |= FLAG_DEAD;
-	}
-
-	return (0);
-}
+#endif //!defined(_CCB_INSTALL_H)

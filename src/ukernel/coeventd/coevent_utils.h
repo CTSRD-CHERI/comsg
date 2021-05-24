@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,50 +28,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "coeventd.h"
-#include "coeventd_setup.h"
-#include <comsg/ukern_calls.h>
+#ifndef _COEVENT_UTILS_H
+#define _COEVENT_UTILS_H
 
-#include <ccmalloc.h>
-#include <err.h>
 #include <stdbool.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include <coproc/coevent.h>
 
-static void
-usage(void)
-{
-	//todo
-	//should be called with lookup string
-	//e.g "coserviced lookup_string"
-	exit(0);
-}
+void lock_coevent(coevent_t *);
+void unlock_coevent(coevent_t *);
 
-static size_t buckets[] = {sizeof(struct cocallback), sizeof(struct cocallback_func)};
-static size_t nbuckets = 2;
+cocallback_t *add_cocallback(coevent_t *, cocallback_func_t *, struct cocallback_args *);
+void free_cocallback(cocallback_t *);
+cocallback_t *get_next_cocallback(coevent_t *);
+bool validate_coevent(coevent_t *);
 
-coservice_provision_t ccb_install_serv, ccb_register_serv, coevent_listen_serv;
-
-int main(int argc, char *const argv[])
-{
-	int opt, error;
-	void *init_cap;
-	
-	is_ukernel = true;
-
-	while((opt = getopt(argc, argv, "")) != -1) {
-		switch (opt) {
-		case '?':
-		default: 
-			usage();
-			break;
-		}
-	}
-	ccmalloc_init(buckets, nbuckets);
-	coeventd_startup();
-
-	/* when new event types are added, this will likely need to change */
-	handle_proc_events();
-
-	return (0);
-}
+#endif //!defined(_COEVENT_UTILS_H)

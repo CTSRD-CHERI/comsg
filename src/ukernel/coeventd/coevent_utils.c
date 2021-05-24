@@ -34,52 +34,85 @@
 #include <stdatomic.h>
 #include <sys/queue.h>
 
-int
-add_cocallback(struct coevent *event, struct cocallback_func *func, struct cocallback_args *args)
+cocallback_t *
+add_cocallback(coevent_t *event, cocallback_func_t *func, struct cocallback_args *args)
 {
-	struct cocallback *ccb;
+	cocallback_t *ccb;
 	int in_progress;
 
-	ccb = cocall_malloc(sizeof(struct cocallback));
+	/* this function must only be called when we hold the in_progress lock */
+	in_progress = atomic_load_explicit(&event->in_progress, memory_order_acquire);
+	assert(in_progress != 0);
+
+	ccb = cocall_malloc(sizeof(cocallback_t));
 	ccb->func = func;
 	memcpy(&ccb->args, args, sizeof(struct cocallback_args));
 
-	in_progress = 0;
-	if (!atomic_compare_exchange_strong_explicit(&event->in_progress, &in_progress, 1, memory_order_acq_rel, memory_order_acquire)) {
-		cocall_free(ccb);
-		return (-1);
-	}
-
-	SLIST_INSERT_HEAD(&event->cocallbacks, ccb, next);
+	STAILQ_INSERT_TAIL(&event->cocallbacks, ccb, next);
 	atomic_fetch_add_explicit(&func->consumers, 1, memory_order_acq_rel);
-	atomic_compare_exchange_strong_explicit(&event->in_progress, &in_progress, 0, memory_order_acq_rel, memory_order_acquire);
 
-	return (0);
-
-}
-
-struct cocallback *
-get_next_cocallback(struct coevent *event)
-{
-	struct cocallback *ccb;
-	int in_progress;
-
-	in_progress = 0;
-	if (!atomic_compare_exchange_strong_explicit(&event->in_progress, &in_progress, -1, memory_order_acq_rel, memory_order_acquire)) {
-		assert(in_progress == 1); 
-	 	assert(atomic_compare_exchange_strong_explicit(&event->in_progress, &in_progress, -1, memory_order_acq_rel, memory_order_acquire));
-	}
-	ccb = SLIST_FIRST(&event->cocallbacks);
-	if (ccb != NULL)
-		SLIST_REMOVE_HEAD(&event->cocallbacks, next);
-	event->ncallbacks--;
-	atomic_store_explicit(&event->in_progress, 0, memory_order_release);
 	return (ccb);
 }
 
 void
-free_cocallback(struct cocallback *ccb)
+lock_coevent(coevent_t *coevent)
+{
+	int in_progress;
+
+	in_progress = 0;
+	while (!atomic_compare_exchange_strong_explicit(&coevent->in_progress, &in_progress, 1, memory_order_acq_rel, memory_order_acquire)) {
+		in_progress = 0;
+		sched_yield();
+	}
+}
+
+void
+unlock_coevent(coevent_t *coevent)
+{
+	int in_progress;
+
+	/* this function must only be called when we hold the in_progress lock */
+	in_progress = atomic_load_explicit(&event->in_progress, memory_order_acquire);
+	assert(in_progress != 0);
+	/* assert here might help catch cases where this is called when this thread doesn't actually hold the lock */
+	assert(atomic_compare_exchange_strong_explicit(&coevent->in_progress, &in_progress, 0, memory_order_acq_rel, memory_order_acquire));
+}
+
+cocallback_t *
+get_next_cocallback(coevent_t *event)
+{
+	cocallback_t *ccb;
+	int in_progress;
+
+	/* this function must only be called when we hold the in_progress lock */
+	in_progress = atomic_load_explicit(&event->in_progress, memory_order_acquire);
+	assert(in_progress != 0);
+
+	ccb = STAILQ_FIRST(&event->cocallbacks);
+	if (ccb != NULL)
+		STAILQ_REMOVE_HEAD(&event->cocallbacks, next);
+	event->ncallbacks--;
+	return (ccb);
+}
+
+void
+free_cocallback(cocallback_t *ccb)
 {
 	atomic_fetch_sub_explicit(&ccb->func->consumers, 1, memory_order_acq_rel);
 	cocall_free(ccb);
+}
+
+bool
+validate_coevent(coevent_t *coevent)
+{
+	/* new coevent types should come before final else and return true if type-specific checks pass */
+	if (__builtin_cheri_tag_get(coevent) == 0)
+		return (false);
+	else if (coevent->event == PROCESS_DEATH) {
+		if (!is_procdeath_table_member(coevent))
+			return (false);
+		else
+			return (true);
+	} else /* invalid type */
+		return (false);
 }

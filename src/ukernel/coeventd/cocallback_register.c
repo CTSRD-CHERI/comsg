@@ -28,12 +28,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
 #include "auth_utils.h"
 
 #include <ccmalloc.h>
 #include <cheri/cheric.h>
 #include <cocall/cocall_args.h>
+
+#include <sys/errno.h>
+
+static void add_func_to_provider(coevent_t *, cocallback_func_t *);
+static coevent_t *monitor_provider(pid_t);
 
 int
 validate_cocallback_register(cocall_args_t *cocall_args)
@@ -49,17 +53,63 @@ validate_cocallback_register(cocall_args_t *cocall_args)
 		return (1);
 }
 
+static coevent_t *
+monitor_provider(pid_t pid)
+{
+	coevent_t *provider_death;
+	cocallback_func_t *handle_death;
+	struct cocallback_args args;
+	int error;
+
+	/* 
+	 * if this is the first cocallback function registered by this provider,
+	 * install event monitoring for if this provider dies, so we can clean
+	 * up our internal state.
+	 */
+	provider_death = allocate_procdeath_event(pid);
+	lock_coevent(provider_death); /* can block */
+	if (STAILQ_EMPTY(&proc->callbacks)) {
+		args.len = 0;
+		SLIST_INIT(&args.provided_funcs);
+		handle_death = get_provdeath_func();
+		cocallback = add_cocallback(provider_death, handle_death, &args);
+	}
+	unlock_coevent(provider_death);
+
+	return (provider_death);
+}
+
+static void
+add_func_to_provider(coevent_t *provider, cocallback_func_t *func)
+{
+	cocallback_t *ccb;
+	
+	lock_coevent(provider);
+	ccb = STAILQ_FIRST(&provider->callbacks);
+	assert(ccb->func == get_provdeath_func());
+	SLIST_INSERT_HEAD(&ccb->args.provided_funcs, func, next);
+	unlock_coevent(provider);
+}
+
 /*
- * ccb_scb - cocallback function
- * scb - caller scb to check/get pid
+ * provider_scb - cocallback function
  * flags - currently only FLAG_SLOCALL is supported
  */
 void 
-register_cocallback(cocall_args_t *cocall_args, void *token)
+cocallback_register(cocall_args_t *cocall_args, void *token)
 {
+	coevent_t *provider_death;
 	cocallback_func_t *ccb_func;
+	pid_t provider_pid;
 
-	ccb_func = cocall_malloc(sizeof(cocallback_func_t));
+	/* XXX-PBB: this functionality (scb_getpid) doesn't exist in cheribsd in non-private branches */
+	pid = scb_getpid(cocall_args->provider_scb);
+	provider = monitor_provider(pid);
+	ccb_func = register_cocallback_func(pid, cocall_args->provider_scb, cocall_args->flags);
+	if (ccb_func == NULL)
+		COCALL_ERR(cocall_args, EINVAL);
+	add_func_to_provider(provider, ccb_func);
 
+	cocall_args->ccb_func = ccb_func;
 	COCALL_RETURN(cocall_args, 0);
 }

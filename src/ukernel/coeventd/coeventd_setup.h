@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Peter S. Blandford-Baker
+ * Copyright (c) 2021 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -28,20 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COEVENTD_SETUP_H
+#define _COEVENTD_SETUP_H
 
-int
-validate_colisten(cocall_args_t *cocall_args)
-{
-	return (1);
-}
+void coeventd_startup(void);
 
-/*
- * coevent_type_t
- * subject
- */
-void 
-add_event_listener(cocall_args_t *cocall_args, void *token)
-{
-
-	COCALL_RETURN(cocall_args, 0);
-}
+#endif //!defined(_COEVENTD_SETUP_H)

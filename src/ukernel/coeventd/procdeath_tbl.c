@@ -37,7 +37,7 @@
 #include <sys/queue.h>
 #include <sys/types.h>
 
-static pid_t pid_max;
+pid_t pid_max;
 static struct coevent *proc_table;
 
 void
@@ -60,25 +60,41 @@ coevent_t *
 allocate_procdeath_event(pid_t pid)
 {
 	coevent_t *proc;
-	int in_progress;
+	int in_progress, error;
 
-	in_progress = 0;
+	/* pid should be validated before calling this */
 	proc = &proc_table[pid];
 
-	if (!atomic_compare_exchange_strong_explicit(&proc->in_progress, &in_progress, 1, memory_order_acq_rel, memory_order_acquire))
-		return (NULL);
+	in_progress = 0;
+	if (!atomic_compare_exchange_strong_explicit(&proc->in_progress, &in_progress, 1, memory_order_acq_rel, memory_order_acquire)) {
+		in_progress = -1; 
+		if (!atomic_compare_exchange_strong_explicit(&proc->in_progress, &in_progress, 1, memory_order_acq_rel, memory_order_acquire))
+			return (NULL);
+	}
 
-	if (proc->ce_pid != pid) {
+	if (proc->ce_pid != pid || in_progress == -1) {
 		proc->event = PROCESS_DEATH;
 		proc->ce_pid = pid;
 		proc->ncallbacks = 0;
-		SLIST_INIT(&proc->cocallbacks);
+		STAILQ_INIT(&proc->cocallbacks);
+		error = monitor_proc(proc); /* starting monitoring here makes it easier to avoid races */
 	}
 
 	atomic_store_explicit(&proc->in_progress, 0, memory_order_release);
 	return (proc);
 }
 
+bool
+is_procdeath_table_member(void *ptr)
+{
+	return (cheri_is_address_inbounds(proc_table, (vaddr_t)ptr));
+}
 
-
-
+bool
+event_inited(pid_t pid)
+{
+	covent_t *proc;
+	/* pid should be validated before calling this */
+	proc = &proc_table[pid];
+	return (proc->ce_pid == pid);
+}

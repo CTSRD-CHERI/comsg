@@ -59,9 +59,7 @@ monitor_proc(struct coevent *proc)
 	 * would need to do anything, in case the subject process dies
 	 * before reaching kevent(2).
 	 */
-
-	EVENT_INIT(&proc_event, proc->ce_pid, proc);
-
+	PROCDEATH_EVENT_INIT(&proc_event, proc->ce_pid, proc);
 	error = kevent(procdeath_kq, &proc_event, 1, NULL, 0, NULL);
 	/* we are now unborrowed */
 	if (error == -1) {
@@ -93,7 +91,7 @@ init_monitoring(void)
 		err(errno, "init_monitoring: kqueue(2) failed");
 
 	parent = getppid();
-	EVENT_INIT(&coprocd_dies, parent, NULL);
+	PROCDEATH_EVENT_INIT(&coprocd_dies, parent, NULL);
 
 	error = kevent(procdeath_kq, &coprocd_dies, 1, NULL, 0, NULL);
 	if (error == -1)
@@ -133,6 +131,7 @@ trigger_cocallbacks(struct coevent *proc)
 	struct cocallback *notify;
 
 	cocallbacks = 0;
+	atomic_store_explict(&proc->in_progress, 1, memory_order_release);
 	while ((notify = get_next_cocallback()) != NULL) {
 		error = execute_cocallback(notify);
 		if (error == -1)
@@ -145,7 +144,7 @@ trigger_cocallbacks(struct coevent *proc)
 		free_cocallback(cocallback);
 		notify = get_next_cocallback();
 	};
-
+	atomic_store_explict(&proc->in_progress, -1, memory_order_release);
 
 	return (cocallbacks);
 }
@@ -178,10 +177,10 @@ handle_proc_events(void *argp)
 		for (i = 0; i < nevents; i++) {
 			error = trigger_cocallbacks(events[i].udata);
 		}
-		if (nevents == max_events) {
+		while (nevents >= max_events) {
 			max_events = max_events * 2;
 			events = realloc(events, (max_events * sizeof(struct kevent)));
-		}
+		};
 	}
 	
 	cocallback_monitoring();
