@@ -31,6 +31,7 @@
 #ifndef _COCALL_ARGS_H
 #define _COCALL_ARGS_H
 
+#include <coproc/coevent.h>
 #include <coproc/coport.h>
 #include <coproc/coservice.h>
 #include <coproc/namespace.h>
@@ -96,7 +97,7 @@ struct _cocall_args
 			nsobject_t *nsobj;
 			nsobject_type_t nsobj_type;
 			union {
-				void *obj;	
+				void *obj;
 				coservice_t *coservice;
 				coport_t *coport;
 			};
@@ -121,6 +122,17 @@ struct _cocall_args
 			void *message;
 			size_t length;
 		}; //cosend/corecv
+		struct {
+			coevent_subject_t subject;
+			coevent_t *coevent;
+			cocallback_func_t *ccb_func;
+			struct cocallback_args *ccb_args;
+			coevent_type_t event;
+		}; //colisten, ccb_install
+		struct {
+			void *provider_scb;
+			cocallback_flags_t flags;
+		}; //ccb_register
 	};
 } __attribute__((__aligned__(16)));
 

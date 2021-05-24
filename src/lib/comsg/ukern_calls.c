@@ -33,6 +33,7 @@
 #include <cocall/cocall_args.h>
 #include <cocall/cocalls.h>
 
+#include <coproc/coevent.h>
 #include <coproc/coport.h>
 #include <coproc/coservice.h>
 #include <coproc/namespace.h>
@@ -474,7 +475,8 @@ coclose(coport_t *coport)
 
 }
 
-nsobject_t *coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
+nsobject_t *
+coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 {
 	coupdate_args_t cocall_args;
 	int error;
@@ -512,7 +514,8 @@ nsobject_t *coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 	return (cocall_args.nsobj);	
 }
 
-int codelete(nsobject_t *nsobj, namespace_t *parent)
+int
+codelete(nsobject_t *nsobj, namespace_t *parent)
 {
 	codelete_args_t cocall_args;
 	int error;
@@ -549,3 +552,68 @@ codrop(namespace_t *ns, namespace_t *parent)
 	return (cocall_args.status);
 }
 
+int
+ccb_install(cocallback_func_t *ccb_func, struct cocallback_args *ccb_args, coevent_t *coevent)
+{
+	ccb_install_args_t cocall_args;
+	int error;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	cocall_args.ccb_func = ccb_func;
+	cocall_args.ccb_args = ccb_args;
+	cocall_args.coevent = coevent;
+
+	error = ukern_call(COCALL_CCB_INSTALL, &cocall_args);
+	if (error != 0)
+		err(errno, "ccb_install: error performing cocall");
+	else if (cocall_args.status == -1)
+		errno = cocall_args.error;
+
+	return (cocall_args.status);
+}
+
+cocallback_func_t *
+ccb_register(void *scb, cocallback_flags_t flags)
+{
+	/* Currently only for cocarriers, likely to change soon */
+	ccb_register_args_t cocall_args;
+	int error;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	cocall_args.provider_scb = scb;
+	cocall_args.flags = flags;
+
+	error = ukern_call(COCALL_CCB_REGISTER, &cocall_args);
+    if(error != 0)
+        err(error, "ccb_register: cocall failed");
+
+    if (cocall_args.status == -1) {
+        errno = cocall_args.error;
+        return (NULL);
+    }
+
+	return (cocall_args.ccb_func);
+}
+
+coevent_t *
+colisten(coevent_type_t type, coevent_subject_t subject)
+{
+	/* Currently only for cocarriers, likely to change soon */
+	colisten_args_t cocall_args;
+	int error;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	cocall_args.subject = subject;
+	cocall_args.event = type;
+
+	error = ukern_call(COCALL_COLISTEN, &cocall_args);
+    if(error != 0)
+        err(error, "colisten: cocall failed");
+
+    if (cocall_args.status == -1) {
+        errno = cocall_args.error;
+        return (NULL);
+    }
+
+	return (cocall_args.coevent);
+}

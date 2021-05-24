@@ -33,6 +33,7 @@
 
 #include <cocall/cocalls.h>
 #include <cocall/cocall_args.h>
+#include <coproc/coevent.h>
 #include <coproc/coport.h>
 #include <coproc/namespace.h>
 #include <coproc/namespace_object.h>
@@ -58,6 +59,9 @@
 #define COCALL_CODROP (14)
 #define COCALL_COPROC_INIT_DONE (15)
 #define COCALL_SLOPOLL (16)
+#define COCALL_CCB_INSTALL (17)
+#define COCALL_CCB_REGISTER (18)
+#define COCALL_COLISTEN (19)
 
 #define U_COOPEN "coopen"
 #define U_COCLOSE "coclose"
@@ -78,7 +82,11 @@
 #define U_COPROC_INIT_DONE "coproc_init_done"
 #define U_SLOPOLL "copoll_slow"
 
-#define n_ukern_calls (17)
+#define U_CCB_INSTALL "ccb_install"
+#define U_CCB_REGISTER "ccb_register"
+#define U_COLISTEN "colisten"
+
+#define n_ukern_calls (20)
 
 extern namespace_t *global_ns;
 extern bool is_ukernel;
@@ -98,6 +106,9 @@ void *cocarrier_recv(coport_t *port, size_t len);
 int cocarrier_send(coport_t *port, void *buf, size_t len);
 int copoll(pollcoport_t *coports, int ncoports, int timeout);
 int coclose(coport_t *coport);
+int ccb_install(cocallback_func_t *ccb_func, struct cocallback_args *ccb_args, coevent_t *coevent);
+cocallback_func_t *ccb_register(void *scb, cocallback_flags_t flags);
+coevent_t *colisten(coevent_type_t type, coevent_subject_t subject);
 
 void discover_ukern_func(nsobject_t *service_obj, int function);
 void set_ukern_target(int function, void *target);
