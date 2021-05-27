@@ -63,7 +63,7 @@ extern struct ukernel_module modules[] __attribute__((aligned (0x400)));
  * Only works when the base of the modules table is aligned to the size of 
  * struct ukernel module, and while the size of the module matches the mask.
  */
-#define MODULE_MASK (~1024)
+#define MODULE_MASK (~1023)
 
 static inline struct ukernel_daemon *
 find_daemon(pid_t dpid)

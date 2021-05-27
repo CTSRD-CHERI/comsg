@@ -28,52 +28,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COMSG_CORE_DAEMONS_H
-#define _COMSG_CORE_DAEMONS_H
+#ifndef _COEVENTD_PROCDEATH_H
+#define _COEVENTD_PROCDEATH_H
 
-#include "../daemon.h"
+#include <coproc/coevent.h>
 
-#include <cocall/cocall_args.h>
-
-void ipcd_setup_complete(cocall_args_t *, void *);
-void get_ipcd_capv(struct coexecve_capvec *);
-
-void nsd_setup(cocall_args_t *, void *);
-void nsd_setup_complete(cocall_args_t *, void *);
-
-void coserviced_setup(cocall_args_t *, void *);
-void get_coserviced_capv(struct coexecve_capvec *);
-
-void coproc_user_init(cocall_args_t *, void *);
-
-void coeventd_setup_complete(cocall_args_t *, void *);
-void get_coeventd_capv(struct coexecve_capvec *);
-
-void core_init_start(struct ukernel_module *);
-void core_init_complete(void);
-
-extern daemon_setup_info coprocd_init;
-extern daemon_setup_info nsd_init;
-extern daemon_setup_info coserviced_init;
-extern daemon_setup_info coeventd_init;
-extern daemon_setup_info ipcd_init;
-
-extern module_setup_info core_init;
-
-#define CORE_DAEMON(NAME) \
-    DAEMON(NAME, "/usr/bin/" #NAME,  &NAME##_init, HCF, SYNCHRONOUS)
-
-#define FOR_EACH_CORE_DAEMON(F) \
-	F(coprocd), \
-	F(nsd), \
-	F(coserviced), \
-	F(coeventd), \
-	F(ipcd), 
-
-#define CORE_FLAGS (0)
-#define CORE_INIT (&core_init)
-#define CORE_FINI (NULL)
-#define N_CORE_DAEMONS (5)
+void *handle_proc_events(void *);
+int monitor_proc(struct coevent *);
 
 
-#endif //!defined(_COMSG_CORE_DAEMONS_H)
+#endif //!defined(_COEVENTD_PROCDEATH_H)

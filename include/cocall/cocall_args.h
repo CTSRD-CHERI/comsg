@@ -41,13 +41,13 @@
 #define COCALL_ERR(c, n) do { c->status = (-1);\
 	c->error = (n);\
 	return; } while(0)
-#endif
+#endif //!defined(COCALL_ERR)
 
 #ifndef COCALL_RETURN
 #define COCALL_RETURN(c, n) do { c->status = (n);\
 	c->error = (0);\
 	return; } while(0)
-#endif
+#endif //!defined(COCALL_RETURN)
 
 #if 0
 struct commap 
@@ -61,7 +61,7 @@ struct comunmap
 {
 	token_t token;
 };
-#endif
+#endif //0
 
 //There is an unsatisfying situation here which arises from the fact that
 //cocall/coaccept data lengths must (sort of) be symmetrical, so to pass a variable 
@@ -126,7 +126,7 @@ struct _cocall_args
 			coevent_subject_t subject;
 			coevent_t *coevent;
 			cocallback_func_t *ccb_func;
-			struct cocallback_args *ccb_args;
+			struct cocallback_args ccb_args;
 			coevent_type_t event;
 		}; //colisten, ccb_install
 		struct {
@@ -151,6 +151,10 @@ typedef struct _cocall_args codrop_args_t;
 typedef struct _cocall_args codelete_args_t;
 typedef struct _cocall_args coupdate_args_t;
 typedef struct _cocall_args cocreate_args_t;
+typedef struct _cocall_args colisten_args_t;
+typedef struct _cocall_args ccb_register_args_t;
+typedef struct _cocall_args ccb_install_args_t;
+
 
 
 #endif //!defined(_COCALL_ARGS_H)

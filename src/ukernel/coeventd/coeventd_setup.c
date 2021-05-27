@@ -28,7 +28,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coeventd_setup.h"
+
 #include "coeventd.h"
+#include "cocallback_install.h"
+#include "cocallback_register.h"
+#include "coevent_listen.h"
+#include "cocallback_func_utils.h"
+#include "procdeath_tbl.h"
 
 #include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
@@ -36,6 +43,7 @@
 
 #include <err.h>
 #include <sys/auxv.h>
+#include <sys/errno.h>
 #include <unistd.h>
 
 #define COEVENTD_WORKERS (12)
@@ -77,7 +85,7 @@ process_capvec(void)
 
 	//todo-pbb: add checks to ensure these are valid
 	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
-	capvec = (struct ipcd_capvec *)capv;
+	capvec = (struct coeventd_capvec *)capv;
 	set_ukern_target(COCALL_COPROC_INIT_DONE, capvec->coproc_init_done);
 	set_ukern_target(COCALL_CODISCOVER, capvec->codiscover);
 	set_ukern_target(COCALL_COINSERT, capvec->coinsert);
@@ -88,6 +96,8 @@ process_capvec(void)
 void
 coeventd_startup(void)
 {
+	nsobject_t *coprovide_nsobj;
+	void *coprovide_scb;
 	init_callback_tables();
 
 	process_capvec();
@@ -108,4 +118,6 @@ coeventd_startup(void)
 	init_service(&ccb_install_serv, install_cocallback, validate_cocallback_install, U_CCB_INSTALL); /* register monitoring for process */
 	init_service(&ccb_register_serv, cocallback_register, validate_cocallback_register, U_CCB_REGISTER); /* register monitoring for process */
 	init_service(&coevent_listen_serv, add_event_listener, validate_colisten, U_COLISTEN); /* register monitoring for process */
+
+	coproc_init_done();
 }

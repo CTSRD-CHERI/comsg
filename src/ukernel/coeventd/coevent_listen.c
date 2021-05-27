@@ -28,6 +28,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coevent_listen.h"
+
+#include "procdeath_tbl.h"
+
+#include <assert.h>
+#include <coproc/coevent.h>
+#include <cocall/cocall_args.h>
+#include <sys/errno.h>
+#include <stdio.h>
+#include <unistd.h>
 
 int
 validate_colisten(cocall_args_t *cocall_args)
@@ -54,20 +64,25 @@ make_coevent_handle(coevent_t *coevent)
 void 
 add_event_listener(cocall_args_t *cocall_args, void *token)
 {
-	covent_t *coevent;
-	pid_t target_pid;
-	union coevent_subject *subject;
+	coevent_t *coevent;
+	pid_t target_pid, requested_pid;
+	union coevent_subject subject;
 
 	coevent = NULL;
 	subject = cocall_args->subject;
 	switch (cocall_args->event) {
 	case PROCESS_DEATH:
-		target_pid = scb_getpid(subject.ces_scb);
-		if (target_pid == -1)
-			COCALL_ERR(cocall_args, EINVAL);
-		else if (target_pid != subject.ces_pid)
-			COCALL_ERR(cocall_args, EACCES);
-		coevent = allocate_procdeath_event(pid);
+		//Workaround present to simplify testing
+		//TODO-PBB: remove workaround
+		if (__builtin_cheri_tag_get(subject.ces_scb)) {
+			target_pid = cogetpid2(subject.ces_scb);
+			if (target_pid == -1)
+				COCALL_ERR(cocall_args, EINVAL);
+			else if (target_pid != subject.ces_pid)
+				COCALL_ERR(cocall_args, EACCES);
+		} else
+			target_pid = subject.ces_pid;
+		coevent = allocate_procdeath_event(target_pid);
 		break;
 	default:
 		COCALL_ERR(cocall_args, EINVAL);

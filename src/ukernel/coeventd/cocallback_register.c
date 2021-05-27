@@ -28,13 +28,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "auth_utils.h"
+#include "cocallback_register.h"
 
+#include "cocallback_func_utils.h"
+#include "procdeath_tbl.h"
+#include "coevent_utils.h"
+
+#include <assert.h>
 #include <ccmalloc.h>
 #include <cheri/cheric.h>
 #include <cocall/cocall_args.h>
-
+#include <coproc/coevent.h>
 #include <sys/errno.h>
+#include <unistd.h>
 
 static void add_func_to_provider(coevent_t *, cocallback_func_t *);
 static coevent_t *monitor_provider(pid_t);
@@ -44,10 +50,11 @@ validate_cocallback_register(cocall_args_t *cocall_args)
 {
 	void *provider_scb;
 
+	//todo-pbb: add ability to properly verify if something's an scb
 	provider_scb = cocall_args->provider_scb;
 	if (cheri_gettag(provider_scb) == 0)
-		return (0)
-	else if (cheri_gettype(provider_scb) != scb_otype)
+		return (0);
+	else if (cheri_getsealed(provider_scb) == 0)
 		return (0);
 	else
 		return (1);
@@ -56,6 +63,7 @@ validate_cocallback_register(cocall_args_t *cocall_args)
 static coevent_t *
 monitor_provider(pid_t pid)
 {
+	cocallback_t *cocallback;
 	coevent_t *provider_death;
 	cocallback_func_t *handle_death;
 	struct cocallback_args args;
@@ -68,7 +76,7 @@ monitor_provider(pid_t pid)
 	 */
 	provider_death = allocate_procdeath_event(pid);
 	lock_coevent(provider_death); /* can block */
-	if (STAILQ_EMPTY(&proc->callbacks)) {
+	if (STAILQ_EMPTY(&provider_death->callbacks)) {
 		args.len = 0;
 		SLIST_INIT(&args.provided_funcs);
 		handle_death = get_provdeath_func();
@@ -100,15 +108,17 @@ cocallback_register(cocall_args_t *cocall_args, void *token)
 {
 	coevent_t *provider_death;
 	cocallback_func_t *ccb_func;
-	pid_t provider_pid;
+	pid_t pid;
 
-	/* XXX-PBB: this functionality (scb_getpid) doesn't exist in cheribsd in non-private branches */
-	pid = scb_getpid(cocall_args->provider_scb);
-	provider = monitor_provider(pid);
+	/* XXX-PBB: this functionality (cogetpid2) doesn't exist in cheribsd in non-private branches */
+	pid = cogetpid2(cocall_args->provider_scb);
+
+	assert(pid > 0);
+	provider_death = monitor_provider(pid);
 	ccb_func = register_cocallback_func(pid, cocall_args->provider_scb, cocall_args->flags);
 	if (ccb_func == NULL)
 		COCALL_ERR(cocall_args, EINVAL);
-	add_func_to_provider(provider, ccb_func);
+	add_func_to_provider(provider_death, ccb_func);
 
 	cocall_args->ccb_func = ccb_func;
 	COCALL_RETURN(cocall_args, 0);

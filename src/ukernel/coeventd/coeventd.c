@@ -30,6 +30,9 @@
  */
 #include "coeventd.h"
 #include "coeventd_setup.h"
+#include "procdeath.h"
+
+#include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 
 #include <ccmalloc.h>
@@ -71,7 +74,7 @@ int main(int argc, char *const argv[])
 	coeventd_startup();
 
 	/* when new event types are added, this will likely need to change */
-	handle_proc_events();
+	handle_proc_events(NULL);
 
 	return (0);
 }

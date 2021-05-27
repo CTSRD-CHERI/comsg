@@ -28,11 +28,17 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "coevent_utils.h"
+#include "procdeath_tbl.h"
 
+#include <assert.h>
 #include <ccmalloc.h>
 #include <coproc/coevent.h>
 #include <stdatomic.h>
+#include <stdbool.h>
+#include <string.h>
 #include <sys/queue.h>
+#include <sys/sched.h>
 
 cocallback_t *
 add_cocallback(coevent_t *event, cocallback_func_t *func, struct cocallback_args *args)
@@ -48,7 +54,7 @@ add_cocallback(coevent_t *event, cocallback_func_t *func, struct cocallback_args
 	ccb->func = func;
 	memcpy(&ccb->args, args, sizeof(struct cocallback_args));
 
-	STAILQ_INSERT_TAIL(&event->cocallbacks, ccb, next);
+	STAILQ_INSERT_TAIL(&event->callbacks, ccb, next);
 	atomic_fetch_add_explicit(&func->consumers, 1, memory_order_acq_rel);
 
 	return (ccb);
@@ -72,7 +78,7 @@ unlock_coevent(coevent_t *coevent)
 	int in_progress;
 
 	/* this function must only be called when we hold the in_progress lock */
-	in_progress = atomic_load_explicit(&event->in_progress, memory_order_acquire);
+	in_progress = atomic_load_explicit(&coevent->in_progress, memory_order_acquire);
 	assert(in_progress != 0);
 	/* assert here might help catch cases where this is called when this thread doesn't actually hold the lock */
 	assert(atomic_compare_exchange_strong_explicit(&coevent->in_progress, &in_progress, 0, memory_order_acq_rel, memory_order_acquire));
@@ -88,9 +94,9 @@ get_next_cocallback(coevent_t *event)
 	in_progress = atomic_load_explicit(&event->in_progress, memory_order_acquire);
 	assert(in_progress != 0);
 
-	ccb = STAILQ_FIRST(&event->cocallbacks);
+	ccb = STAILQ_FIRST(&event->callbacks);
 	if (ccb != NULL)
-		STAILQ_REMOVE_HEAD(&event->cocallbacks, next);
+		STAILQ_REMOVE_HEAD(&event->callbacks, next);
 	event->ncallbacks--;
 	return (ccb);
 }

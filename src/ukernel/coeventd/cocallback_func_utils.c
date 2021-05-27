@@ -28,11 +28,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "cocallback_func_utils.h"
 
-#include <cheri/cheric.h>
 #include <coproc/coevent.h>
 
+#include <cheri/cheric.h>
+#include <err.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/errno.h>
+#include <sys/types.h>
 #include <pthread.h>
+#include <unistd.h>
 
 static pid_t mypid;
 
@@ -98,25 +105,25 @@ init_cocallback_func_utils(void)
 {
 	mypid = getpid();
 
-	ccb_func_tbl.funcs = calloc(init_tbl_len, sizeof(cocallback_func_t));
+	ccb_func_tbl.funcs = calloc(base_tbl_len, sizeof(cocallback_func_t));
 	atomic_store_explicit(&ccb_func_tbl.idx, 0, memory_order_release);
 	provider_death = register_cocallback_func(mypid, NULL, FLAG_PROVIDER);
 }
 
 
 int 
-flag_dead_provider(cocallback_func_t **funcs, size_t nfuncs)
+flag_dead_provider(cocallback_t *provider_death)
 {
-	size_t i;
-
-	for (i = 0; i < nfuncs; i++) {
-		funcs[i]->flags |= FLAG_DEAD;
-	}
+	cocallback_func_t *func;
+	
+	SLIST_FOREACH(func, &provider_death->args.provided_funcs, next) {
+		func->flags |= FLAG_DEAD;
+	};
 
 	return (0);
 }
 
-coevent_t *
+cocallback_func_t *
 get_provdeath_func(void)
 {
 	/* internal provider death function - provider death has the same behaviour for all subjects */
@@ -133,7 +140,7 @@ register_cocallback_func(pid_t provider, void *scb, cocallback_flags_t flags)
 		return (NULL); /* external callbacks must have a valid cocall target */
 
 	func = allocate_ccb_func();
-	func->provider = pid;
+	func->provider = provider;
 	func->scb = scb;
 	func->flags = flags;
 	func->consumers = 0;

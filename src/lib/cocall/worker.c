@@ -70,6 +70,12 @@ coaccept_init(
     void **target_cap)
 {
     pthread_mutex_lock(&registration_mutex);
+#ifdef COSETUP_COGETPID
+    cosetup(COSETUP_COGETPID);
+#endif
+#ifdef COSETUP_COGETTID
+    cosetup(COSETUP_COGETTID);
+#endif
 
     if (target_name != NULL)  {
         assert(cheri_getlen(target_name) > 0);
@@ -82,6 +88,7 @@ coaccept_init(
         pthread_cond_signal(&registration_cond);
         pthread_exit(NULL);
     }
+
     
     pthread_cond_signal(&registration_cond);
     pthread_mutex_unlock(&registration_mutex);

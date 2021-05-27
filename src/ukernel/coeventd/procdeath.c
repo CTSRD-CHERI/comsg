@@ -28,19 +28,32 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "procdeath.h"
+#include "coevent_utils.h"
+#include "cocallback_func_utils.h"
+
+#include <coproc/coevent.h>
+#include <cocall/tls_cocall.h>
+
 #include <err.h>
+#include <stdatomic.h>
+#include <stdlib.h>
 #include <sys/errno.h>
 #include <sys/event.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#define UNUSED(x) (void)(x)
 
 #define PROCDEATH_FLAGS (EV_ADD | EV_ENABLE | EV_ONESHOT)
 #define PROCDEATH_EVENT_INIT(event, pid, data) do {	\
-		EV_SET(event, pid, EVFILT_PROC, PROCDEATH_FLAGS, NOTE_EXIT, NULL, data); \
+		EV_SET(event, pid, EVFILT_PROC, PROCDEATH_FLAGS, NOTE_EXIT, 0, data); \
 	} while(0)
 
-static int procdeath_kq;
+static int procdeath_kq = -1;
 
 int
-monitor_proc(struct coevent *proc)
+monitor_proc(coevent_t *proc)
 {
 	int error;
 	struct kevent proc_event;
@@ -67,7 +80,6 @@ monitor_proc(struct coevent *proc)
 		case ESRCH:
 			/*unborrow happened, but process has died and been reaped*/
 			/* coaccepting now will cause us to die, so we should spawn a new coaccept thread and exit */
-			
 			break;
 		case EINTR:
 			//changes were applied, we're fine
@@ -77,6 +89,7 @@ monitor_proc(struct coevent *proc)
 			break;
 		}
 	}
+	return (error);
 }
 
 static void
@@ -112,13 +125,13 @@ execute_cocallback(struct cocallback *cocallback)
 
 	func = cocallback->func;
 	if ((func->flags & FLAG_PROVIDER) != 0) {
-		error = flag_dead_provider(cocallback->args.funcs, cocallback->args.len);
+		error = flag_dead_provider(cocallback);
 	} else if ((func->flags & FLAG_DEAD) != 0) {
 		error = 1;
 	} else if ((func->flags & FLAG_SLOCALL) != 0) {
 		error = slocall_tls(func->scb, cocallback->args.cocall_data, cocallback->args.len);
 	} else {
-		error = cocall_tls(func->scb, cocallback->args.cocall_data, cocallback.args->len);
+		error = cocall_tls(func->scb, cocallback->args.cocall_data, cocallback->args.len);
 	}
 
 	return (error);
@@ -131,8 +144,8 @@ trigger_cocallbacks(struct coevent *proc)
 	struct cocallback *notify;
 
 	cocallbacks = 0;
-	atomic_store_explict(&proc->in_progress, 1, memory_order_release);
-	while ((notify = get_next_cocallback()) != NULL) {
+	atomic_store_explicit(&proc->in_progress, 1, memory_order_release);
+	while ((notify = get_next_cocallback(proc)) != NULL) {
 		error = execute_cocallback(notify);
 		if (error == -1)
 			err(errno, "cocallback: cocallback failed");
@@ -141,10 +154,9 @@ trigger_cocallbacks(struct coevent *proc)
 				warn("cocallback: dead cocallback provider");
 			cocallbacks++;
 		}
-		free_cocallback(cocallback);
-		notify = get_next_cocallback();
+		free_cocallback(notify);
 	};
-	atomic_store_explict(&proc->in_progress, -1, memory_order_release);
+	atomic_store_explicit(&proc->in_progress, -1, memory_order_release);
 
 	return (cocallbacks);
 }
@@ -174,8 +186,8 @@ handle_proc_events(void *argp)
 		}
 		//get list of those who should be notified
 		//do notification (i.e. execute cocallbacks)
-		for (i = 0; i < nevents; i++) {
-			error = trigger_cocallbacks(events[i].udata);
+		for (idx = 0; idx < nevents; idx++) {
+			error = trigger_cocallbacks(events[idx].udata);
 		}
 		while (nevents >= max_events) {
 			max_events = max_events * 2;

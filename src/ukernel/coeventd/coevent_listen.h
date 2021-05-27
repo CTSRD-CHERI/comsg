@@ -31,6 +31,8 @@
 #ifndef _COEVENT_LISTEN_H
 #define _COEVENT_LISTEN_H
 
+#include <cocall/cocall_args.h>
+
 int validate_colisten(cocall_args_t *);
 void add_event_listener(cocall_args_t *, void *);
 

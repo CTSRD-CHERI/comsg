@@ -31,6 +31,11 @@
 #ifndef _COEVENTD_H
 #define _COEVENTD_H
 
+#define COPROC_UKERN
+
+#include <cocall/worker_map.h>
+#include <coproc/namespace.h>
+
 /* Must match the capv coprocd provides exactly */
 struct coeventd_capvec {
 	void *coproc_init_done;

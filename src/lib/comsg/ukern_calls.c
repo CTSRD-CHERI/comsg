@@ -48,7 +48,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char *ukern_func_names[] = {"NOTUSED", U_CODISCOVER, U_COPROVIDE, U_COINSERT, U_COSELECT, U_COUPDATE, U_CODELETE, U_COOPEN, U_COCLOSE, U_COSEND, U_CORECV, U_COPOLL, U_COPROC_INIT, U_COCREATE, U_CODROP, U_COPROC_INIT_DONE, U_SLOPOLL};
+static const char *ukern_func_names[] = {"NOTUSED", U_CODISCOVER, U_COPROVIDE, U_COINSERT, U_COSELECT, U_COUPDATE, U_CODELETE, U_COOPEN, U_COCLOSE, U_COSEND, U_CORECV, U_COPOLL, U_COPROC_INIT, U_COCREATE, U_CODROP, U_COPROC_INIT_DONE, U_SLOPOLL, U_CCB_INSTALL, U_CCB_REGISTER, U_COLISTEN};
 
 static int slocall_funcs[] = {COCALL_SLOPOLL};
 static int n_slocalls = 1;
@@ -560,7 +560,7 @@ ccb_install(cocallback_func_t *ccb_func, struct cocallback_args *ccb_args, coeve
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	cocall_args.ccb_func = ccb_func;
-	cocall_args.ccb_args = ccb_args;
+	memcpy(&cocall_args.ccb_args, ccb_args, sizeof(struct cocallback_args));
 	cocall_args.coevent = coevent;
 
 	error = ukern_call(COCALL_CCB_INSTALL, &cocall_args);

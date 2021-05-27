@@ -28,6 +28,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "cocallback_install.h"
+#include "coevent_utils.h"
+
+
+#include <coproc/coevent.h>
+#include <cocall/cocall_args.h>
+#include <sys/errno.h>
 
 int
 validate_cocallback_install(cocall_args_t *cocall_args)

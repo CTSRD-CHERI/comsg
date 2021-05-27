@@ -28,6 +28,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 #include <comsg/coport_ipc.h>
 #include <comsg/coport_ipc_cinvoke.h>
@@ -42,6 +44,7 @@
 #include <sched.h>
 #include <pthread.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -49,6 +52,7 @@
 static char *coprocd_args[] = {"/usr/bin/coprocd", NULL};
 extern char **environ;
 static void *sealroot;
+static pid_t monitored_child;
 
 static const char default_name[] = "coproctestA";
 static char test_str[] = "Testing...";
@@ -61,8 +65,61 @@ typedef struct {
 } corecv_thr_args_t;
 
 pthread_mutex_t start;
-
 pthread_cond_t started;
+
+pthread_mutex_t procdeath;
+pthread_cond_t proc_died;
+
+static void 
+ccb_example(cocall_args_t *cocall_args, void *token)
+{
+	(void)(token);
+	(void)(cocall_args);
+
+	pthread_mutex_lock(&procdeath);
+	pthread_cond_signal(&proc_died);
+	pthread_mutex_unlock(&procdeath);
+}
+
+static void
+do_procdeath_test(void)
+{
+	function_map_t *fmap;
+	coevent_subject_t subject_death;
+	char *child_args[] = {"/usr/bin/coeventtest", NULL};
+	pid_t child_pid, my_pid;
+	cocall_args_t args;
+	struct cocallback_args ccb_args;
+
+	void **scbs, *scb;
+	void **capv;
+
+	fmap = spawn_slow_worker(NULL, ccb_example, NULL);
+	scbs = get_worker_scbs(fmap);
+	scb = scbs[0];
+	capv = calloc(2, sizeof(void *));
+	capv[0] = scb;
+	capv[1] = NULL;
+
+	cocallback_func_t *ccb_func = ccb_register(scb, FLAG_SLOCALL);
+	
+	my_pid = getpid();
+	child_pid = vfork();
+	if (child_pid == 0) {
+		coexecvec(my_pid, child_args[0], child_args, environ, capv);
+		_exit(EX_UNAVAILABLE);
+	} 
+	subject_death.ces_pid = child_pid;
+	pthread_mutex_lock(&procdeath);
+	coevent_t *death = colisten(PROCESS_DEATH, subject_death);
+	ccb_args.len = sizeof(cocall_args_t);
+	ccb_args.cocall_data = (void *)&args;
+	ccb_install(ccb_func, &ccb_args, death);
+	pthread_cond_wait(&proc_died, &procdeath);
+	pthread_mutex_unlock(&procdeath);
+	printf("coproctest: coeventd test passed\n");
+
+}
 
 static void *
 do_copipe_recv(void *argp)
@@ -120,6 +177,8 @@ do_tests(void)
 
  	pthread_mutex_init(&start, NULL);
  	pthread_cond_init(&started, NULL);
+ 	pthread_mutex_init(&procdeath, NULL);
+ 	pthread_cond_init(&proc_died, NULL);
 
  	recvr_args = calloc(1, sizeof(corecv_thr_args_t));
 	ns_name = calloc(32, sizeof(char));
@@ -307,6 +366,8 @@ cocreate_lbl:
 		printf("\t\t\tsuccess!\n");
 	else
 		err(errno, "coproctest: do_tests: coclose failed");
+
+
 }
 
 int main(int argc, char *const argv[])
@@ -330,6 +391,7 @@ int main(int argc, char *const argv[])
     set_ukern_target(COCALL_COPROC_INIT, coproc_init_scb);
 
     do_tests();
+    do_procdeath_test();
 
 	return (0);
 }

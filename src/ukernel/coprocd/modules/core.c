@@ -59,6 +59,10 @@ daemon_setup_info ipcd_init = {
 	NULL, ipcd_setup_complete, get_ipcd_capv, 4
 };
 
+daemon_setup_info coeventd_init = {
+	NULL, coeventd_setup_complete, get_coeventd_capv, 4
+};
+
 module_setup_info core_init = {
 	core_init_start, core_init_complete
 };
@@ -74,18 +78,15 @@ static void *coselect_scb = NULL;
 static _Atomic bool coproc_inited = false;
 static _Atomic bool ukern_inited = false;
 
-#define NSD_SELECTOR (1)
-#define COSERVICED_SELECTOR (2)
-#define IPCD_SELECTOR (3)
-
-struct ukernel_daemon *nsd, *coserviced, *ipcd;
+struct ukernel_daemon *nsd, *coserviced, *ipcd, *coeventd;
 
 void
 core_init_start(struct ukernel_module *m)
 {
 	nsd = &m->daemons[1];
 	coserviced = &m->daemons[2];
-	ipcd = &m->daemons[3];
+	coeventd = &m->daemons[3];
+	ipcd = &m->daemons[4];
 }
 
 void
@@ -157,6 +158,18 @@ nsd_setup_complete(cocall_args_t *cocall_args, void *token)
 }
 
 void
+coeventd_setup_complete(cocall_args_t *cocall_args, void *token)
+{
+	UNUSED(token);
+	if (coeventd->status == RUNNING)
+		COCALL_ERR(cocall_args, EAGAIN);
+
+	coeventd->status = RUNNING;
+
+	COCALL_RETURN(cocall_args, 0);
+}
+
+void
 ipcd_setup_complete(cocall_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
@@ -195,6 +208,21 @@ get_coserviced_capv(struct coexecve_capvec *capvec)
 	assert(coselect_scb != NULL);
 
 	capvec_append(capvec, global_namespace);
+	capvec_append(capvec, coinsert_scb);
+	capvec_append(capvec, coselect_scb);
+}
+
+void
+get_coeventd_capv(struct coexecve_capvec *capvec)
+{
+	assert(coproc_inited);
+	assert(global_namespace != NULL);
+	assert(codiscover_scb != NULL);
+	assert(coinsert_scb != NULL);
+	assert(coselect_scb != NULL);
+
+	capvec_append(capvec, global_namespace);
+	capvec_append(capvec, codiscover_scb);
 	capvec_append(capvec, coinsert_scb);
 	capvec_append(capvec, coselect_scb);
 }

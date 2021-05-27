@@ -31,6 +31,8 @@
 #ifndef _CCB_INSTALL_H
 #define _CCB_INSTALL_H
 
+#include <cocall/cocall_args.h>
+
 int validate_cocallback_install(cocall_args_t *);
 void install_cocallback(cocall_args_t *, void *);
 

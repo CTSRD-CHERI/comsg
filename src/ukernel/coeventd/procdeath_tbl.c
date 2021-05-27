@@ -28,17 +28,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "procdeath_tbl.h"
+
+#include "procdeath.h"
+#include <cheri/cheric.h>
 #include <assert.h>
 #include <err.h>
 #include <coproc/coevent.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
 #include <sys/types.h>
+#include <sys/sysctl.h>
 
 pid_t pid_max;
-static struct coevent *proc_table;
+static coevent_t *proc_table = NULL;
 
 void
 setup_procdeath_table(void)
@@ -76,7 +82,7 @@ allocate_procdeath_event(pid_t pid)
 		proc->event = PROCESS_DEATH;
 		proc->ce_pid = pid;
 		proc->ncallbacks = 0;
-		STAILQ_INIT(&proc->cocallbacks);
+		STAILQ_INIT(&proc->callbacks);
 		error = monitor_proc(proc); /* starting monitoring here makes it easier to avoid races */
 	}
 
@@ -93,7 +99,7 @@ is_procdeath_table_member(void *ptr)
 bool
 event_inited(pid_t pid)
 {
-	covent_t *proc;
+	coevent_t *proc;
 	/* pid should be validated before calling this */
 	proc = &proc_table[pid];
 	return (proc->ce_pid == pid);

@@ -31,10 +31,12 @@
 #ifndef _CCB_UTILS_H
 #define _CCB_UTILS_H
 
+#include <coproc/coevent.h>
+
 void init_cocallback_func_utils(void);
 
-int flag_dead_provider(cocallback_func_t **, size_t);
-coevent_t *get_provdeath_func(void);
+int flag_dead_provider(cocallback_t *);
+cocallback_func_t *get_provdeath_func(void);
 cocallback_func_t *register_cocallback_func(pid_t, void *, cocallback_flags_t);
 int validate_cocallback_func(cocallback_func_t *);
 
