@@ -35,18 +35,20 @@
 #include <coproc/utils.h>
 
 #include <assert.h>
+#include <err.h>
 #include <cheri/cheric.h>
 #include <sys/sysctl.h>
+#include <sysexits.h>
 #include <unistd.h>
 
-static struct object_type cocarrier_otype, coport_otype;
+static struct object_type cocarrier_otype, copipe_otype, cochannel_otype;
 static void *root_cap;
 
 static __attribute__((constructor)) void
 setup_ipcd_otypes(void)
 {
     size_t len;
-    struct object_type *otypes[] = {&coport_otype, &cocarrier_otype};
+    struct object_type *otypes[] = {&copipe_otype, &cochannel_otype, &cocarrier_otype};
     
     len = sizeof(root_cap);
     assert(sysctlbyname("security.cheri.sealcap", &root_cap, &len,
@@ -59,7 +61,7 @@ setup_ipcd_otypes(void)
     /* XXX-PBB: we currently simulate the eventual role of the type manager here and in libcomsg */
     root_cap = cheri_incoffset(root_cap, 32);
 
-    root_cap = make_otypes(root_cap, 2, otypes);
+    root_cap = make_otypes(root_cap, 3, otypes);
 }
 
 coport_type_t
@@ -99,10 +101,14 @@ seal_coport(coport_t *ptr)
     if (cheri_getsealed(ptr))
         return (ptr);
     ptr = cheri_clearperm(ptr, CHERI_PERM_GLOBAL);
-    if (ptr->type != COCARRIER)
-        return (cheri_seal(ptr, coport_otype.sc));
-    else //TODO-PBB: seal
+    if (ptr->type == COCHANNEL)
+        return (cheri_seal(ptr, cochannel_otype.sc));
+    else if (ptr->type == COPIPE)
+        return (cheri_seal(ptr, copipe_otype.sc));
+    else if (ptr->type == COCARRIER)
         return (cheri_seal(ptr, cocarrier_otype.sc));
+    else
+        err(EX_SOFTWARE, "%s: invalid coport type %d", __func__, ptr->type); //should not be reached
 }
 
 coport_t *
@@ -112,8 +118,10 @@ unseal_coport(coport_t *ptr)
         return (ptr);
     else if (cheri_gettype(ptr) == cocarrier_otype.otype)
         return (cheri_unseal(ptr, cocarrier_otype.usc));
-    else if (cheri_gettype(ptr) == coport_otype.otype)
-        return (cheri_unseal(ptr, coport_otype.usc));
+    else if (cheri_gettype(ptr) == copipe_otype.otype)
+        return (cheri_unseal(ptr, copipe_otype.usc));
+    else if (cheri_gettype(ptr) == cochannel_otype.otype)
+        return (cheri_unseal(ptr, cochannel_otype.usc));
     else 
-        return (NULL);
+        err(EX_SOFTWARE, "%s: invalid coport type %d", __func__, ptr->type); //should not be reached
 }
