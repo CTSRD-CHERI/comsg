@@ -1,6 +1,7 @@
 TGT = lib$(LIB)
 OUT_FILE = $(TGT).so.$(SHLIB_MAJOR)
 
+CFLAGS += -fPIC
 LDFLAGS += -shared
 
 

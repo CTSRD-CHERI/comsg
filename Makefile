@@ -1,4 +1,4 @@
-COMSG_DIR ?= 	$(CURDIR)
+	COMSG_DIR ?= 	$(CURDIR)
 ARCHES := riscv 
 DEFAULT_ARCH ?= riscv
 BUILD_DIR := 	$(COMSG_DIR)/build
@@ -10,7 +10,7 @@ INC_DIRS +=		$(COMSG_DIR)/include
 INC_FLAGS :=	$(addprefix -isystem,$(INC_DIRS))
 
 LDFLAGS :=		-fuse-ld=lld -Wl,-znow 
-CFLAGS :=		-g -fPIC -fPIE -v
+CFLAGS :=		-g -v
 
 export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS
 

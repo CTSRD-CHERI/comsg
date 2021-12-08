@@ -4,7 +4,7 @@ OUT_PATH := $(OUT_DIR)/$(ARCH)
 OBJS := $(SRCS:%=$(BUILD_PATH)/%.o)
 DEPS := $(OBJS:.o=.d)
 CFLAGS += -MMD -MP
-CONFIG := --config cheribsd-$(ARCH)64-purecap.cfg 
+CONFIG := -target riscv64-unknown-freebsd13 --sysroot=/Users/peter/Projects/CHERI/output/rootfs-riscv64-purecap -B/Users/peter/Projects/CHERI/output/sdk/bin -march=rv64imafdcxcheri -mabi=l64pc128d -mno-relax
 LDFLAGS += -L $(OUT_PATH)
 
 ifdef DEP_LIBS
