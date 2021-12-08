@@ -162,3 +162,10 @@ make_pollcoport(pollcoport_t *pcpt, coport_t *port, coport_eventmask_t events)
     pcpt->events = events;
     pcpt->revents = NOEVENT;
 }
+
+void 
+set_coport_handle_type(coport_t *port, coport_type_t type)
+{
+    process_coport_handle(port, type);
+}
+
