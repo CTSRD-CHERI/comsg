@@ -111,7 +111,7 @@ cocallback_register(cocall_args_t *cocall_args, void *token)
 	pid_t pid;
 
 	/* XXX-PBB: this functionality (cogetpid2) doesn't exist in cheribsd in non-private branches */
-	pid = cogetpid2(cocall_args->provider_scb);
+	pid = cogetpid2();
 
 	assert(pid > 0);
 	provider_death = monitor_provider(pid);

@@ -72,20 +72,13 @@ add_event_listener(cocall_args_t *cocall_args, void *token)
 	subject = cocall_args->subject;
 	switch (cocall_args->event) {
 	case PROCESS_DEATH:
-		//Workaround present to simplify testing
-		//TODO-PBB: remove workaround
-		if (__builtin_cheri_tag_get(subject.ces_scb)) {
-			target_pid = cogetpid2(subject.ces_scb);
-			if (target_pid == -1)
-				COCALL_ERR(cocall_args, EINVAL);
-			else if (target_pid != subject.ces_pid)
-				COCALL_ERR(cocall_args, EACCES);
-		} else
-			target_pid = subject.ces_pid;
+		/* event allocator must be the subject (i.e. the monitored process) */
+		target_pid = cogetpid2();
 		coevent = allocate_procdeath_event(target_pid);
 		break;
 	default:
 		COCALL_ERR(cocall_args, EINVAL);
+		break; /* NOTREACHED */
 	}
 	assert(coevent != NULL); /* should return prior to this point if we fail */
 	cocall_args->coevent = make_coevent_handle(coevent);
