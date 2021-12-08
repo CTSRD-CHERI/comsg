@@ -45,6 +45,8 @@ $(ARCH_TGTS):
 $(LIBS): $$(addprefix $$@-,$$(ARCHES))
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so $(CHERI_ROOT)/extra-files/usr/lib/$@.so
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so.* $(CHERI_ROOT)/extra-files-minimal/usr/lib
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so $(CHERI_ROOT)/extra-files-minimal/usr/lib/$@.so
 
 .PHONY: libs
 libs: $(LIBS)
@@ -52,6 +54,7 @@ libs: $(LIBS)
 .SECONDEXPANSION:
 $(UKERNEL_EXECS): libs $$(addprefix $$@-,$$(ARCHES))
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
 
 .PHONY: ukernel
 ukernel : libs $(UKERNEL_EXECS)
@@ -59,6 +62,7 @@ ukernel : libs $(UKERNEL_EXECS)
 .SECONDEXPANSION:
 $(TESTS): libs ukernel $$(addprefix $$@-,$$(ARCHES))
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
 
 .PHONY: tests
 tests : libs ukernel $(TESTS)
@@ -66,6 +70,7 @@ tests : libs ukernel $(TESTS)
 .SECONDEXPANSION:
 $(EXAMPLES): libs ukernel $$(addprefix $$@-,$$(ARCHES))
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
 
 .PHONY: examples
 examples: libs ukernel $(EXAMPLES)
