@@ -67,25 +67,19 @@ void setup_table(void)
 {
 	size_t top_of_table;
 
-	cocarrier_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	if (cocarrier_table.coports == MAP_FAILED)
-		err(errno, "setup_table: mmap for cocarrier table failed");
+	cocarrier_table.coports = calloc(max_coports, sizeof(coport_tbl_entry_t));
 	top_of_table = (cheri_getlen(cocarrier_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
 	cocarrier_table.next_coport = top_of_table;
 	cocarrier_table.first_coport = top_of_table;
 	cocarrier_table.ncoports = 0;
 
-	copipe_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	if (copipe_table.coports == MAP_FAILED)
-		err(errno, "setup_table: mmap for copipe table failed");
+	copipe_table.coports = calloc(max_coports, sizeof(coport_tbl_entry_t));
 	top_of_table = (cheri_getlen(copipe_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
 	copipe_table.next_coport = top_of_table;
 	copipe_table.first_coport = top_of_table;
 	copipe_table.ncoports = 0;
 
-	cochannel_table.coports = mmap(NULL, coport_table_len, coport_table_prot, coport_table_flags, -1, 0);
-	if (cochannel_table.coports == MAP_FAILED)
-		err(errno, "setup_table: mmap for cochannel table failed");
+	cochannel_table.coports = calloc(max_coports, sizeof(coport_tbl_entry_t));
 	top_of_table = (cheri_getlen(cochannel_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
 	cochannel_table.next_coport = top_of_table;
 	cochannel_table.first_coport = top_of_table;
