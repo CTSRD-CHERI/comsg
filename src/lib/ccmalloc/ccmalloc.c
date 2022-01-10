@@ -42,6 +42,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
 #include <unistd.h>
@@ -72,11 +73,12 @@ static struct {
 } bucket_table;
 
 static const size_t alloc_size = (1024 * 1024);
+static const size_t extra_alloc_multiplier = 32;
 static pthread_t refiller, emptier;
 
-static void init_bucket(struct bucket *new_bucket, size_t len);
+static void init_bucket(struct bucket *new_bucket, size_t len, bool extra_alloc);
 static int bucketsize_compare(const void* arg1, const void* arg2);
-static void new_batch(struct bucket *bucket);
+static struct batch *new_batch(struct bucket *bucket);
 static struct batch *get_spare(struct bucket *bucket);
 static struct bucket *get_bucket(size_t size);
 
@@ -116,19 +118,28 @@ mem_remaining(struct batch *batch)
 }
 
 static void
-init_bucket(struct bucket *new_bucket, size_t len)
+init_bucket(struct bucket *new_bucket, size_t len, bool extra_alloc)
 {
+	size_t bucket_alloc_size;
+	struct batch *batch;
+
 	LIST_INIT(&new_bucket->batch_list);
-	new_bucket->alloc_size = alloc_size;
+	
+	if (len <= alloc_size)
+		bucket_alloc_size = alloc_size;
+	else
+		bucket_alloc_size = __builtin_align_up(len, alloc_size);
+	if (extra_alloc)
+		bucket_alloc_size *= extra_alloc_multiplier;
+
+	new_bucket->alloc_size = bucket_alloc_size;
 	new_bucket->size = len;
 	new_bucket->cherisize = CHERI_REPRESENTABLE_LENGTH(len);
 	new_bucket->alignment = CHERI_REPRESENTABLE_ALIGNMENT(len);
-	new_bucket->spare = NULL;
 	
-	new_batch(new_bucket);
-	get_spare(new_bucket);
-	new_batch(new_bucket);
-	assert(new_bucket->spare != NULL);
+	batch = new_batch(new_bucket);
+	LIST_INSERT_HEAD(&new_bucket->batch_list, batch, batches);
+	atomic_store_explicit(&new_bucket->spare, new_batch(new_bucket), memory_order_release);
 }
 
 void 
@@ -144,7 +155,10 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 	last_bucket = 0;
 	bucket_table.nbuckets = 1;
 	bucket_table.sizes[0] = bucket_sizes[0];
-	init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket]);
+	if (nbuckets != 1)
+		init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket], false);
+	else
+		init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket], true);
 	for (i = 1; i < nbuckets; i++) {
 		if (bucket_table.sizes[last_bucket] == bucket_sizes[i]) {
 			bucket_table.buckets[last_bucket].alloc_size += alloc_size;
@@ -152,7 +166,10 @@ ccmalloc_init(size_t *bucket_sizes, size_t nbuckets)
 		}
 		last_bucket = bucket_table.nbuckets++;
 		bucket_table.sizes[last_bucket] = bucket_sizes[i];
-		init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket]);
+		if (i != nbuckets - 1)
+			init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket], false);
+		else
+			init_bucket(&bucket_table.buckets[last_bucket], bucket_table.sizes[last_bucket], true);
 	}
 	bucket_table.buckets = realloc(bucket_table.buckets, bucket_table.nbuckets * sizeof(struct bucket));
 	bucket_table.sizes = realloc(bucket_table.sizes, bucket_table.nbuckets * sizeof(size_t));
@@ -166,12 +183,13 @@ get_spare(struct bucket *bucket)
 {
 	struct batch *spare_batch;
 	spare_batch = atomic_load_explicit(&bucket->spare, memory_order_acquire);
-	
-	if (spare_batch == NULL)
-		return (NULL);
-	else if (atomic_compare_exchange_strong_explicit(&bucket->spare, &spare_batch, NULL, memory_order_acq_rel, memory_order_acquire))
-		LIST_INSERT_HEAD(&bucket->batch_list, spare_batch, batches);
 
+	do {	
+		if (spare_batch == NULL)
+			return (NULL);
+	} while (!atomic_compare_exchange_strong_explicit(&bucket->spare, &spare_batch, NULL, memory_order_acq_rel, memory_order_acquire));
+	
+	LIST_INSERT_HEAD(&bucket->batch_list, spare_batch, batches);
 	return (spare_batch);
 }
 
@@ -191,27 +209,26 @@ get_bucket(size_t size)
 
 }
 
-void
+struct batch *
 new_batch(struct bucket *bucket)
 {
-	struct batch *batch, *expected;
+	struct batch *batch;
 	void *mem;
 
-	mem = malloc(alloc_size);
+	mem = calloc(1, bucket->alloc_size);
 	if (mem == NULL)
-		err(errno, "new_bucket_batch: malloc failed");
-	memset(mem, '\0', cheri_getlen(mem)); /* fault in via zero */
+		err(EX_SOFTWARE, "%s: malloc failed", __func__);
 
 	batch = calloc(1, sizeof(struct batch));
-	batch->status = MAPPED;
+	if (batch == NULL)
+		err(EX_SOFTWARE, "%s: malloc failed", __func__);
+
 	batch->freed = 0;
 	batch->allocated = 0;
 	batch->mem = mem;
-	expected = NULL;
-	if(!atomic_compare_exchange_strong_explicit(&bucket->spare, &expected, batch, memory_order_acq_rel, memory_order_acquire)) {
-		free(mem);
-		free(batch);
-	}
+	atomic_store_explicit(&batch->status, MAPPED, memory_order_release);
+
+	return (batch);
 }
 
 void *
@@ -219,14 +236,17 @@ refill_buckets(void *args)
 {
 	UNUSED(args);
 	struct bucket *bucket;
+	struct batch *batch, *expected;
 	size_t i;
 
 	for (;;) {
-		sleep(10);
+		sleep(1); //needs revising
 		for (i = 0; i < bucket_table.nbuckets; i++) {
 			bucket = &bucket_table.buckets[i];
-			if (needs_new_batch(bucket)) 
-				new_batch(bucket);
+			if (needs_new_batch(bucket)){
+				batch = new_batch(bucket);
+				atomic_store_explicit(&bucket->spare, batch, memory_order_release);
+			}
 		}
 	}
 
@@ -244,7 +264,7 @@ empty_buckets(void *args)
 	int error;
 
 	for (;;) {
-		sleep(10);
+		sleep(1); //needs revising
 		for (i = 0; i < bucket_table.nbuckets; i++) {
 			bucket = &bucket_table.buckets[i];
 			batch = LIST_FIRST(&bucket->batch_list);
@@ -255,6 +275,8 @@ empty_buckets(void *args)
 				else if (batch->status == FREED)
 					continue;
 				allocated = atomic_load_explicit(&batch->allocated, memory_order_acquire);
+				if (allocated == 0)
+					continue;
 				freed = batch->freed;
 				if (allocated != freed)
 					continue;
@@ -278,13 +300,14 @@ cocall_malloc(size_t len)
 	bucket = get_bucket(len);
 	batch = LIST_FIRST(&bucket->batch_list);
 	
-	status = batch->status;
+	status = atomic_load_explicit(&batch->status, memory_order_acquire);
 	if (mem_remaining(batch) < len || status == FREED) {
 		batch = get_spare(bucket);
 		if (batch == NULL) 
 			return (NULL);
+		status = atomic_load_explicit(&batch->status, memory_order_acquire);
 	}
-	else if (status == MAPPED)
+	if (status == MAPPED)
 		atomic_store_explicit(&batch->status, INUSE, memory_order_release);
 
 	cap = atomic_load_explicit(&batch->mem, memory_order_acquire);
