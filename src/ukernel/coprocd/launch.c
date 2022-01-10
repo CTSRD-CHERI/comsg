@@ -46,6 +46,7 @@
 #include <string.h>
 #include <sysexits.h>
 #include <sys/errno.h>
+#include <sys/signal.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -149,7 +150,7 @@ init_microkernel(void)
                 warnc(errno, "failed to start core microkernel module %s", m->module_name);
                 if (launched_setpgrp)
                     kill_setpgrp_modules();
-                kill(-getpid(), KILL);
+                kill(-getpid(), SIGKILL);
                 exit(EX_SOFTWARE);
             } else
                 warn("failed to start microkernel module %s", m->module_name);
