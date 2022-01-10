@@ -93,8 +93,9 @@ process_coport_handle(coport_t *port, coport_type_t type)
 {
     switch (type) {
     case COPIPE:
-        if (cheri_getsealed(port) == 1)
+        if (cheri_getsealed(port) == 1) {
             break;
+        }
         port = cheri_clearperm(port, CHERI_PERM_GLOBAL);
         port = cheri_seal(port, copipe_otype.sc);
         break;
@@ -119,35 +120,45 @@ process_coport_handle(coport_t *port, coport_type_t type)
 } 
 
 coport_status_t 
-acquire_coport_status(coport_t *port, coport_status_t expected, coport_status_t desired)
+acquire_coport_status(const coport_t *port, coport_status_t expected, coport_status_t desired)
 {
     coport_status_t status_val;
+    _Atomic(coport_status_t) *status_ptr;
     int i;
 
     i = 0;
+    status_ptr = &port->info->status;
     status_val = expected;
     for(;;) {
-        if(atomic_compare_exchange_strong_explicit(&port->info->status, &status_val, desired, memory_order_acq_rel, memory_order_relaxed))
-            break;
-        switch (status_val) {
-        case COPORT_CLOSING:
-        case COPORT_CLOSED:
+        if (atomic_compare_exchange_strong_explicit(status_ptr, &status_val, desired, memory_order_acq_rel, memory_order_relaxed)) {
             return (status_val);
-        default:
-            status_val = expected;
-            break;
+        } else {
+            switch (status_val) {
+            case COPORT_CLOSING:
+            case COPORT_CLOSED:
+                return (status_val);
+                break; /* NOTREACHED */
+            default:
+                status_val = expected;
+                break;
+            }
+            if (!multicore || (i % 3) == 0) 
+                sched_yield(); 
+            i++;
         }
-        if(multicore == 0 || (i % 3) == 0) 
-            sched_yield(); 
-        i++;
     }
-    return (status_val);
 }
 
 void
-release_coport_status(coport_t *port, coport_status_t desired)
+release_coport_status(const coport_t *port, coport_status_t desired)
 {
     atomic_store_explicit(&port->info->status, desired, memory_order_release);
+}
+
+static bool
+check_coport_status(const coport_t *port, coport_status_t desired)
+{
+    return (atomic_load_explicit(&port->info->status, memory_order_acquire) == desired);
 }
 
 ssize_t
@@ -184,11 +195,13 @@ ssize_t
 cochannel_send(const coport_t *port, const void *buf, size_t len)
 {
     size_t port_size, port_start, old_end, new_end, new_len;
+    ssize_t copied_bytes;
     char *port_buffer, *msg_buffer;
     coport_eventmask_t event;
 
     port_size = port->info->length;
     new_len = len + port_size;
+    
     if(new_len > COPORT_BUF_LEN) {
         errno = EWOULDBLOCK;
         return (-1);
@@ -214,10 +227,13 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
     new_end = (old_end + len) % COPORT_BUF_LEN;
     if (old_end + len > COPORT_BUF_LEN) {
         memcpy(&port_buffer[old_end], msg_buffer, COPORT_BUF_LEN - old_end);
-        memcpy(port_buffer, &msg_buffer[COPORT_BUF_LEN-old_end], new_end);
-    }
-    else
+        memcpy(port_buffer, &msg_buffer[COPORT_BUF_LEN - old_end], new_end);
+        copied_bytes = COPORT_BUF_LEN - (ssize_t) old_end;
+        copied_bytes += (ssize_t) new_end;
+    } else {
         memcpy(&port_buffer[old_end], msg_buffer, len);
+        copied_bytes = len;
+    }
     port->info->end = new_end;
     port->info->length = new_len;
     
@@ -228,14 +244,15 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
 
     release_coport_status(port, COPORT_OPEN);
 
-    return ((ssize_t) len);
+    return (copied_bytes);
 }
 
 ssize_t
 cochannel_recv(const coport_t *port, void *buf, size_t len)
 {
     char *out_buffer, *port_buffer;
-    size_t port_size, old_start, port_end, new_start, len_to_end, new_len;
+    size_t port_size, port_buf_len;
+    size_t old_start, port_end, new_start, len_to_end, new_len;
     coport_eventmask_t event;
 
     port_size = port->info->length;
@@ -258,11 +275,12 @@ cochannel_recv(const coport_t *port, void *buf, size_t len)
     }
     out_buffer = buf;
     port_buffer = port->buffer->buf;
+    port_buf_len = __builtin_cheri_length_get(port_buffer);
     old_start = port->info->start;
     new_start = (old_start + len) % COPORT_BUF_LEN;
     
-    if (old_start + len > port_size) {
-        len_to_end = COPORT_BUF_LEN - old_start;
+    if (old_start + len > port_buf_len) {
+        len_to_end = port_buf_len - old_start;
         memcpy(out_buffer, &port_buffer[old_start], len_to_end);
         memcpy(&out_buffer[len_to_end], port_buffer, new_start);
     }
@@ -330,10 +348,11 @@ coport_ipc_utils_init(void)
     /* TODO-PBB: simulate a divided otype space, pending a type manager */
     sealroot = cheri_incoffset(sealroot, 32);
 
-    sealroot = make_otypes(sealroot, 1, allocated_otypes);
-    cochannel_otype = copipe_otype;
+    sealroot = make_otypes(sealroot, 2, allocated_otypes);
+    copipe_otype.usc = __builtin_cheri_tag_clear(copipe_otype.usc);
+    cochannel_otype.usc = __builtin_cheri_tag_clear(cochannel_otype.usc);
     cocarrier_otype.otype = 0;
-    setup_cinvoke_targets(copipe_otype.sc);
+    setup_cinvoke_targets(copipe_otype.sc, cochannel_otype.sc);
 
     len = sizeof(cores); 
     mib[0] = CTL_HW;
