@@ -71,13 +71,15 @@ int validate_coprovide_args(coprovide_args_t *cocall_args)
 void provide_coservice(coprovide_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	size_t service_len = CHERICAP_SIZE * cocall_args->nworkers;
+	int i;
 	coservice_t *coservice_ptr = allocate_coservice();
 
 	coservice_ptr->next_worker = 0;
 	coservice_ptr->nworkers = cocall_args->nworkers;
-	coservice_ptr->worker_scbs = cocall_flexible_malloc(service_len);
-	memcpy(coservice_ptr->worker_scbs, cocall_args->worker_scbs, service_len);
+	coservice_ptr->worker_scbs = cocall_calloc(CHERICAP_SIZE, cocall_args->nworkers);
+	for (i = 0; i < coservice_ptr->nworkers; i++) {
+		coservice_ptr->worker_scbs[i] = cocall_args->worker_scbs[i];
+	}
 
 	cocall_args->service = create_coservice_handle(coservice_ptr);
 
