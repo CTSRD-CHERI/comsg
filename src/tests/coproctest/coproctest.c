@@ -37,6 +37,7 @@
 #include <coproc/namespace_object.h>
 #include <coproc/coport.h>
 
+#include <assert.h>
 #include <err.h>
 #include <machine/sysarch.h>
 #include <stdio.h>
@@ -90,12 +91,16 @@ do_procdeath_test(void)
 	pid_t child_pid, my_pid;
 	cocall_args_t args;
 	struct cocallback_args ccb_args;
+	coport_t *copipe;
+	coevent_t *death;
+	int error;
 
 	void **scbs, *scb;
 	void **capv;
 
 	fmap = spawn_slow_worker(NULL, ccb_example, NULL);
 	scbs = get_worker_scbs(fmap);
+	copipe = open_coport(COPIPE);
 	scb = scbs[0];
 	capv = calloc(2, sizeof(void *));
 	capv[0] = scb;
@@ -109,15 +114,17 @@ do_procdeath_test(void)
 		coexecvec(my_pid, child_args[0], child_args, environ, capv);
 		_exit(EX_UNAVAILABLE);
 	} 
-	subject_death.ces_pid = child_pid;
+
 	pthread_mutex_lock(&procdeath);
-	coevent_t *death = colisten(PROCESS_DEATH, subject_death);
+	error = corecv(copipe, &death, sizeof(death));
+	assert(error > 0);
 	ccb_args.len = sizeof(cocall_args_t);
 	ccb_args.cocall_data = (void *)&args;
 	ccb_install(ccb_func, &ccb_args, death);
 	pthread_cond_wait(&proc_died, &procdeath);
-	pthread_mutex_unlock(&procdeath);
 	printf("coproctest: coeventd test passed\n");
+	pthread_mutex_unlock(&procdeath);
+	
 
 }
 
@@ -146,8 +153,7 @@ do_cocarrier(void *argp)
 	if (error == -1) {
 		printf("\t\t\tfailed\n");
 		err(errno, "do_cocarrier: copoll failed");
-	}
-	else
+	} else
 		printf("coproctest: polling coport... \t\t\tsuccess!\n");
 	pthread_mutex_lock(&start);
 	printf("coproctest: receiving message...");

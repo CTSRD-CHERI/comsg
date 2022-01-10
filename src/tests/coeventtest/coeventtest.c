@@ -28,15 +28,48 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include <comsg/coport_ipc.h>
+#include <comsg/ukern_calls.h>
+#include <coproc/coevent.h>
 
 #include <unistd.h>
+#include <err.h>
+#include <sysexits.h>
+#include <sys/auxv.h>
+
+static coport_t *copipe;
+
+static void
+process_capvec(void)
+{
+    int error;
+    void **capv;
+
+    error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+    if (capv[1] != NULL)
+        err(EX_SOFTWARE, "%s: invalid capvec format", __func__);
+
+    copipe = capv[0];
+}
 
 int main(int argc, char const *argv[])
 {
 	(void)argc;
 	(void)argv;
-	void *scb;
+    int error;
+	void *coproc_init_scb;
+    coevent_t *my_death;
+    coevent_subject_t subject_death;
 
+    error = colookup(U_COPROC_INIT, &coproc_init_scb);
+    if (error != 0){
+        err(EX_SOFTWARE, "%s: comsg microkernel not available", __func__);
+    }
+    set_ukern_target(COCALL_COPROC_INIT, coproc_init_scb);
+    global_ns = coproc_init(NULL, NULL, NULL, NULL);
+    subject_death.ces_pid = 0; //NOTUSED
+    my_death = colisten(PROCESS_DEATH, subject_death);
+    error = cosend(copipe, &my_death, sizeof(my_death));
 	sleep(5);
 	sleep(5);
 

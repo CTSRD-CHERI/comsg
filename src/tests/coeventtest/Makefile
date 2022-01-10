@@ -2,6 +2,6 @@ PROG := coeventtest
 
 SRCS :=	coeventtest.c 
 
-DEP_LIBS := pthread
+DEP_LIBS := pthread comsg coproc cocall
 
 include $(MK_DIR)/comsg.prog.mk
