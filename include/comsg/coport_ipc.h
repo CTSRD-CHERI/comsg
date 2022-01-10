@@ -44,5 +44,6 @@ ssize_t cosend(const coport_t *prt, const void *buf, size_t len);
 ssize_t corecv(const coport_t *port, void **buf, size_t len);
 coport_type_t coport_gettype(coport_t *port);
 void make_pollcoport(pollcoport_t *pct, coport_t *port, coport_eventmask_t events);
+void set_coport_handle_type(coport_t *port, coport_type_t type);
 
 #endif

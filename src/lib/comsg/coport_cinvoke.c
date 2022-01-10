@@ -50,10 +50,24 @@
 
 static coport_func_ptr _cosend_codecap = NULL;
 static coport_func_ptr _corecv_codecap = NULL;
+
+static coport_func_ptr _cosend_codecap_copipe = NULL;
+static coport_func_ptr _corecv_codecap_copipe = NULL;
+
+static coport_func_ptr _cosend_codecap_cochannel = NULL;
+static coport_func_ptr _corecv_codecap_cochannel  = NULL;
+
 static void *_stack_sealcap = NULL;
 
 const coport_func_ptr *cosend_codecap = &_cosend_codecap;
 const coport_func_ptr *corecv_codecap = &_corecv_codecap;
+
+const coport_func_ptr *cosend_codecap_copipe = &_cosend_codecap_copipe;
+const coport_func_ptr *corecv_codecap_copipe = &_corecv_codecap_copipe;
+
+const coport_func_ptr *cosend_codecap_cochannel = &_cosend_codecap_cochannel;
+const coport_func_ptr *corecv_codecap_cochannel = &_corecv_codecap_cochannel;
+
 const void **return_stack_sealcap = &_stack_sealcap;
 
 
@@ -67,7 +81,6 @@ validate_coport_op_args(coport_t *port, void *buf, size_t len)
     else 
         return (0);
 }
-
 
 static ssize_t
 cosend_impl(coport_t *port, void *buf, size_t len)
@@ -132,17 +145,109 @@ corecv_impl(coport_t *port, void **buf, size_t len)
     return (retval);  /* NOTREACHED */
 }
 
-void
-setup_cinvoke_targets(void *coport_sealcap)
+static ssize_t
+corecv_impl_cochannel(coport_t *port, void **buf, size_t len)
 {
-    /* TODO-PBB: get sealing capability via type manager and/or rtld */
-    _cosend_codecap = cheri_getpcc();
-    _cosend_codecap = cheri_setaddress(_cosend_codecap, (vaddr_t)&cosend_impl);
-    _cosend_codecap = cheri_seal(_cosend_codecap, coport_sealcap);
+    void *msg;
+    coport_type_t type;
+    ssize_t retval;
+    GET_IDC(port);
 
-    _corecv_codecap = cheri_getpcc();
-    _corecv_codecap = cheri_setaddress(_corecv_codecap, (vaddr_t)&corecv_impl);
-    _corecv_codecap = cheri_seal(_corecv_codecap, coport_sealcap);
+    retval = validate_coport_op_args(port, *buf, len);
+    if (retval != 0) {
+        errno = retval;
+        retval = -1;
+        CCALL_RETURN(retval);
+    }
+    retval = cochannel_recv(port, *buf, len);
+    CCALL_RETURN(retval);
+    return (retval);  /* NOTREACHED */
+}
+
+static ssize_t
+corecv_impl_copipe(coport_t *port, void **buf, size_t len)
+{
+    ssize_t retval;
+    GET_IDC(port);
+
+    retval = validate_coport_op_args(port, *buf, len);
+    if (retval != 0) {
+        errno = retval;
+        retval = -1;
+        CCALL_RETURN(retval);
+    }
+    retval = copipe_recv(port, *buf, len);
+    CCALL_RETURN(retval);
+    return (retval);  /* NOTREACHED */
+}
+
+static ssize_t
+cosend_impl_copipe(coport_t *port, void *buf, size_t len)
+{
+    ssize_t retval;
+    GET_IDC(port);
+
+    //comsg_benchmark_log("cinvoke");
+    retval = validate_coport_op_args(port, buf, len);
+    //comsg_benchmark_log("validate args");
+    if (retval != 0) {
+        errno = retval;
+        retval = -1;
+        CCALL_RETURN(retval);
+    }
+    retval = copipe_send(port, buf, len);
+    CCALL_RETURN(retval);
+    return (retval);  /* NOTREACHED */
+}
+
+static ssize_t
+cosend_impl_cochannel(coport_t *port, void *buf, size_t len)
+{
+    ssize_t retval;
+    GET_IDC(port);
+
+    retval = validate_coport_op_args(port, buf, len);
+    if (retval != 0) {
+        errno = retval;
+        retval = -1;
+        CCALL_RETURN(retval);
+    }
+    retval = cochannel_send(port, buf, len);
+    CCALL_RETURN(retval);
+    return (retval);  /* NOTREACHED */
+}
+
+void
+setup_cinvoke_targets(void *copipe_sealcap, void *cochannel_sealcap)
+{
+    void *cosend_func, *corecv_func;
+    void *coport_sealcap = copipe_sealcap;
+
+    coport_sealcap = copipe_sealcap;
+    /* TODO-PBB: get sealing capability via type manager and/or rtld */
+    cosend_func = cheri_getpcc();
+    
+    cosend_func = cheri_setaddress(cosend_func, (vaddr_t)&cosend_impl);
+    _cosend_codecap = cheri_seal(cosend_func, coport_sealcap);
+
+    cosend_func = cheri_setaddress(cosend_func, (vaddr_t)&cosend_impl_copipe);
+    _cosend_codecap_copipe = cheri_seal(cosend_func, copipe_sealcap);
+   
+    cosend_func = cheri_setaddress(cosend_func, (vaddr_t)&cosend_impl_cochannel);
+    _cosend_codecap_cochannel = cheri_seal(cosend_func, cochannel_sealcap);
+
+
+    corecv_func = cheri_getpcc();
+    corecv_func = cheri_setaddress(corecv_func, (vaddr_t)&corecv_impl);
+    
+    _corecv_codecap = cheri_seal(corecv_func, coport_sealcap);
+
+    corecv_func = cheri_setaddress(corecv_func, (vaddr_t)&corecv_impl_copipe);
+    _corecv_codecap_copipe = cheri_seal(corecv_func, copipe_sealcap);
+    
+    corecv_func = cheri_setaddress(corecv_func, (vaddr_t)&corecv_impl_cochannel);
+    _corecv_codecap_cochannel = cheri_seal(corecv_func, cochannel_sealcap);
+
 
     assert(cheri_getperm(_cosend_codecap) & CHERI_PERM_CCALL);
     assert(cheri_getperm(_corecv_codecap) & CHERI_PERM_CCALL);

@@ -31,9 +31,6 @@
 #ifndef _COPORT_CINVOKE_H
 #define _COPORT_CINVOKE_H
 
-#include <coproc/coport.h>
-#include <stddef.h>
-
-void setup_cinvoke_targets(void *coport_sealcap);
+void setup_cinvoke_targets(void *, void *);
 
 #endif

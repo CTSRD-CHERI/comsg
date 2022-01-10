@@ -101,12 +101,18 @@ cosend(const coport_t *port, const void *buf, size_t len)
     type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
+        if (len == 0) {
+            errno = EINVAL;
+            retval = -1;
+        } else
+            retval = cosend_cinvoke_cochannel(port, buf, len);
+        break;
     case COPIPE:
         if (len == 0) {
             errno = EINVAL;
             retval = -1;
         } else
-            retval = cosend_cinvoke(port, buf, len);
+            retval = cosend_cinvoke_copipe(port, buf, len);
         break;
     case COCARRIER:
         /* len is an optional hint here, so we're not so worried */
@@ -130,12 +136,18 @@ corecv(const coport_t *port, void **buf, size_t len)
     type = coport_gettype(port);
     switch(type) {
     case COCHANNEL:
+        if (len == 0) {
+            errno = EINVAL;
+            retval = -1;
+        } else
+            retval = corecv_cinvoke_cochannel(port, buf, len);
+        break;
     case COPIPE:
         if (len == 0) {
             errno = EINVAL;
             retval = -1;
         } else
-            retval = corecv_cinvoke(port, buf, len);
+            retval = corecv_cinvoke_copipe(port, buf, len);
         break;
     case COCARRIER:
         /* len is an optional hint here, so we're not so worried */

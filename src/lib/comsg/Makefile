@@ -4,12 +4,14 @@ SRCS := ukern_calls.c \
 	coport_ipc.c \
 	coport_ipc_utils.c \
 	coport_cinvoke.c \
-	coport_cinvoke_stub.S
+	coport_cinvoke_stub.S \
+	copipe_cinvoke_stubs.S \
+	cochannel_cinvoke_stubs.S
 
 VPATH := $(CURDIR)/$(ARCH)
 INC_FLAGS += -I$(CURDIR)/$(ARCH)
 
-DEP_LIBS := pthread cocall coproc
+DEP_LIBS := pthread cocall coproc statcounters
 
 SHLIB_MAJOR=	2
 

@@ -39,9 +39,21 @@ typedef ssize_t (*coport_func_ptr)(coport_t *, void *, size_t);
 
 extern const coport_func_ptr *cosend_codecap;
 extern const coport_func_ptr *corecv_codecap;
+
+extern const coport_func_ptr *cosend_codecap_copipe;
+extern const coport_func_ptr *corecv_codecap_copipe;
+
+extern const coport_func_ptr *cosend_codecap_cochannel;
+extern const coport_func_ptr *corecv_codecap_cochannel;
+
 extern const void **return_stack_sealcap;
 
 extern ssize_t coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
+
+extern ssize_t cochannel_cosend_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
+extern ssize_t cochannel_corecv_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
+extern ssize_t copipe_cosend_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
+extern ssize_t copipe_corecv_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
 
 static inline __always_inline ssize_t 
 cosend_cinvoke(coport_t *port, void *buffer, size_t length)
@@ -53,6 +65,30 @@ static inline __always_inline ssize_t
 corecv_cinvoke(coport_t *port, void *buffer, size_t length)
 {
 	return (coport_cinvoke(*corecv_codecap, port, buffer, (*return_stack_sealcap), length));
+}
+
+static inline __always_inline ssize_t 
+cosend_cinvoke_copipe(coport_t *port, void *buffer, size_t length)
+{
+    return (copipe_cosend_cinvoke(*cosend_codecap_copipe, port, buffer, (*return_stack_sealcap), length));
+}
+
+static inline __always_inline ssize_t 
+corecv_cinvoke_copipe(coport_t *port, void *buffer, size_t length)
+{
+    return (copipe_corecv_cinvoke(*corecv_codecap_copipe, port, buffer, (*return_stack_sealcap), length));
+}
+
+static inline __always_inline ssize_t 
+cosend_cinvoke_cochannel(coport_t *port, void *buffer, size_t length)
+{
+    return (cochannel_cosend_cinvoke(*cosend_codecap_cochannel, port, buffer, (*return_stack_sealcap), length));
+}
+
+static inline __always_inline ssize_t 
+corecv_cinvoke_cochannel(coport_t *port, void *buffer, size_t length)
+{
+    return (cochannel_corecv_cinvoke(*corecv_codecap_cochannel, port, buffer, (*return_stack_sealcap), length));
 }
 
 #endif
