@@ -156,7 +156,7 @@ corecv(const coport_t *port, void **buf, size_t len)
             retval = -1;
         else {
             *buf = msg;
-            retval = cheri_getlen(buf);
+            retval = cheri_getlen(msg);
         }
         break;
     default:
