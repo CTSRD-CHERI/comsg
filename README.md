@@ -8,7 +8,7 @@ The co-process microkernel is itself compartmentalized, running over the switche
 
 ## Getting Started
 
-This requires CheriBSD from the cocall-copycap branch of https://github.com/CTSRD-CHERI/cheribsd which has a modified switcher capable of copying capabilities.
+This requires CheriBSD from the cocall-comsg branch of https://github.com/CTSRD-CHERI/cheribsd which has a modified switcher capable of copying capabilities.
 
 Set (and export) the environment variable CHERI_ROOT to the directory containing the directories containing CheriBSD, cheribuild, and the extra-files directory. Alternatively, set CHERI_FSDIR, CHERIBSD_DIR, CHERIBUILD_DIR to the extra-files, Cheribsd, and cheribuild directories respectively. Your CC should be a version of clang able to target 128-bit purecap CheriBSD running on CHERI-MIPS. (Support for CHERI-RISCV is currently a work-in-progress)
 
