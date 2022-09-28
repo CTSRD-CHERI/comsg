@@ -1,4 +1,5 @@
 	COMSG_DIR ?= 	$(CURDIR)
+SHELL := /bin/bash
 ARCHES := riscv 
 DEFAULT_ARCH ?= riscv
 BUILD_DIR := 	$(COMSG_DIR)/build
@@ -12,7 +13,7 @@ INC_FLAGS :=	$(addprefix -isystem,$(INC_DIRS))
 LDFLAGS :=		-fuse-ld=lld -Wl,-znow 
 CFLAGS :=		-g -v
 
-export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS
+export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS SHELL
 
 LIBS := $(addprefix lib,$(shell find $(SRC_DIR)/lib -mindepth 1 -maxdepth 1 -type d -exec basename {} \;))
 ARCH_LIBS := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(LIBS)))
@@ -27,6 +28,10 @@ EXAMPLES := $(shell find $(SRC_DIR)/examples -mindepth 1 -maxdepth 1 -type d -ex
 ARCH_EXAMPLES := $(foreach arch,$(ARCHES),$(addsuffix -$(arch),$(EXAMPLES)))
 
 ARCH_TGTS := $(ARCH_LIBS) $(ARCH_EXECS) $(ARCH_TESTS) $(ARCH_EXAMPLES)
+INSTALL_ROOTS := $(addprefix $(CHERI_ROOT)/, extra-files extra-files-minimal)
+INSTALL_PARENTS := $(addsuffix /usr, $(INSTALL_ROOTS))
+INSTALL_DIRS := $(addsuffix /lib, $(INSTALL_PARENTS))
+INSTALL_DIRS += $(addsuffix /bin, $(INSTALL_PARENTS))
 
 #gosh this is awful
 .PHONY: $(ARCH_TGTS)
@@ -41,18 +46,25 @@ $(ARCH_TGTS):
 	cp $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so.* $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so; \
 	fi
 
+$(INSTALL_DIRS) : | $(INSTALL_PARENTS)
+	mkdir -p $@
+
+$(INSTALL_PARENTS) : | $(INSTALL_ROOTS)
+	mkdir -p $@
+
+$(INSTALL_ROOTS):
+	mkdir -p $@
+
 .SECONDEXPANSION:
-$(LIBS): $$(addprefix $$@-,$$(ARCHES))
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so.* $(CHERI_ROOT)/extra-files/usr/lib
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so $(CHERI_ROOT)/extra-files/usr/lib/$@.so
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so.* $(CHERI_ROOT)/extra-files-minimal/usr/lib
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so $(CHERI_ROOT)/extra-files-minimal/usr/lib/$@.so
+$(LIBS): $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so* $(CHERI_ROOT)/extra-files/usr/lib
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so* $(CHERI_ROOT)/extra-files-minimal/usr/lib
 
 .PHONY: libs
 libs: $(LIBS)
 
 .SECONDEXPANSION:
-$(UKERNEL_EXECS): libs $$(addprefix $$@-,$$(ARCHES))
+$(UKERNEL_EXECS): libs $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
 
@@ -60,7 +72,7 @@ $(UKERNEL_EXECS): libs $$(addprefix $$@-,$$(ARCHES))
 ukernel : libs $(UKERNEL_EXECS)
 
 .SECONDEXPANSION:
-$(TESTS): libs ukernel $$(addprefix $$@-,$$(ARCHES))
+$(TESTS): libs ukernel $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
 
@@ -68,7 +80,7 @@ $(TESTS): libs ukernel $$(addprefix $$@-,$$(ARCHES))
 tests : libs ukernel $(TESTS)
 
 .SECONDEXPANSION:
-$(EXAMPLES): libs ukernel $$(addprefix $$@-,$$(ARCHES))
+$(EXAMPLES): libs ukernel $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
 	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
 
