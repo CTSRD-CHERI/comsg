@@ -33,9 +33,9 @@
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
-#include <cocall/cocall_args.h>
-#include <coproc/namespace.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/namespace.h>
+#include <comsg/utils.h>
 
 #include <cheri/cheric.h>
 #include <sys/errno.h>
@@ -45,7 +45,7 @@ int validate_cocreate_args(cocreate_args_t *cocall_args)
 	//XXX-PBB: extensive type based checking is neglected here, as types are likely to get a rework
 	if(!valid_namespace_cap(cocall_args->ns_cap))
 		return (0);
-	else if (cocall_args->ns_type == GLOBAL || cocall_args->ns_type == INVALID_NS)
+	else if (cocall_args->ns_type == ROOT || cocall_args->ns_type == INVALID_NS)
 		return (0);
 	else if (!valid_ns_name(cocall_args->ns_name))
 		return (0);
@@ -64,7 +64,7 @@ void namespace_create(cocreate_args_t *cocall_args, void *token)
 	/*
 	 * XXX-PBB: The access control model implemented here is incorrect/incomplete.
 	 * This is a placeholder that sort-of works. The hack here is to allow lookups of
-	 * APPLICATION, LIBRARY, and PUBLIC  namespaces from the GLOBAL namespace
+	 * APPLICATION, LIBRARY, and PUBLIC  namespaces from the ROOT namespace
 	 * where normally only PUBLIC should be allowed. Once we have linker assistance, 
 	 * or passing capabilities after vfork+coexecve, we can do the right thing. 
      */
@@ -77,7 +77,7 @@ void namespace_create(cocreate_args_t *cocall_args, void *token)
 			COCALL_ERR(cocall_args, EEXIST);
 		else if (ns->type == PRIVATE) 
 			COCALL_ERR(cocall_args, EEXIST);
-		else if (ns->type != PUBLIC && get_ns_type(parent_ns) != GLOBAL)
+		else if (ns->type != PUBLIC && get_ns_type(parent_ns) != ROOT)
 			COCALL_ERR(cocall_args, EEXIST);
 		else {
 			ns = cheri_andperm(ns, NS_PERMS_WR_MASK);

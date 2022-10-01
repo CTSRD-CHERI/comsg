@@ -32,8 +32,8 @@
 #include "coport_ipc_utils.h"
 #include "coport_cinvoke.h"
 
-#include <coproc/coport.h>
-#include <coproc/utils.h>
+#include <comsg/coport.h>
+#include <comsg/utils.h>
 #include <comsg/ukern_calls.h>
 
 #include <assert.h>
@@ -54,7 +54,7 @@ static nsobject_t *cosend_obj = NULL;
 static nsobject_t *corecv_obj = NULL;
 
 static struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
-static struct object_type *allocated_otypes[] = {&copipe_otype};
+static struct object_type *allocated_otypes[] = {&copipe_otype, &cochannel_otype};
 
 coport_type_t 
 coport_gettype(coport_t *port)
@@ -78,12 +78,12 @@ coport_gettype(coport_t *port)
 static void
 cocarrier_preload(void)
 {
-    if (global_ns == NULL)
-        global_ns = coproc_init(NULL, NULL, NULL, NULL);
+    if (root_ns == NULL)
+        root_ns = coproc_init(NULL, NULL, NULL, NULL);
     if (cosend_obj == NULL)
-        cosend_obj = coselect(U_COSEND, COSERVICE, global_ns);
+        cosend_obj = coselect(U_COSEND, COSERVICE, root_ns);
     if (corecv_obj == NULL)
-        corecv_obj = coselect(U_CORECV, COSERVICE, global_ns);
+        corecv_obj = coselect(U_CORECV, COSERVICE, root_ns);
     discover_ukern_func(cosend_obj, COCALL_COSEND);
     discover_ukern_func(corecv_obj, COCALL_CORECV);
 }

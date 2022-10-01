@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "coserviced_setup.h"
+#include "coserviced_endpoints.h"
 
 #include "codiscover.h"
 #include "coprovide.h"
@@ -36,30 +37,46 @@
 #include "coservice_table.h"
 #include "coservice_cap.h"
 
-#include <coproc/coservice.h>
-#include <coproc/namespace.h>
-#include <cocall/worker_map.h>
-#include <cocall/cocall_args.h>
+#include <comsg/coservice.h>
+#include <comsg/namespace.h>
+#include <comsg/comsg_args.h>
 #include <comsg/ukern_calls.h>
 
+
 #include <err.h>
+#include <sysexits.h>
 #include <sys/auxv.h>
 #include <sys/errno.h>
 
+static struct _coservice_endpoint *fast_endpoint = NULL;
+
+static struct _coservice_endpoint *
+get_fast_coservice_endpoint(void)
+{
+	return (fast_endpoint);
+}
 
 static void 
-init_service(coservice_provision_t *serv, void *func, void *valid)
+init_service(coservice_provision_t *serv, char *name, int op)
 {
 	coservice_t *service = allocate_coservice();
-	function_map_t *service_map = spawn_workers(func, valid, COSERVICED_NWORKERS);
+
+	service->impl = get_fast_coservice_endpoint();
+	if (service->impl == NULL) {
+		service->impl = allocate_endpoint();
+		service->impl->worker_scbs = get_fast_endpoints();
+		service->impl->nworkers = get_fast_endpoint_count();
+		service->impl->next_worker = 0;
+		fast_endpoint = create_coservice_handle(service)->impl;
+	}
 	
-	service->worker_scbs = get_worker_scbs(service_map);
-	service->nworkers = COSERVICED_NWORKERS;
-	service->next_worker = 0;
-	
-	serv->service = service;
-	serv->function_map = service_map;
-	return;
+	service->op = op;
+	service->flags = NONE;
+	serv->service = create_coservice_handle(service);
+
+	serv->nsobj = coinsert(name, COSERVICE, serv->service, root_ns);
+	if (serv->nsobj == NULL)
+		err(EX_UNAVAILABLE, "%s: error coinserting %s into root namespace", __func__, name);
 }
 
 static void
@@ -75,7 +92,9 @@ process_capvec(void)
 	set_ukern_target(COCALL_COPROC_INIT, capvec->coproc_init);
 	set_ukern_target(COCALL_COINSERT, capvec->coinsert);
 	set_ukern_target(COCALL_COSELECT, capvec->coselect);
-	global_ns = capvec->global_ns;
+	root_ns = capvec->root_ns;
+	if (root_ns == NULL)
+		err(EX_SOFTWARE, "%s: invalid root namespace in capvec!", __func__);
 }
 
 void 
@@ -84,23 +103,23 @@ coserviced_startup(void)
 	void *codiscover_scb;
 	coservice_t *coservice_cap;
 
-	//install scb and global ns capabilities
+	//install scb and root ns capabilities
 	process_capvec();
-	if (global_ns == NULL)
-		err(EINVAL, "coserviced_startup: incorrect capvec");
+	if (root_ns == NULL)
+		err(EX_UNAVAILABLE, "%s: incorrect capvec", __func__);
 	//init own services
-	init_service(&codiscover_serv, discover_coservice, validate_codiscover_args);
-	init_service(&coprovide_serv, provide_coservice, validate_coprovide_args);
+	init_endpoints();
 	
-	codiscover_scb = get_coservice_scb(codiscover_serv.service);
-	//connect to process daemon and do the startup dance (we can dance if we want to)
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+	init_service(&name##_serv, #name, op);
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
-	codiscover_serv.nsobj = coinsert(U_CODISCOVER, COSERVICE, create_coservice_handle(codiscover_serv.service), global_ns);
-	if (codiscover_serv.nsobj == NULL)
-		err(errno, "coserviced_startup: error coinserting codiscover into global namespace");
-	coprovide_serv.nsobj = coinsert(U_COPROVIDE, COSERVICE, create_coservice_handle(coprovide_serv.service), global_ns);
-	if (coprovide_serv.nsobj == NULL)
-		err(errno, "coserviced_startup: error coinserting coprovide into global namespace");
-
+	codiscover_scb = get_coservice_scb(unseal_endpoint(fast_endpoint));
 	coproc_init(NULL, NULL, NULL, codiscover_scb);
+	//coproc_init_done(); /* not needed; folded into coproc_init (see coprocd/modules/core.d) */
 }

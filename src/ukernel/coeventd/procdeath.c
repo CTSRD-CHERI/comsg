@@ -32,12 +32,13 @@
 #include "coevent_utils.h"
 #include "cocallback_func_utils.h"
 
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 #include <cocall/tls_cocall.h>
 
 #include <err.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/event.h>
 #include <sys/types.h>
@@ -85,7 +86,7 @@ monitor_proc(coevent_t *proc)
 			//changes were applied, we're fine
 			break;
 		default:
-			err(errno, "monitor_proc: kevent(2) failed");
+			err(EX_SOFTWARE, "%s: kevent(2) failed", __func__);
 			break;
 		}
 	}
@@ -101,14 +102,14 @@ init_monitoring(void)
 
 	procdeath_kq = kqueue();
 	if (procdeath_kq == -1)
-		err(errno, "init_monitoring: kqueue(2) failed");
+		err(EX_SOFTWARE, "%s: kqueue(2) failed", __func__);
 
 	parent = getppid();
 	PROCDEATH_EVENT_INIT(&coprocd_dies, parent, NULL);
 
 	error = kevent(procdeath_kq, &coprocd_dies, 1, NULL, 0, NULL);
 	if (error == -1)
-		err(errno, "init_monitoring: failed to add coprocd to kqueue");
+		err(EX_SOFTWARE, "%s: failed to add coprocd to kqueue", __func__);
 }
 
 static void
@@ -137,21 +138,29 @@ execute_cocallback(struct cocallback *cocallback)
 	return (error);
 }
 
+static void
+handle_coprocd_death(void)
+{
+	_exit(0);
+}
+
 static int
 trigger_cocallbacks(struct coevent *proc)
 {
 	int error, cocallbacks;
 	struct cocallback *notify;
-
+	
+	if (proc == NULL)
+		handle_coprocd_death();
 	cocallbacks = 0;
 	atomic_store_explicit(&proc->in_progress, 1, memory_order_release);
 	while ((notify = get_next_cocallback(proc)) != NULL) {
 		error = execute_cocallback(notify);
 		if (error == -1)
-			err(errno, "cocallback: cocallback failed");
+			err(EX_SOFTWARE, "%s: cocallback failed", __func__);
 		else { 
 			if (error == 1)
-				warn("cocallback: dead cocallback provider");
+				warn("%s: dead cocallback provider", __func__);
 			cocallbacks++;
 		}
 		free_cocallback(notify);
@@ -180,7 +189,7 @@ handle_proc_events(void *argp)
 			case EINTR:
 				break;
 			default:
-				err(errno, "handle_proc_events: kevent failed");
+				err(EX_SOFTWARE, "%s: kevent failed", __func__);
 				break; /*NOTREACHED*/
 			}
 		}

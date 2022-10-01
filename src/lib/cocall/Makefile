@@ -2,13 +2,12 @@ LIB := cocall
 
 SRCS :=	cocalls.c		\
 	tls_cocall.c		\
-	worker.c		\
-	worker_map.c 	\
+	endpoint.c		\
 	capvec.c
 
-DEP_LIBS := pthread coproc
+DEP_LIBS := pthread
 
-SHLIB_MAJOR=	1
+CFLAGS += -D_LIBCOCALL
 
-include $(MK_DIR)/comsg.lib.mk
+include $(MK_DIR)/comsg.libstatic.mk
 

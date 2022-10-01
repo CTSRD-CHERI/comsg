@@ -37,8 +37,8 @@
 #include <assert.h>
 #include <ccmalloc.h>
 #include <cheri/cheric.h>
-#include <cocall/cocall_args.h>
-#include <coproc/coevent.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coevent.h>
 #include <sys/errno.h>
 #include <unistd.h>
 
@@ -46,7 +46,7 @@ static void add_func_to_provider(coevent_t *, cocallback_func_t *);
 static coevent_t *monitor_provider(pid_t);
 
 int
-validate_cocallback_register(cocall_args_t *cocall_args)
+validate_cocallback_register(comsg_args_t *cocall_args)
 {
 	void *provider_scb;
 
@@ -104,7 +104,7 @@ add_func_to_provider(coevent_t *provider, cocallback_func_t *func)
  * flags - currently only FLAG_SLOCALL is supported
  */
 void 
-cocallback_register(cocall_args_t *cocall_args, void *token)
+cocallback_register(comsg_args_t *cocall_args, void *token)
 {
 	coevent_t *provider_death;
 	cocallback_func_t *ccb_func;

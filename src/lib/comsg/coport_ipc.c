@@ -34,7 +34,7 @@
 
 #include <comsg/coport_ipc_cinvoke.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <cheri/cheri.h>

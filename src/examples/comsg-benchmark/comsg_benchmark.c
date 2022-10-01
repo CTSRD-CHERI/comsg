@@ -29,13 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 #include <comsg/coport_ipc.h>
 #include <comsg/coport_ipc_cinvoke.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-#include <coproc/coport.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <err.h>
@@ -398,8 +397,8 @@ spawn_ukernel(pid_t my_pid)
 
 	retries = 0;
 coproc_init_lbl:
-	global_ns = coproc_init(NULL, NULL, NULL, NULL);
-	if (global_ns == NULL) {
+	root_ns = coproc_init(NULL, NULL, NULL, NULL);
+	if (root_ns == NULL) {
 		if (errno == EAGAIN) {
 			sleep(1);
 			retries++;

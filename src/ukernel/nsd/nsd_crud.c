@@ -36,9 +36,9 @@
 
 #include <ccmalloc.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-#include <coproc/utils.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <cheri/cheric.h>
@@ -56,7 +56,7 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 {
 	assert(valid_ns_name(name));
 	assert(VALID_NS_TYPE(type));
-	if(type != GLOBAL) {
+	if(type != ROOT) {
 		valid_namespace_cap(parent);
 		assert(NS_PERMITS_WRITE(parent));
 		parent = unseal_ns(parent);
@@ -64,13 +64,13 @@ validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 
 	switch(type)
 	{
-		case GLOBAL:
+		case ROOT:
 			assert(parent == NULL);
 			break;
 		case APPLICATION:
 		case LIBRARY:
-			assert(parent->type == GLOBAL);
-			assert(is_global_namespace(parent));
+			assert(parent->type == ROOT);
+			assert(is_root_namespace(parent));
 			break;
 		case PRIVATE:
 		case PUBLIC:
@@ -122,9 +122,9 @@ namespace_t *new_namespace(const char *name, nstype_t type, namespace_t *parent)
 	ns_ptr->type = type;
 	strncpy(ns_ptr->name, name, NS_NAME_LEN);
 
-	if (type == GLOBAL) {
+	if (type == ROOT) {
 		ns_ptr->parent = NULL;
-		global_ns = ns_ptr;
+		root_ns = ns_ptr;
 	} else {
 		parent_cap = unseal_ns(parent);	
 		parent_cap = cheri_andperm(parent_cap, NS_PERMS_OBJ_MASK);
@@ -209,7 +209,7 @@ int delete_namespace(namespace_t *ns_cap)
 			//TODO-PBB: oh boy we gotta do big work now
 			//Are all child namespaces now invalid?
 			//Are all nsobjects below this invalid?
-			//In the case of the global namespace, the answer to both of these is yes.
+			//In the case of the root namespace, the answer to both of these is yes.
 			//Should these simply "merge up?" - this could be problematic, I think
 			//This could represent a substantial amount of work; should we make the cocalling thread do it for us?
 			//There are large concurrency issues around this whole thing.

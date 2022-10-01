@@ -31,7 +31,7 @@
 #ifndef _COPOLL_UTILS_H
 #define _COPOLL_UTILS_H
 
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 
 #include <pthread.h>
 

@@ -31,7 +31,7 @@
 #ifndef _CCB_UTILS_H
 #define _CCB_UTILS_H
 
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 
 void init_cocallback_func_utils(void);
 

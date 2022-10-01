@@ -34,10 +34,9 @@
 #include "coservice_table.h"
 
 #include <ccmalloc.h>
-#include <cocall/cocall_args.h>
-#include <coproc/coservice.h>
-#include <cocall/worker.h>
-#include <cocall/worker_map.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coservice.h>
+#include <cocall/endpoint.h>
 #include <comsg/ukern_calls.h>
 
 #include <err.h>
@@ -48,7 +47,7 @@
 #include <sys/errno.h>
 #include <unistd.h>
 
-coservice_provision_t codiscover_serv, coprovide_serv;
+coservice_provision_t CODISCOVER_serv, COPROVIDE_serv, COPROVIDE2_serv;
 
 size_t buckets[] = {CHERICAP_SIZE * COSERVICE_MAX_WORKERS};
 size_t nbuckets = 1;
@@ -81,12 +80,7 @@ int main(int argc, char *const argv[])
 	ccmalloc_init(buckets, nbuckets);
 	coserviced_startup();
 	
-	//TODO-PBB: revise?
-	for (int i = 0; i < coprovide_serv.function_map->nworkers; i++)
-		pthread_join(coprovide_serv.function_map->workers[i].worker, NULL);
-	for (int i = 0; i < codiscover_serv.function_map->nworkers; i++)
-		pthread_join(codiscover_serv.function_map->workers[i].worker, NULL);
-
+	join_endpoint_thread();
 
 	return (0);
 }

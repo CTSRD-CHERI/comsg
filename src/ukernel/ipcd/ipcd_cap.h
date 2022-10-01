@@ -32,7 +32,7 @@
 #ifndef _IPCD_CAP_H
 #define _IPCD_CAP_H
 
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 
 int valid_coport(coport_t*);
 int valid_cocarrier(coport_t*);

@@ -31,7 +31,7 @@
 #ifndef _CODISCOVER_H
 #define _CODISCOVER_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
 int validate_codiscover_args(codiscover_args_t *args);
 

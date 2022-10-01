@@ -35,9 +35,9 @@
 
 #include <assert.h>
 #include <ccmalloc.h>
-#include <cocall/cocall_args.h>
-#include <coproc/coport.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coport.h>
+#include <comsg/utils.h>
 
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>

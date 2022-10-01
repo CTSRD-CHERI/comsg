@@ -31,7 +31,7 @@
 #ifndef _COSEND_H
 #define _COSEND_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
 int validate_cosend_args(coopen_args_t *cocall_args);
 void coport_send(coopen_args_t *cocall_args, void *token);

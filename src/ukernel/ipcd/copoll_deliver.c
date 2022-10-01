@@ -32,7 +32,7 @@
 #include "copoll_utils.h"
 #include "coport_table.h"
 
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <pthread.h>

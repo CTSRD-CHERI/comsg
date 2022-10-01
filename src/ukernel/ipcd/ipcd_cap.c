@@ -31,8 +31,8 @@
 #include "ipcd_cap.h"
 #include "coport_table.h"
 
-#include <coproc/coport.h>
-#include <coproc/utils.h>
+#include <comsg/coport.h>
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <err.h>

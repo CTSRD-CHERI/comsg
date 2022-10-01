@@ -35,10 +35,10 @@
 
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
-#include <cocall/cocall_args.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
+#include <comsg/utils.h>
 
 #include <sys/errno.h>
 
@@ -49,6 +49,8 @@ int validate_coinsert_args(coinsert_args_t *cocall_args)
 		return (0);
 	if (cocall_args->obj != NULL) {
 		if ((cheri_getperm(cocall_args->obj) & CHERI_PERM_GLOBAL) == 1)
+			return (0);
+		else if (cocall_args->nsobj_type > last_nsobj_type || cocall_args->nsobj_type <= INVALID_NSOBJ)
 			return (0);
 	} else if (cocall_args->nsobj_type != RESERVATION)
 		return (0);

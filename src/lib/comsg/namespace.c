@@ -28,32 +28,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_H
-#define _COSERVICE_H
 
-#include <cheri/cherireg.h>
-#include <stdatomic.h>
-#include <sys/cdefs.h>
+#include <comsg/namespace.h>
 
-#define COSERVICE_CODISCOVER_PERMS (-1)
-#define COSERVICE_PROVIDE_PERMS (-1)
-#define COSERVICE_MAX_WORKERS (128)
+#include <ctype.h>
+#include <string.h>
 
-typedef struct _coservice {
-	char *name;
-	void **worker_scbs;
-	int nworkers;
-	_Atomic int next_worker;
-} coservice_t;
+int valid_ns_name(const char *name)
+{
+	int i;
+	if(name[0]=='\0')
+		return (0);
 
-/* Wrapper functions should marshall arguments */
-/* Wrapper can return a value directly, or a status code */
-/* */
+	for(i = 0; i < strnlen(name, NS_NAME_LEN); i++) {
+		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
+			return (0);
+	}
+	return (1);
+}
 
-__BEGIN_DECLS
-
-void *get_coservice_scb(coservice_t *);
-
-__END_DECLS
-
-#endif //!defined(_COSERVICE_H)

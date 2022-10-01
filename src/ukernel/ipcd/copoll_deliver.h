@@ -36,7 +36,7 @@
 #include <stdatomic.h>
 #include <stddef.h>
 
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 
 extern const size_t n_copoll_notifiers;
 

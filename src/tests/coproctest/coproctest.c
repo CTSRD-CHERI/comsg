@@ -29,13 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 #include <comsg/coport_ipc.h>
 #include <comsg/coport_ipc_cinvoke.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-#include <coproc/coport.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <err.h>
@@ -49,6 +48,9 @@
 #include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "dynamic_endpoint.h"
+#include "dynamic_endpoint_map.h"
 
 static char *coprocd_args[] = {"/usr/bin/coprocd", NULL};
 extern char **environ;
@@ -72,7 +74,7 @@ pthread_mutex_t procdeath;
 pthread_cond_t proc_died;
 
 static void 
-ccb_example(cocall_args_t *cocall_args, void *token)
+ccb_example(comsg_args_t *cocall_args, void *token)
 {
 	(void)(token);
 	(void)(cocall_args);
@@ -89,7 +91,7 @@ do_procdeath_test(void)
 	coevent_subject_t subject_death;
 	char *child_args[] = {"/usr/bin/coeventtest", NULL};
 	pid_t child_pid, my_pid;
-	cocall_args_t args;
+	comsg_args_t args;
 	struct cocallback_args ccb_args;
 	coport_t *copipe;
 	coevent_t *death;
@@ -118,7 +120,7 @@ do_procdeath_test(void)
 	pthread_mutex_lock(&procdeath);
 	error = corecv(copipe, &death, sizeof(death));
 	assert(error > 0);
-	ccb_args.len = sizeof(cocall_args_t);
+	ccb_args.len = sizeof(comsg_args_t);
 	ccb_args.cocall_data = (void *)&args;
 	ccb_install(ccb_func, &ccb_args, death);
 	pthread_cond_wait(&proc_died, &procdeath);
@@ -193,8 +195,8 @@ do_tests(void)
 
 coproc_init_lbl:
 	printf("coproctest: initializing coproc...");
-	global_ns = coproc_init(NULL, NULL, NULL, NULL);
-	if (global_ns != NULL) 
+	root_ns = coproc_init(NULL, NULL, NULL, NULL);
+	if (root_ns != NULL) 
 		printf("\t\tsuccess!\n");
 	else {
 		if (errno == EAGAIN) {
@@ -208,7 +210,7 @@ coproc_init_lbl:
 	
 	printf("coproctest: creating namespace...");
 cocreate_lbl:
-	proc_ns = cocreate(ns_name, APPLICATION, global_ns);
+	proc_ns = cocreate(ns_name, APPLICATION, root_ns);
 	if (proc_ns != NULL) 
 		printf("\t\tsuccess!\n");
 	else {

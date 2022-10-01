@@ -29,44 +29,46 @@
  * SUCH DAMAGE.
  */
 #include "coeventd_setup.h"
-
+#include "coeventd_endpoints.h"
 #include "coeventd.h"
-#include "cocallback_install.h"
-#include "cocallback_register.h"
-#include "coevent_listen.h"
+
 #include "cocallback_func_utils.h"
 #include "procdeath_tbl.h"
 
-#include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/namespace_object.h>
+#include <comsg/namespace_object.h>
 
 #include <err.h>
+#include <sysexits.h>
 #include <sys/auxv.h>
 #include <sys/errno.h>
 #include <unistd.h>
 
-#define COEVENTD_WORKERS (12)
+static coservice_t *fast_endpoints = NULL;
 
-static void
-init_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
+static struct _coservice_endpoint *
+get_fast_coservice_endpoint(void)
 {
-
-	serv->function_map = spawn_workers(func, valid, COEVENTD_WORKERS);
-	serv->service = coprovide(get_worker_scbs(serv->function_map), COEVENTD_WORKERS);
-	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
-	if (serv->nsobj == NULL)
-		err(errno, "init_service: error inserting %s into global namespace", name);
+	if (fast_endpoints == NULL)
+		return (NULL);
+	return (fast_endpoints->impl);
 }
 
-static void
-init_slow_service(coservice_provision_t *serv, void *func, void *valid, const char *name)
+static void 
+init_service(coservice_provision_t *serv, char *name, int op)
 {
-	serv->function_map = spawn_slow_workers(func, valid, COEVENTD_WORKERS);
-	serv->service = coprovide(get_worker_scbs(serv->function_map), COEVENTD_WORKERS);
-	serv->nsobj = coinsert(name, COSERVICE, serv->service, global_ns);
+	struct _coservice_endpoint *ep = get_fast_coservice_endpoint();
+	if (ep == NULL) {
+		fast_endpoints = coprovide(get_fast_endpoints(), (int)get_fast_endpoint_count(), (coservice_flags_t)NONE, op);
+		serv->service = fast_endpoints;
+	} else
+		serv->service = coprovide2(ep, NONE, op);
+
+	if (serv->service == NULL)
+		err(EX_SOFTWARE, "%s: error creating/getting endpoint coservice when initing %s", __func__, name);
+	serv->nsobj = coinsert(name, COSERVICE, serv->service, root_ns);
 	if (serv->nsobj == NULL)
-		err(errno, "init_service: error inserting %s into global namespace", name);
+		err(EX_SOFTWARE, "%s: error inserting %s into root namespace", __func__, name);
 }
 
 static void
@@ -90,7 +92,7 @@ process_capvec(void)
 	set_ukern_target(COCALL_CODISCOVER, capvec->codiscover);
 	set_ukern_target(COCALL_COINSERT, capvec->coinsert);
 	set_ukern_target(COCALL_COSELECT, capvec->coselect);
-	global_ns = capvec->global_ns;
+	root_ns = capvec->root_ns;
 }
 
 void
@@ -101,11 +103,11 @@ coeventd_startup(void)
 	init_callback_tables();
 
 	process_capvec();
-	if (global_ns == NULL)
+	if (root_ns == NULL)
 		err(errno, "coeventd_startup: cocall failed");
 
 	do {
-		coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, global_ns);
+		coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, root_ns);
 		if(cheri_gettag(coprovide_nsobj) == 0)
 			continue;
 		else if (cheri_gettag(coprovide_nsobj->obj) == 0)
@@ -114,10 +116,16 @@ coeventd_startup(void)
 
 	codiscover(coprovide_nsobj, &coprovide_scb);
 	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
+	init_endpoints();
 
-	init_service(&ccb_install_serv, install_cocallback, validate_cocallback_install, U_CCB_INSTALL); /* register monitoring for process */
-	init_service(&ccb_register_serv, cocallback_register, validate_cocallback_register, U_CCB_REGISTER); /* register monitoring for process */
-	init_service(&coevent_listen_serv, add_event_listener, validate_colisten, U_COLISTEN); /* register monitoring for process */
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+	init_service(&name##_serv, #name, op);
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 	coproc_init_done();
 }

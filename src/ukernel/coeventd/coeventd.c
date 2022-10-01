@@ -32,7 +32,7 @@
 #include "coeventd_setup.h"
 #include "procdeath.h"
 
-#include <cocall/worker_map.h>
+#include <comsg/coservice_provision.h>
 #include <comsg/ukern_calls.h>
 
 #include <ccmalloc.h>
@@ -53,7 +53,15 @@ usage(void)
 static size_t buckets[] = {sizeof(struct cocallback), sizeof(struct cocallback_func)};
 static size_t nbuckets = 2;
 
-coservice_provision_t ccb_install_serv, ccb_register_serv, coevent_listen_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name,  COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
+
 
 int main(int argc, char *const argv[])
 {

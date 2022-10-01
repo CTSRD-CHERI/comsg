@@ -28,39 +28,47 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _UKERN_WORKER_H
+#define _UKERN_WORKER_H
 
-#include <coproc/coservice.h>
+#include <cocall/cocall_args.h>
+
+#include <cheri/cherireg.h>
+#include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 
-#include <stddef.h>
-
-static int
-get_scb_index(coservice_t *service)
+typedef struct _worker_args
 {
-	int idx;
-	int max;
+	/* the worker thread */
+	pthread_t worker;
+	/* 
+	 * pointer to a function that: 
+	 *  + takes a pointer to cocall_args_t, 
+	 *  + modifies it in place,
+	 *  + sets status and error values before returning.
+	 */
+	void (*worker_function)(cocall_args_t *, void *);
+	/* 
+	 * pointer to a function that:
+	 * 	+ takes a pointer to cocall_args_t,
+	 * 	+ validates the arguments passed from a cocall
+	 * 	+ returns 0 if they fail, else non-zero
+	 */
+	int (*validation_function)(cocall_args_t *);
+	/* name to coregister under */
+	char *name;
+	/* result of coregister */
+	void *scb_cap;
+	/* should use slowpath */
+	bool slow;
+} worker_args_t;
 
-	max = service->nworkers;
-	for (;;) {
-		idx = atomic_fetch_add_explicit(&service->next_worker, 1, memory_order_acq_rel);
-		if (idx >= max) {
-			atomic_store_explicit(&service->next_worker, 1, memory_order_release);
-            continue;
-		};
-        break;
-	}
+typedef struct _worker_args handler_args_t;
 
-	return (idx);
-}
+bool start_coaccept_worker(worker_args_t *thread_args);
+void *coaccept_worker(void *worker_argp);
+bool start_sloaccept_worker(worker_args_t *thread_args);
+void *sloaccept_worker(void *worker_argp);
 
-void *
-get_coservice_scb(coservice_t *service)
-{
-	void *scb;
-	int index;
-
-	index = get_scb_index(service);
-	scb = service->worker_scbs[index];
-
-	return (scb);
-}
+#endif

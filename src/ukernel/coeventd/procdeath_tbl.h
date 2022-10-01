@@ -31,7 +31,7 @@
 #ifndef _COEVENTD_PROCDEATH_TBL_H
 #define _COEVENTD_PROCDEATH_TBL_H
 
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 #include <sys/types.h>
 #include <stdbool.h>
 

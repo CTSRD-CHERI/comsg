@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Peter S. Blandford-Baker
+ * Copyright (c) 2020 Peter S. Blandford-Baker
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -29,70 +29,44 @@
  * SUCH DAMAGE.
  */
 
-#include <coproc/module.h>
-
-#include <assert.h>
+#include <comsg/coservice.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/queue.h>
 
-
-static size_t cur_ndeps = 0;
-static struct _provider *deps = NULL;
-
-struct depq_entry {
-	struct _provider *provider;
-	TAILQ_ENTRY(depq_entry) depq_next;
-};
-
-static TAILQ_HEAD(, depq_entry) deps = 
-	TAILQ_HEAD_INITIALIZER(deps);
-
-static bool module_init_complete = false;
-
-static coproc_deps_initializer void
-init_deps_array(void)
+static int
+get_scb_index(struct _coservice_endpoint *service)
 {
-	return;
-}
+	int idx;
+	int max;
 
-void
-add_dependency(char *provider_module, char *provider_submodule)
-{
-	struct depq_entry *entry;
-	struct _provider *prov;
-	/* placeholder for when i'm in less dental pain */
-	/* should only be called from constructors with priority greater than register_dependencies */
-	assert(!module_init_complete);
-	/* check dependency not installed */
-	TAILQ_FOREACH(entry, &deps, depq_next) {
-		prov = entry->provider;
-		if (strcmp(prov->module, provider_module) == 0) {
-			if (provider_submodule == NULL && prov->submodule == NULL)
-				return;
-			else if (provider_submodule != NULL && prov->submodule != NULL) {
-				if (strcmp(prov->submodule, provider_submodule) == 0)
-					return; /* exists */
-			} 
-		}
+	max = service->nworkers;
+	for (;;) {
+		idx = atomic_fetch_add_explicit(&service->next_worker, 1, memory_order_acq_rel);
+		if (idx >= max) {
+			atomic_store_explicit(&service->next_worker, 1, memory_order_release);
+            continue;
+		};
+        break;
 	}
-	entry = calloc(1, sizeof(struct depq_entry))
-	prov = calloc(1, sizeof(struct _provider));
-	prov->module = strdup(provider_module);
-	if (provider_submodule != NULL)
-		prov->submodule = strdup(provider_submodule);
-	entry->provider = prov;
 
-	TAILQ_INSERT_TAIL(&deps, entry, depq_next);
-	cur_ndeps++;
+	return (idx);
 }
 
-static coproc_deps_register void
-register_dependencies(void)
+void *
+get_coservice_scb(struct _coservice_endpoint *s)
 {
-	module_init_complete = true;
-	if (cur_ndeps != 0)
-		//dostuff
+	void *scb;
+	int index;
+
+	index = get_scb_index(s);
+	scb = s->worker_scbs[index];
+
+	return (scb);
+}
+
+bool
+should_slocall(coservice_t *s)
+{
+	return s->flags & SLOWPATH;
 }

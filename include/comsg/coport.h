@@ -39,7 +39,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 
-#include <coproc/namespace.h>
+#include <comsg/namespace.h>
 
 #ifndef COPORT_NAME_LEN
 #ifdef NS_NAME_LEN

@@ -56,6 +56,7 @@
 
 #include <ccmalloc.h>
 #include <comsg/ukern_calls.h>
+#include <cocall/endpoint.h>
 
 #include <err.h>
 #include <stdio.h>
@@ -66,7 +67,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-coservice_provision_t coinsert_serv, coselect_serv, coupdate_serv, codelete_serv, cocreate_serv, codrop_serv;
+coservice_provision_t COINSERT_serv, COSELECT_serv, COUPDATE_serv, CODELETE_serv, COCREATE_serv, CODROP_serv;
 
 static 
 void usage(void)
@@ -100,13 +101,10 @@ int main(int argc, char *const argv[])
 	}
 	ccmalloc_init(buckets, nbuckets);
 	//we can dance if we want to
-	global_ns = new_namespace("coproc", GLOBAL, NULL);
+	root_ns = new_namespace("coproc", ROOT, NULL);
 	init_services();
 
-	for (int i = 0; i < coinsert_serv.function_map->nworkers; i++)
-		pthread_join(coinsert_serv.function_map->workers[i].worker, NULL);
-	for (int i = 0; i < codelete_serv.function_map->nworkers; i++)
-		pthread_join(codelete_serv.function_map->workers[i].worker, NULL);
+	join_endpoint_thread();
 
 
 	return (0);

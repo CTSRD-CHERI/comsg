@@ -31,9 +31,9 @@
 #ifndef _CCB_REGISTER_H
 #define _CCB_REGISTER_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
-int validate_cocallback_register(cocall_args_t *);
-void cocallback_register(cocall_args_t *, void *);
+int validate_cocallback_register(comsg_args_t *);
+void cocallback_register(comsg_args_t *, void *);
 
 #endif //!defined(_CCB_REGISTER_H)

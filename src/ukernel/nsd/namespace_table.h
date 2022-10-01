@@ -31,8 +31,8 @@
 #ifndef _NSD_TABLE_H
 #define _NSD_TABLE_H
 
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
 #include <stdatomic.h>
 #include <stddef.h>
@@ -65,9 +65,9 @@ struct _ns_members {
 namespace_t *allocate_namespace(namespace_t *parent, nstype_t type);
 nsobject_t *allocate_nsobject(namespace_t *parent);
 
-void set_global_namespace(namespace_t *ns_cap);
-int is_global_namespace(namespace_t *ns_cap);
-void *get_global_namespace(void);
+void set_root_namespace(namespace_t *ns_cap);
+int is_root_namespace(namespace_t *ns_cap);
+void *get_root_namespace(void);
 
 int in_ns_table(namespace_t *ptr);
 int in_nsobject_table(nsobject_t *ptr);

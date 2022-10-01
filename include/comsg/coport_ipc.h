@@ -31,8 +31,8 @@
 #ifndef _COPORT_IPC_H
 #define _COPORT_IPC_H
 
-#include <cocall/cocall_args.h>
-#include <coproc/coport.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coport.h>
 
 #include <stddef.h>
 #include <sys/types.h>

@@ -31,8 +31,8 @@
 #ifndef _NSD_CRUD_H
 #define _NSD_CRUD_H
 
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
 
 namespace_t *new_namespace(const char *name, nstype_t type, namespace_t *parent);

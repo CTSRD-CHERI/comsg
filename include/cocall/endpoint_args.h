@@ -28,45 +28,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _UKERN_WORKER_H
-#define _UKERN_WORKER_H
+#ifndef _COCALL_WORKER_ARGS_H
+#define _COCALL_WORKER_ARGS_H
 
-#include <cocall/cocall_args.h>
-#include <coproc/namespace.h>
-
-#include <cheri/cherireg.h>
 #include <pthread.h>
-#include <stdatomic.h>
+#include <stdbool.h>
 
 typedef struct _worker_args
 {
 	/* the worker thread */
 	pthread_t worker;
-	/* 
-	 * pointer to a function that: 
-	 *  + takes a pointer to struct cocall_args, 
-	 *  + modifies it in place,
-	 *  + sets status and error values before returning.
-	 */
-	void (*worker_function)(cocall_args_t *, void *);
-	/* 
-	 * pointer to a function that:
-	 * 	+ takes a pointer to struct cocall_args,
-	 * 	+ validates the arguments passed from a cocall
-	 * 	+ returns 0 if they fail, else non-zero
-	 */
-	int (*validation_function)(cocall_args_t *);
-	/* name to coregister under */
-	char *name;
 	/* result of coregister */
 	void *scb_cap;
-} worker_args_t;
+	/* should use slowpath */
+	bool slow;
+} endpoint_args_t;
 
-typedef struct _worker_args handler_args_t;
+typedef struct _worker_args endpoint_args_t;
 
-bool start_coaccept_worker(worker_args_t *thread_args);
-void *coaccept_worker(void *worker_argp);
-bool start_sloaccept_worker(worker_args_t *thread_args);
-void *sloaccept_worker(void *worker_argp);
-
-#endif
+#endif //!defined(_COCALL_WORKER_ARGS_H)

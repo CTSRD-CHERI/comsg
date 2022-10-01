@@ -29,21 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#include <coproc/namespace.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
-#include <ctype.h>
-#include <string.h>
 
-int valid_ns_name(const char *name)
+int valid_nsobj_name(const char *name)
 {
-	int i;
-	if(name[0]=='\0')
-		return (0);
-
-	for(i = 0; i < strnlen(name, NS_NAME_LEN); i++) {
-		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
-			return (0);
-	}
-	return (1);
+	return (valid_ns_name(name));
 }
 

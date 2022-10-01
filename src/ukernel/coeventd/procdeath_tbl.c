@@ -34,7 +34,7 @@
 #include <cheri/cheric.h>
 #include <assert.h>
 #include <err.h>
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <stdio.h>

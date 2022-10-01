@@ -30,7 +30,7 @@
  */
 #include "cocallback_func_utils.h"
 
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 
 #include <cheri/cheric.h>
 #include <err.h>

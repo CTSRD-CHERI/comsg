@@ -31,8 +31,8 @@
 #include "nsd.h"
 #include "nsd_cap.h"
 
-#include <cocall/cocall_args.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/utils.h>
 
 #include <cheri/cheric.h>
 #include <sys/errno.h>

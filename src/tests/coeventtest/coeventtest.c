@@ -30,7 +30,7 @@
  */
 #include <comsg/coport_ipc.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 
 #include <unistd.h>
 #include <err.h>
@@ -66,7 +66,7 @@ int main(int argc, char const *argv[])
         err(EX_SOFTWARE, "%s: comsg microkernel not available", __func__);
     }
     set_ukern_target(COCALL_COPROC_INIT, coproc_init_scb);
-    global_ns = coproc_init(NULL, NULL, NULL, NULL);
+    root_ns = coproc_init(NULL, NULL, NULL, NULL);
     subject_death.ces_pid = 0; //NOTUSED
     my_death = colisten(PROCESS_DEATH, subject_death);
     error = cosend(copipe, &my_death, sizeof(my_death));

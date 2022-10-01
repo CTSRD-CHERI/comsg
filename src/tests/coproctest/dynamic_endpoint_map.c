@@ -28,10 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <cocall/worker_map.h>
-#include <cocall/worker.h>
-#include <coproc/namespace.h>
-#include <coproc/utils.h>
+#include "dynamic_endpoint_map.h"
+#include "dynamic_endpoint.h"
+#include <comsg/utils.h>
 
 #include <cheri/cheric.h>
 #include <err.h>
@@ -162,8 +161,8 @@ spawn_slow_worker(const char *worker_name, void *func, void *valid)
     map = new_function_map();
     memset(&wargs, '\0', sizeof(wargs));
     if(worker_name != NULL) {
-        wargs.name = calloc(1, NS_NAME_LEN);
-        strncpy(wargs.name, worker_name, NS_NAME_LEN);
+        wargs.name = calloc(1, 256);
+        strncpy(wargs.name, worker_name, 256);
     }
     wargs.worker_function = func;
     wargs.validation_function = valid; 
@@ -186,8 +185,8 @@ spawn_worker(const char *worker_name, void *func, void *valid)
     map = new_function_map();
     memset(&wargs, '\0', sizeof(wargs));
     if(worker_name != NULL) {
-        wargs.name = calloc(1, NS_NAME_LEN);
-        strncpy(wargs.name, worker_name, NS_NAME_LEN);
+        wargs.name = calloc(1, 256);
+        strncpy(wargs.name, worker_name, 256);
     }
 
     wargs.worker_function = func;

@@ -30,18 +30,74 @@
  */
 #include "coservice_cap.h"
 
-#include <coproc/coservice.h>
-#include <coproc/utils.h>
+#include <comsg/coservice.h>
+#include <comsg/utils.h>
 
+#include <assert.h>
 #include <cheri/cheric.h>
 #include <err.h>
+#include <stdbool.h>
 #include <sys/errno.h>
 #include <sys/sysctl.h>
 #include <unistd.h>
 
+static struct object_type coservice_otype;
+
+
+static __attribute__((constructor)) void
+setup_ipcd_otypes(void)
+{
+    size_t len;
+    struct object_type *otypes[] = {&coservice_otype};
+	void *root_cap;
+    
+    len = sizeof(root_cap);
+    assert(sysctlbyname("security.cheri.sealcap", &root_cap, &len,
+        NULL, 0) >= 0);
+
+    assert(cheri_gettag(root_cap) != 0);    
+    assert(cheri_getlen(root_cap) >= 96);
+    assert((cheri_getperm(root_cap) & CHERI_PERM_SEAL) != 0);
+    /* TODO-PBB: implement type manager and a divided otype space  */
+    /* XXX-PBB: we currently simulate the eventual role of the type manager here and in libcomsg */
+    root_cap = cheri_incoffset(root_cap, 64);
+    root_cap = make_otypes(root_cap, 1, otypes);
+}
+
+bool
+is_valid_endpoint(struct _coservice_endpoint *ep)
+{
+    if (!cheri_gettag(ep))
+        return false;
+    else if (cheri_gettype(ep) != coservice_otype.otype)
+        return false;
+    
+    return true;
+}
+
 coservice_t *create_coservice_handle(coservice_t *service)
 {
-	service = cheri_clearperm(service, CHERI_PERM_GLOBAL);
+    if (!cheri_getsealed(service->impl)) {
+        service->impl = cheri_setboundsexact(service->impl, sizeof(struct _coservice_endpoint));
+        service->impl = cheri_andperm(service->impl, COSERVICE_ENDPOINT_HANDLE_PERMS);
+	    service->impl = cheri_seal(service->impl, coservice_otype.sc);
+    }
+	service = cheri_andperm(service, COSERVICE_HANDLE_PERMS);
 	service = cheri_setboundsexact(service, sizeof(coservice_t));
+	
 	return ((service));
+}
+
+struct _coservice_endpoint *unseal_endpoint(struct _coservice_endpoint *ep)
+{
+    if (!cheri_getsealed(ep))
+        return (ep);
+	if (cheri_gettype(ep) != coservice_otype.otype)
+		return NULL; //malformed coservice
+	return cheri_unseal(ep, coservice_otype.usc);
+}
+
+struct _coservice_endpoint *get_service_endpoint(coservice_t *service)
+{
+	return unseal_endpoint(service->impl);
 }

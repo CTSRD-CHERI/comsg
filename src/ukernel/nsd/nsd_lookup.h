@@ -31,13 +31,13 @@
 #ifndef _NSD_LOOKUP_H
 #define _NSD_LOOKUP_H
 
-#include <coproc/coservice.h>
-#include <coproc/coport.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/coservice.h>
+#include <comsg/coport.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
-coservice_t *lookup_coservice(char * name, namespace_t *ns_cap);
-coport_t *lookup_coport(char * name, namespace_t *ns_cap);
+coservice_t *lookup_coservice(const char * name, namespace_t *ns_cap);
+coport_t *lookup_coport(const char * name, namespace_t *ns_cap);
 nsobject_t *lookup_nsobject(const char * name, nsobject_type_t nsobject_type, namespace_t *ns_cap);
 int in_namespace(const char * name, namespace_t *ns_cap);
 namespace_t *lookup_namespace(const char *name, namespace_t *parent);

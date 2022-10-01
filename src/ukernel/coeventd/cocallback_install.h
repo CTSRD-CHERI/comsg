@@ -31,9 +31,9 @@
 #ifndef _CCB_INSTALL_H
 #define _CCB_INSTALL_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
-int validate_cocallback_install(cocall_args_t *);
-void install_cocallback(cocall_args_t *, void *);
+int validate_cocallback_install(comsg_args_t *);
+void install_cocallback(comsg_args_t *, void *);
 
 #endif //!defined(_CCB_INSTALL_H)

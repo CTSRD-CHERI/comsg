@@ -30,11 +30,13 @@
  */
 #include "ipcd.h"
 #include "ipcd_startup.h"
+#include <cocall/endpoint.h>
 
 #include <ccmalloc.h>
 #include <cocall/cocalls.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/coport.h>
+
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <err.h>
@@ -45,7 +47,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_serv, cosend_serv, corecv_serv;
+coservice_provision_t COOPEN_serv, COCLOSE_serv, COPOLL_serv, SLOPOLL_serv, COSEND_serv, CORECV_serv;
 
 static 
 void usage(void)
@@ -77,12 +79,7 @@ int main(int argc, char *const argv[])
 	ccmalloc_init(buckets, nbuckets);
 	ipcd_startup();
 
-	for(;;) {
-		for (int i = 0; i < coopen_serv.function_map->nworkers; i++)
-			pthread_join(coopen_serv.function_map->workers[i].worker, NULL);
-		for (int i = 0; i < coclose_serv.function_map->nworkers; i++)
-			pthread_join(coclose_serv.function_map->workers[i].worker, NULL);
-	}
+	join_endpoint_thread();
 
 	return (0);
 }

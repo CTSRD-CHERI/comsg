@@ -35,9 +35,9 @@
 #define COPROC_UKERN 1
 #endif
 
-#include <cocall/worker_map.h>
+#include <comsg/coservice_provision.h>
 
-extern coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_serv, cosend_serv, corecv_serv;
+extern coservice_provision_t COOPEN_serv, COCLOSE_serv, COPOLL_serv, SLOPOLL_serv, COSEND_serv, CORECV_serv;
 
 //TODO-PBB: Revisit
 #define IPCD_NWORKERS 12
@@ -45,7 +45,7 @@ extern coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_ser
 /* Must match the capv coprocd provides exactly */
 struct ipcd_capvec {
 	void *coproc_init_done;
-	namespace_t *global_ns;
+	namespace_t *root_ns;
 	void *codiscover;
 	void *coinsert;
 	void *coselect;

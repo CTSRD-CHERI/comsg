@@ -28,39 +28,47 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _WORKER_MAP_H
-#define _WORKER_MAP_H
+#ifndef _UKERN_WORKER_H
+#define _UKERN_WORKER_H
 
-#include <coproc/namespace_object.h>
-#include <cocall/worker.h>
+#include <cocall/cocall_args.h>
 
 #include <cheri/cherireg.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 
-#define FUNC_MAP_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+typedef struct _worker_args
+{
+	/* the worker thread */
+	pthread_t worker;
+	/* 
+	 * pointer to a function that: 
+	 *  + takes a pointer to cocall_args_t, 
+	 *  + modifies it in place,
+	 *  + sets status and error values before returning.
+	 */
+	void (*worker_function)(cocall_args_t *, void *);
+	/* 
+	 * pointer to a function that:
+	 * 	+ takes a pointer to cocall_args_t,
+	 * 	+ validates the arguments passed from a cocall
+	 * 	+ returns 0 if they fail, else non-zero
+	 */
+	int (*validation_function)(cocall_args_t *);
+	/* name to coregister under */
+	char *name;
+	/* result of coregister */
+	void *scb_cap;
+	/* should use slowpath */
+	bool slow;
+} worker_args_t;
 
-typedef struct {
-	_Atomic int nworkers;
-	worker_args_t *workers;
-} function_map_t;
+typedef struct _worker_args handler_args_t;
 
-#ifdef COPROC_UKERN
+bool start_coaccept_worker(worker_args_t *thread_args);
+void *coaccept_worker(void *worker_argp);
+bool start_sloaccept_worker(worker_args_t *thread_args);
+void *sloaccept_worker(void *worker_argp);
 
-typedef struct coservice_prov {
-	coservice_t *service;
-	function_map_t *function_map;
-	nsobject_t *nsobj;
-} coservice_provision_t;
-
-#endif 
-
-bool spawn_slow_worker_thread(worker_args_t *worker, function_map_t *func_map);
-bool spawn_worker_thread(worker_args_t *worker, function_map_t *func_map);
-
-function_map_t *spawn_slow_worker(const char *worker_name, void *func, void *valid);
-function_map_t *spawn_slow_workers(void *func, void *arg_func, int nworkers);
-function_map_t *spawn_worker(const char *worker_name, void *func, void *valid);
-function_map_t *spawn_workers(void *func, void *arg_func, int nworkers);
-
-void **get_worker_scbs(function_map_t *func);
-
-#endif //!defined(_WORKER_MAP_H)
+#endif

@@ -35,14 +35,14 @@
 #define COPROC_UKERN 1
 #endif
 
-#include <cocall/worker_map.h>
+#include <comsg/coservice_provision.h>
 
-extern coservice_provision_t codiscover_serv, coprovide_serv;
+extern coservice_provision_t CODISCOVER_serv, COPROVIDE_serv, COPROVIDE2_serv;
 
 /* Must match the capv coprocd provides exactly */
 struct coserviced_capvec {
 	void *coproc_init;
-	namespace_t *global_ns;
+	namespace_t *root_ns;
 	void *coinsert;
 	void *coselect;
 };

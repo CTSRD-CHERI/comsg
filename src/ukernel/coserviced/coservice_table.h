@@ -31,9 +31,10 @@
 #ifndef _COSERVICE_TABLE_H
 #define _COSERVICE_TABLE_H
 
-#include <coproc/coservice.h>
+#include <comsg/coservice.h>
 
 coservice_t *allocate_coservice(void);
+struct _coservice_endpoint *allocate_endpoint(void);
 
 int in_table(coservice_t *ptr);
 

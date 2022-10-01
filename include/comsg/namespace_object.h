@@ -31,9 +31,9 @@
 #ifndef _NSOBJ_H
 #define _NSOBJ_H
 
-#include <coproc/coport.h>
-#include <coproc/coservice.h>
-#include <coproc/namespace.h>
+#include <comsg/coport.h>
+#include <comsg/coservice.h>
+#include <comsg/namespace.h>
 
 #include <sys/cdefs.h>
 
@@ -76,6 +76,7 @@
 #define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_andperm(c, ~NSOBJ_PERM_W) )
 
 typedef enum {INVALID_NSOBJ=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
+static const nsobject_type_t last_nsobj_type = COSERVICE;
 
 typedef struct _nsobject
 {

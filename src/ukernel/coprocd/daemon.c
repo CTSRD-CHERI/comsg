@@ -35,8 +35,9 @@
 #include "util.h"
 
 #include <cocall/capvec.h>
-#include <cocall/worker_map.h>
-#include <coproc/utils.h>
+#include "dynamic_endpoint.h"
+#include "dynamic_endpoint_map.h"
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <err.h>

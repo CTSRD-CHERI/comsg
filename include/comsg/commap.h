@@ -36,7 +36,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <coproc/utils.h>
+#include <comsg/utils.h>
 
 #define MAX_ADDR_SIZE 104
 

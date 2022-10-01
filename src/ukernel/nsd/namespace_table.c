@@ -33,33 +33,26 @@
 #include "nsd_cap.h"
 
 #include <ccmalloc.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-#include <coproc/utils.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <cheri/cheric.h>
 #include <err.h>
 #include <sys/errno.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <unistd.h>
 
-/* Constants */
-static const int namespace_table_prot = ( PROT_READ | PROT_WRITE );
-static const int namespace_table_flags = ( MAP_ANON | MAP_PRIVATE | MAP_STACK | MAP_ALIGNED_SUPER );
+static size_t max_namespaces = 0;
+static size_t max_nsobjects = 0;
 
-/* TODO-PBB: needs refining. we shouldn't be quite so scared of using more memory than this */
-#define ALLOC_UNIT ( 1024 * 1024 ) 
-
-static size_t namespace_table_len = ALLOC_UNIT; //should get from OS and relate to process limits
-static size_t max_namespaces;
-static size_t max_nsobjects;
-
-static namespace_t *global_namespace = NULL;
+static namespace_t *root_namespace = NULL;
 
 static struct {
 	namespace_t *namespaces;
@@ -77,21 +70,20 @@ __attribute__ ((constructor)) static
 void setup_namespace_table(void)
 {
 	/* Add space to ensure we can map a process namespace for every process in the system */
-	int maxprocs = get_maxprocs();
-	namespace_table_len += (((maxprocs * sizeof(namespace_t)) / ALLOC_UNIT) + 1) * ALLOC_UNIT;
+	int maxprocs = get_maxprocs() < 1024 ? 1024 : get_maxprocs();
 	/* Allocate namespace table */
-	namespace_table.namespaces = mmap(NULL, namespace_table_len, namespace_table_prot, namespace_table_flags, -1, 0);
-	if (namespace_table.namespaces == MAP_FAILED)
-		err(errno, "setup_namespace_table: mmap for namespace table failed");
+	namespace_table.namespaces = calloc(maxprocs, sizeof(namespace_t));
+	if (namespace_table.namespaces == NULL)
+		err(errno, "setup_namespace_table: calloc for namespace table failed");
 	max_namespaces = cheri_getlen(namespace_table.namespaces) / sizeof(namespace_t);
-	namespace_table.next_namespace = max_namespaces - 1;
+	namespace_table.next_namespace = 0;
 	namespace_table.namespace_count = 0lu;
 	/* Allocate namespace object table */
-	nsobject_table.nsobjects = mmap(NULL, namespace_table_len, namespace_table_prot, namespace_table_flags, -1, 0);
-	if (nsobject_table.nsobjects == MAP_FAILED)
-		err(errno, "setup_namespace_table: mmap for nsobject table failed");
+	nsobject_table.nsobjects = calloc(maxprocs * 2, sizeof(nsobject_t));
+	if (nsobject_table.nsobjects == NULL)
+		err(errno, "setup_namespace_table: calloc for nsobject table failed");
 	max_nsobjects = cheri_getlen(nsobject_table.nsobjects) / sizeof(nsobject_t);
-	nsobject_table.next_nsobject = max_nsobjects - 1;
+	nsobject_table.next_nsobject = 0;
 	nsobject_table.nsobject_count = 0lu;
 
 	/* Determine limits - not fully used yet.*/
@@ -110,8 +102,8 @@ new_namespace_entry(void)
 		warn("new_namespace_entry: namespace table exhausted");
 		return (NULL);
 	} else {
-		index = atomic_fetch_sub(&namespace_table.next_namespace, 1);
-		if(index == 0) {
+		index = atomic_fetch_add(&namespace_table.next_namespace, 1);
+		if(index == max_namespaces) {
 			warn("new_namespace_entry: namespace table exhausted. further attempts to create namespaces will fail.");
 			full = 1;
 		}
@@ -140,8 +132,8 @@ new_nsobject_entry(void)
 		return (NULL);
 	}
 	else {
-		index = atomic_fetch_sub(&nsobject_table.next_nsobject, 1);
-		if(index == 0) {
+		index = atomic_fetch_add(&nsobject_table.next_nsobject, 1);
+		if(index == max_nsobjects) {
 			warn("new_nsobject_entry: nsobject table exhausted. further attempts to create namespaces will fail.");
 			full = 1;
 		}
@@ -175,11 +167,11 @@ namespace_t *
 allocate_namespace(namespace_t *parent, nstype_t type)
 {
 	struct _ns_member *obj_cap;
-	if (type == GLOBAL) {
+	if (type == ROOT) {
 		assert(parent == NULL);
-		assert(global_namespace == NULL);
-		global_namespace = new_namespace_entry();
-		return (global_namespace);
+		assert(root_namespace == NULL);
+		root_namespace = new_namespace_entry();
+		return (root_namespace);
 	} else {
 		assert(NS_PERMITS_WRITE(parent));
 	}
@@ -193,16 +185,16 @@ allocate_namespace(namespace_t *parent, nstype_t type)
 }
 
 int
-is_global_namespace(namespace_t *ns_cap)
+is_root_namespace(namespace_t *ns_cap)
 {
-	assert(global_namespace != NULL);
-	return (global_namespace == ns_cap);
+	assert(root_namespace != NULL);
+	return (root_namespace == ns_cap);
 }
 
-void *get_global_namespace(void)
+void *get_root_namespace(void)
 {
-	assert(global_namespace != NULL);
-	return (global_namespace);
+	assert(root_namespace != NULL);
+	return (root_namespace);
 }
 
 int in_ns_table(namespace_t *ptr)

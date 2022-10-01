@@ -30,7 +30,7 @@
  */
 #include <ccmalloc.h>
 
-#include <coproc/utils.h>
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <cheri/cheric.h>

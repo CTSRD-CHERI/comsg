@@ -36,7 +36,7 @@
 #include "monitor.h"
 #include "util.h"
 
-#include <cocall/worker_map.h>
+#include "dynamic_endpoint_map.h"
 #include <comsg/ukern_calls.h>
 
 #include <assert.h>
@@ -49,6 +49,8 @@
 #include <sys/signal.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h>
+
 
 static bool core_loaded = false;
 static bool launched_setpgrp = false;
@@ -58,6 +60,27 @@ struct ukernel_daemon *process_manager = NULL;
 
 static void init_core(void);
 static void kill_setpgrp_modules(void);
+
+static void __attribute__((noinline))
+check_daemon(struct ukernel_daemon *d)
+{
+    pid_t p;
+    int status, options;
+
+    options = WNOHANG | WEXITED;
+    p = waitpid(d->pid, &status, options);
+    if (p != d->pid)
+        return;
+    if (WIFEXITED(status) || WIFSIGNALED(status))
+        err(EX_SOFTWARE, "%s: microkernel daemon (%s) died during startup", __func__, d->name);
+}
+
+static void __attribute__((noinline))
+check_core(struct ukernel_module *core_module, int inited)
+{
+    for (int i = 1; i <= inited; i++)
+        check_daemon(&core_module->daemons[i]);
+}
 
 static void
 init_core(void)
@@ -95,6 +118,7 @@ init_core(void)
     core_module->init->start(core_module);
     for (i = 1; i < core_module->ndaemons; i++) {
         d = &core_module->daemons[i];
+        check_core(core_module, i-1);
         daemon_pid = init_daemon(core_module, d);
         if (daemon_pid == -1) 
             err(errno, "failed to start microkernel core daemon %s", d->name);
@@ -103,6 +127,7 @@ init_core(void)
                 if (d->status != STARTING) {
                     warn("%s status is not STARTING, CONTINUING, or RUNNING", d->name);
                 }
+                check_core(core_module, i);
                 sched_yield();
             }
         }

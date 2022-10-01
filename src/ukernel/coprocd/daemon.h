@@ -32,8 +32,8 @@
 #define _UKERN_DAEMON_H
 
 #include <cocall/capvec.h>
-#include <cocall/cocall_args.h>
-#include <cocall/worker.h>
+#include <comsg/comsg_args.h>
+#include "dynamic_endpoint.h"
 
 #include <stdatomic.h>
 #include <sys/types.h>
@@ -55,7 +55,7 @@ struct ukernel_module;
  * pattern being capvec + done, with prior dependencies marked
  * synchronous.
  */
-typedef void (*daemon_init_func)(cocall_args_t *, void *);
+typedef void (*daemon_init_func)(comsg_args_t *, void *);
 /* Puts module/daemon specific caps into supplied array */
 typedef void (*daemon_capv_func)(struct coexecve_capvec *);
 /* 

@@ -30,7 +30,7 @@
  */
 #include "coport_table.h"
 #include "copoll_deliver.h"
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <cheri/cheric.h>
