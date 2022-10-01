@@ -36,7 +36,10 @@
 
 #include <sys/errno.h>
 #include <sys/types.h>
+#include <sys/cdefs.h>
 #include <stdbool.h>
+
+__BEGIN_DECLS
 
 void init_endpoints(void);
 void join_endpoint_thread(void);
@@ -45,7 +48,11 @@ void **get_slow_endpoints(void);
 size_t get_fast_endpoint_count(void);
 size_t get_slow_endpoint_count(void);
 
+__END_DECLS
+
 #if !defined(_LIBCOCALL) && defined(COCALL_ENDPOINT_IMPL)
+
+__BEGIN_DECLS
 
 size_t 
 get_n_fast_workers()
@@ -120,12 +127,18 @@ sloaccept_handler(void *cookie, cocall_args_t *args)
     }
 }
 
+__END_DECLS
+
 #else
+
+__BEGIN_DECLS
 
 void sloaccept_handler(void *, cocall_args_t *);
 void coaccept_handler(void *, cocall_args_t *);
 size_t get_n_fast_workers();
 size_t get_n_slow_workers();
+
+__END_DECLS
 
 #endif //!defined(_LIBCOCALL)
 

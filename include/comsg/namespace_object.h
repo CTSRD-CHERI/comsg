@@ -92,6 +92,10 @@ typedef struct _nsobject
 
 #define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
 
+__BEGIN_DECLS
+
 int valid_nsobj_name(const char *name);
+
+__END_DECLS
 
 #endif

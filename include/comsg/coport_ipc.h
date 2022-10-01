@@ -35,15 +35,20 @@
 #include <comsg/coport.h>
 
 #include <stddef.h>
+#include <sys/cdefs.h>
 #include <sys/types.h>
 
-nsobject_t *open_named_coport(const char *coport_name, coport_type_t type, namespace_t *ns);
-coport_t *open_coport(coport_type_t type);
+__BEGIN_DECLS
 
-ssize_t cosend(const coport_t *prt, const void *buf, size_t len);
-ssize_t corecv(const coport_t *port, void **buf, size_t len);
-coport_type_t coport_gettype(coport_t *port);
-void make_pollcoport(pollcoport_t *pct, coport_t *port, coport_eventmask_t events);
-void set_coport_handle_type(coport_t *port, coport_type_t type);
+nsobject_t *open_named_coport(const char *, coport_type_t, namespace_t *);
+coport_t *open_coport(coport_type_t);
+
+ssize_t cosend(const coport_t *, const void *, size_t);
+ssize_t corecv(const coport_t *, void **, size_t);
+coport_type_t coport_gettype(coport_t *);
+void make_pollcoport(pollcoport_t *, coport_t *, coport_eventmask_t);
+void set_coport_handle_type(coport_t *, coport_type_t);
+
+__END_DECLS
 
 #endif

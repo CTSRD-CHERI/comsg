@@ -32,11 +32,16 @@
 #define _COCALL_TLS_H
 
 #include <stddef.h>
+#include <sys/cdefs.h>
 
-int cocall_tls(void *target, void *buffer, size_t len);
-int slocall_tls(void *target, void *buffer, size_t len);
+__BEGIN_DECLS
 
-int coaccept_tls(void **tokenp, void *buffer, size_t len);
-int sloaccept_tls(void **tokenp, void *buffer, size_t len);
+int cocall_tls(void *, void *, size_t);
+int slocall_tls(void *, void *, size_t);
+
+int coaccept_tls(void **, void *, size_t);
+int sloaccept_tls(void **, void *, size_t);
+
+__END_DECLS
 
 #endif //!defined(_COCALL_TLS_H)

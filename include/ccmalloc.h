@@ -34,6 +34,8 @@
 #include <stddef.h>
 #include <sys/cdefs.h>
 
+__BEGIN_DECLS
+
 void ccmalloc_init(size_t*, size_t);
 void *cocall_malloc(size_t len);
 void *cocall_calloc(size_t num, size_t length);
@@ -44,5 +46,7 @@ cocall_flexible_malloc(size_t len)
 {
 	return (cocall_malloc(len));
 }
+
+__END_DECLS
 
 #endif //!defined(_CCMALLOC_H)

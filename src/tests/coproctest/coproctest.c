@@ -126,8 +126,6 @@ do_procdeath_test(void)
 	pthread_cond_wait(&proc_died, &procdeath);
 	printf("coproctest: coeventd test passed\n");
 	pthread_mutex_unlock(&procdeath);
-	
-
 }
 
 static void *

@@ -37,6 +37,7 @@
 
 #include <stddef.h>
 #include <sys/mman.h>
+#include <sys/cdefs.h>
 
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
@@ -48,6 +49,14 @@ struct object_type
 	otype_t usc;
 	long otype;
 };
+
+
+#define GET_PROT(c) perms_to_prot(cheri_getperm(c))
+#define SET_PROT(c, p) cheri_andperm(c, prot_to_perms(p))
+#define HAS_PROT(a, b) ( a <= ( a & b ) )
+#define HAS_PROT_PERMS(c, p) ( p <= ( GET_PROT(c) & p ) )
+
+__BEGIN_DECLS
 
 int generate_id(void);
 int rand_string(char * buf, size_t len);
@@ -87,9 +96,6 @@ int prot_to_perms(int prot)
 	return (perms);
 }
 
-#define GET_PROT(c) perms_to_prot(cheri_getperm(c))
-#define SET_PROT(c, p) cheri_andperm(c, prot_to_perms(p))
-#define HAS_PROT(a, b) ( a <= ( a & b ) )
-#define HAS_PROT_PERMS(c, p) ( p <= ( GET_PROT(c) & p ) )
+__END_DECLS
 
 #endif
