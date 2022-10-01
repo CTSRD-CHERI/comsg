@@ -88,7 +88,7 @@
 typedef enum {INVALID_NS = -1, ROOT = 1, APPLICATION = 2, PRIVATE = 4, PUBLIC = 8, LIBRARY = 16} nstype_t;
 
 #ifndef NS_NAME_LEN
-#define NS_NAME_LEN ( (CHERICAP_SIZE * 5) + ( CHERICAP_SIZE - sizeof(nstype_t) ) )
+#define NS_NAME_LEN ( ((CHERICAP_SIZE * 8) - ((CHERICAP_SIZE * 2) + sizeof(nstype_t)))  )
 #endif
 
 struct _ns_members;
@@ -96,9 +96,9 @@ typedef struct _namespace namespace_t;
 
 struct _namespace {
 	namespace_t	*parent;
+	struct _ns_members *members;
 	char 		name[NS_NAME_LEN];
 	nstype_t	 type;
-	struct _ns_members *members;
 };
 
 #define VALID_NS_TYPE(type) ( type == ROOT || type == APPLICATION || type == PRIVATE || type == PUBLIC || type == LIBRARY )

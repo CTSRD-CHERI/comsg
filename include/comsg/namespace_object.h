@@ -78,16 +78,19 @@
 typedef enum {INVALID_NSOBJ=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
 static const nsobject_type_t last_nsobj_type = COSERVICE;
 
+#define NSOBJECT_PAD ( ((CHERICAP_SIZE * 8) - ((CHERICAP_SIZE) + sizeof(nsobject_type_t) + NS_NAME_LEN))  )
+
 typedef struct _nsobject
 {
-	char 			name[NS_NAME_LEN];
-	nsobject_type_t	type;
 	union
 	{
 		_Atomic(void *)			obj;
 		_Atomic(coservice_t	*)	coservice;
 		_Atomic(coport_t	*)	coport;
 	};
+	char 			name[NS_NAME_LEN];
+	nsobject_type_t	type;
+	char pad[NSOBJECT_PAD];
 } nsobject_t;
 
 #define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
