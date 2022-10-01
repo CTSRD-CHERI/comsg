@@ -42,7 +42,7 @@ $(ARCH_TGTS):
 	$(eval $@_DIR	:= $(patsubst $($@_TGT),examples,$(patsubst %test,tests,$(patsubst %d,ukernel,$(patsubst lib%,lib,$($@_TGT))))))
 	$(eval $@_NAME	:= $(patsubst lib%,%,$($@_TGT)))
 	$(MAKE) -C $(SRC_DIR)/$($@_DIR)/$($@_NAME) $($@_TGT) ARCH=$($@_ARCH)
-	@if [ "$($@_DIR)" == "lib" ]; then \
+	@if compgen -G "$(OUT_DIR)/$($@_ARCH)/$($@_TGT).so.*" > /dev/null; then \
 	cp $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so.* $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so; \
 	fi
 
@@ -57,8 +57,8 @@ $(INSTALL_ROOTS):
 
 .SECONDEXPANSION:
 $(LIBS): $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so* $(CHERI_ROOT)/extra-files/usr/lib
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@.so* $(CHERI_ROOT)/extra-files-minimal/usr/lib
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@* $(CHERI_ROOT)/extra-files/usr/lib
+	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@* $(CHERI_ROOT)/extra-files-minimal/usr/lib
 
 .PHONY: libs
 libs: $(LIBS)
