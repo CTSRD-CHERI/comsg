@@ -311,8 +311,13 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
     coport_status_t status;
     ssize_t received_len;
 
-    if (cheri_getlen(buf) < len)
+    if (cheri_getlen(buf) > len)
         buf = cheri_setbounds(buf, len);
+    else if (cheri_getlen(buf) < len) {
+        errno = EMSGSIZE;
+        return (-1);
+    }
+
     buf = cheri_andperm(buf, COPIPE_RECVBUF_PERMS);
 
     status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
