@@ -79,7 +79,7 @@ coport_gettype(coport_t *port)
             return (COCARRIER);
         }
     }
-        return (INVALID_COPORT);  
+    return (INVALID_COPORT);  
 }
 
 static void
@@ -261,6 +261,7 @@ cochannel_recv(const coport_t *port, void *buf, size_t len)
     size_t port_size, port_buf_len;
     size_t old_start, port_end, new_start, len_to_end, new_len;
     coport_eventmask_t event;
+    coport_status_t status;
 
     port_size = port->info->length;
     if (cheri_getlen(buf) < len) {
@@ -268,7 +269,9 @@ cochannel_recv(const coport_t *port, void *buf, size_t len)
         return (-1);
     }
     new_len = port_size - len;
-    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
+    if((status & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+        /* port is closed */
         errno = EPIPE;
         return (-1);
     }
