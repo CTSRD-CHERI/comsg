@@ -55,6 +55,8 @@ static nsobject_t *corecv_obj = NULL;
 
 static struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
 static struct object_type *allocated_otypes[] = {&copipe_otype, &cochannel_otype};
+#define IPCD_OTYPE_RANGE_START (32)
+#define IPCD_OTYPE_RANGE_END (63)
 
 coport_type_t 
 coport_gettype(coport_t *port)
@@ -71,7 +73,12 @@ coport_gettype(coport_t *port)
         return (COCHANNEL);
     else if (port_otype == copipe_otype.otype)
         return (COPIPE);
-    else
+    else if (cocarrier_otype.otype == 0) {
+        if (port_otype >= IPCD_OTYPE_RANGE_START && port_otype <= IPCD_OTYPE_RANGE_END) {
+            cocarrier_otype.otype = port_otype;
+            return (COCARRIER);
+        }
+    }
         return (INVALID_COPORT);  
 }
 
