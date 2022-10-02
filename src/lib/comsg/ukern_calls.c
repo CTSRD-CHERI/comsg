@@ -90,7 +90,7 @@ get_ukernel_service(cocall_num_t func)
 	coservice_t *s, *tmp;
 	void *scb;
 
-	if ((s = atomic_load(&ukernel_services[func])) == NULL) {
+	if (((s = atomic_load(&ukernel_services[func])) == NULL)) {
 		service_obj = coselect(ukern_func_names[func], COSERVICE, root_ns);
 		if (service_obj == NULL) {
 			errno = ENOSYS;
@@ -98,10 +98,15 @@ get_ukernel_service(cocall_num_t func)
 		}
 		tmp = codiscover(service_obj, &scb);
 		atomic_compare_exchange_strong(&ukernel_services[func], &s, tmp);
+		set_cocall_target(ukern_call_set, (int)func, scb);
 	} else {
+		if (get_cocall_target(ukern_call_set, COCALL_CODISCOVER2) == NULL)  {
+			errno = EDOOFUS;
+			err(EX_SOFTWARE, "get_ukernel_service: called before %s was initialized", ukern_func_names[COCALL_CODISCOVER2]);
+		}
 		scb = codiscover2(s);
-	}
 	set_cocall_target(ukern_call_set, (int)func, scb);
+	}
 	return (s);
 }
 
@@ -114,6 +119,17 @@ set_ukernel_service(cocall_num_t func, coservice_t *s)
 		return;
 }
 
+static bool
+should_init_thread(void)
+{
+	bool res;
+	res = (get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL);
+	res |= (get_cocall_target(ukern_call_set, COCALL_COSELECT) == NULL);
+	res |= (atomic_load(&ukernel_services[COCALL_CODISCOVER]) == NULL);
+	res |= (atomic_load(&ukernel_services[COCALL_COSELECT]) == NULL);
+	return (res);
+}
+
 static void
 init_new_thread_calls(void)
 {
@@ -124,9 +140,24 @@ init_new_thread_calls(void)
 	 * It is the responsibility of the callee/service manager to manage contention between threads
 	 * from different processes.
 	 */
+	if (get_global_target(COCALL_CODISCOVER) == NULL || get_global_target(COCALL_COSELECT) == NULL) {
+		errno = ENOTCONN;
+		err(EX_UNAVAILABLE, "%s: coproc_init not called; unable to perform cocalls", __func__);
+	}
 	set_cocall_target(ukern_call_set, COCALL_CODISCOVER,  get_global_target(COCALL_CODISCOVER));
 	set_cocall_target(ukern_call_set, COCALL_COSELECT, get_global_target(COCALL_COSELECT));
 	
+	if (get_global_target(COCALL_CODISCOVER2) == NULL) {
+		if (atomic_load(&ukernel_services[COCALL_CODISCOVER2]) != NULL) {
+			errno = EDOOFUS;
+			err(EX_SOFTWARE, "%s: codiscover2 service present but no codiscover2 scb can be found", __func__);
+		}
+		get_ukernel_service(COCALL_CODISCOVER2);
+	} else {
+		set_cocall_target(ukern_call_set, COCALL_CODISCOVER2,  get_global_target(COCALL_CODISCOVER2));
+		get_ukernel_service(COCALL_CODISCOVER2);
+	}
+
 	get_ukernel_service(COCALL_CODISCOVER);
 	get_ukernel_service(COCALL_COSELECT);
 }
@@ -149,8 +180,7 @@ refresh_target_scb(cocall_num_t func)
 	coservice_t *s;
 	void *scb;
 	if ((s = atomic_load(&ukernel_services[func])) == NULL) {
-		errno = EDOOFUS;
-		err(EX_SOFTWARE, "%s: should not be called before initial get of ukernel service (%s)", __func__, ukern_func_names[func]);
+		s = get_ukernel_service(func);
 	}
 	scb = codiscover2(s);
 	set_cocall_target(ukern_call_set, func, scb);
@@ -166,23 +196,37 @@ call_ukern_target(cocall_num_t func, comsg_args_t *args)
 		args->op = s->op;
 	else
 		args->op = func;
-	if (is_slocall(func))
-		return (targeted_slocall(ukern_call_set, (int)func, args, sizeof(comsg_args_t)));
-	else 
+
+	if (!is_slocall(func))
 		return (targeted_cocall(ukern_call_set, (int)func, args, sizeof(comsg_args_t)));
+	else 
+		return (targeted_slocall(ukern_call_set, (int)func, args, sizeof(comsg_args_t)));
 }
 
 static int
-call_ukern_service(cocall_num_t func, cocall_args_t *args, void *scb)
+call_ukern_service(cocall_num_t func, comsg_args_t *args, void *scb)
 {
 	int error;
 	void *func_scb;
 	void *orig_func_scb;
+	bool can_refresh;
 	
 	if (scb != NULL)
 		func_scb = scb;
 	else
 		func_scb = get_cocall_target(ukern_call_set, (int)func);
+
+	if (get_global_target(COCALL_CODISCOVER2) == NULL) {
+		do {
+			error = call_ukern_target(func, args);
+			if (error != 0 && errno == EAGAIN) {
+				sched_yield();
+				continue;
+			}
+		} while (0);
+		return (error);
+	}
+	
 	orig_func_scb = func_scb;
 	do {
 		error = call_ukern_target(func, args);
@@ -205,32 +249,16 @@ ukern_call(cocall_num_t func, comsg_args_t *args)
 	void *global_coselect_scb, *coselect_scb;
 	int error;
 
-	args->op = func;
 	errno = 0;
 	if ((func_scb = get_cocall_target(ukern_call_set, (int)func)) == NULL) {
 		if ((get_global_target(COCALL_CODISCOVER) == NULL) || (get_global_target(COCALL_COSELECT) == NULL)) {
 			errno = ESRCH;
 			err(EX_SOFTWARE, "ukern_call: coproc_init either failed or has not been called; attempted call was %s", ukern_func_names[func]);
-		} else if ((get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL) || (get_cocall_target(ukern_call_set, COCALL_COSELECT) == NULL))
+		} else if (should_init_thread())
 			init_new_thread_calls();
 		get_ukernel_service(func);
 	}
 	return (call_ukern_service(func, args, func_scb));
-}
-
-void 
-discover_ukern_func(nsobject_t *service_obj, cocall_num_t function)
-{
-	coservice_t *service;
-	void *scb;
-
-	if (get_cocall_target(ukern_call_set, (int)function) != NULL)
-		return;
-
-    service = codiscover(service_obj, &scb);
-    if (service == NULL)
-    	err(EX_SOFTWARE, "discover_ukern_func: invalid service_obj");
-    set_cocall_target(ukern_call_set, (int)function, scb);
 }
 
 void
@@ -450,7 +478,7 @@ coproc_init(namespace_t *root_ns_cap, void *coinsert_scb, void *coselect_scb, vo
 		errno = cocall_args.error;
 		return (NULL);
 	}
-	if (is_ukernel && root_ns != NULL && cocall_args.ns_cap == NULL) {
+	if (is_ukernel && root_ns != NULL && cocall_args.ns_cap == NULL && cocall_args.codiscover != NULL) {
 		set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args.codiscover);
 		return (root_ns);
 	} else if (!is_ukernel && cocall_args.ns_cap == NULL) {
@@ -482,6 +510,7 @@ coproc_init_done(void)
 		err(EX_SOFTWARE, "coproc_init_done: cocall failed");
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
+		err(EX_SOFTWARE, "coproc_init_done: coproc_init_done failed");
 		return (-1);
 	}
 
@@ -556,7 +585,7 @@ cocarrier_recv(coport_t *port, void ** const buf, size_t len)
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
-        return (NULL);
+        return (-1);
     } else if (cocall_args.oob_data.len != 0) {
         errno = EBADMSG;
         err(EX_SOFTWARE, "%s: out-of-band data present; use cocarrier_recv_oob instead", __func__);
@@ -837,7 +866,7 @@ codiscover2(coservice_t *s)
 	cocall_args.scb_cap = NULL;
 	cocall_args.coservice = s;
 	
-	error = ukern_call(COCALL_CODISCOVER2, &cocall_args);;
+	error = ukern_call(COCALL_CODISCOVER2, &cocall_args);
 	if (error == -1) {
 		err(EX_SOFTWARE, "codiscover2: error performing cocall to codiscover2");
 	} else if (cocall_args.status == -1) {

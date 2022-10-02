@@ -87,12 +87,8 @@ cocarrier_preload(void)
 {
     if (root_ns == NULL)
         root_ns = coproc_init(NULL, NULL, NULL, NULL);
-    if (cosend_obj == NULL)
-        cosend_obj = coselect(U_COSEND, COSERVICE, root_ns);
-    if (corecv_obj == NULL)
-        corecv_obj = coselect(U_CORECV, COSERVICE, root_ns);
-    discover_ukern_func(cosend_obj, COCALL_COSEND);
-    discover_ukern_func(corecv_obj, COCALL_CORECV);
+    get_ukernel_service(COCALL_COSEND);
+    get_ukernel_service(COCALL_CORECV);
 }
 
 coport_t *

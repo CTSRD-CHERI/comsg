@@ -76,8 +76,6 @@ cocallback_func_t *ccb_register(void *, cocallback_flags_t);
 coevent_t *colisten(coevent_type_t , coevent_subject_t);
 void *codiscover2(coservice_t *);
 
-
-void discover_ukern_func(nsobject_t *, cocall_num_t);
 void set_ukern_target(cocall_num_t , void *);
 void set_ukern_func(nsobject_t *, cocall_num_t);
 

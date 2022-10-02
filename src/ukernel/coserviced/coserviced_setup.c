@@ -68,10 +68,10 @@ init_service(coservice_provision_t *serv, char *name, int op)
 		service->impl = allocate_endpoint();
 		service->impl->worker_scbs = get_fast_endpoints();
 		service->impl->nworkers = get_fast_endpoint_count();
-		service->impl->next_worker = 0;
+		service->impl->next_worker = 1;
 		fast_endpoint = create_coservice_handle(service)->impl;
 	}
-	
+	set_ukern_target(op, get_coservice_scb(unseal_endpoint(service->impl)));
 	service->op = op;
 	service->flags = NONE;
 	serv->service = create_coservice_handle(service);

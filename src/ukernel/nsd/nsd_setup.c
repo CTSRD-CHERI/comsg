@@ -113,12 +113,12 @@ startup_dance(void)
 				err(EX_SOFTWARE, "%s: failed to get codiscover scb from coprocd", __func__);
 		}
 	} while (0);
-
 	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, root_ns);
 	coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
 	set_ukernel_service(COCALL_COPROVIDE, coprovide_service);
 	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
 	set_ukernel_service(COCALL_CODISCOVER, lookup_coservice(U_CODISCOVER, root_ns));
+	set_ukernel_service(COCALL_CODISCOVER2, lookup_coservice(U_CODISCOVER2, root_ns));
 }
 
 static void 

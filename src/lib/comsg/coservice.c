@@ -41,10 +41,15 @@ get_scb_index(struct _coservice_endpoint *service)
 	int max;
 
 	max = service->nworkers;
+	if (max == 1)
+		return (0);
 	for (;;) {
-		idx = atomic_fetch_add_explicit(&service->next_worker, 1, memory_order_acq_rel);
+		idx = atomic_fetch_add(&service->next_worker, 1);
 		if (idx >= max) {
-			atomic_store_explicit(&service->next_worker, 1, memory_order_release);
+			idx++;
+			if (atomic_compare_exchange_strong(&service->next_worker, &idx, 0))
+				return (0);
+			else
             continue;
 		};
         break;
