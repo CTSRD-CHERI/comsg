@@ -402,7 +402,7 @@ coproc_init_done(void)
 }
 
 int 
-cocarrier_send(coport_t *port, void *buf, size_t len)
+cocarrier_send(coport_t *port, const void *buf, size_t len)
 {
 	/* Currently only for cocarriers, likely to change soon */
 	cosend_args_t cocall_args;
@@ -414,6 +414,8 @@ cocarrier_send(coport_t *port, void *buf, size_t len)
     buf = cheri_setbounds(buf, len);
     cocall_args.message = cheri_andperm(buf, COCARRIER_MSG_PERMS);
     cocall_args.length = len;
+	cocall_args.oob_data.len = 0;
+	cocall_args.oob_data.attachments = NULL;
     
     error = ukern_call(COCALL_COSEND, &cocall_args);
     if(error)
@@ -448,8 +450,8 @@ coopen(coport_type_t type)
 	return (cocall_args.port);
 }
 
-void *
-cocarrier_recv(coport_t *port, size_t len)
+int
+cocarrier_recv(coport_t *port, void ** const buf, size_t len)
 {
 	/* Currently only for cocarriers, likely to change soon */
 	corecv_args_t cocall_args;
@@ -458,6 +460,8 @@ cocarrier_recv(coport_t *port, size_t len)
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	cocall_args.cocarrier = port;
 	cocall_args.length = len;
+	cocall_args.oob_data.len = 0;
+	cocall_args.oob_data.attachments = NULL;
 
 	error = ukern_call(COCALL_CORECV, &cocall_args);
     if(error != 0)
@@ -466,9 +470,13 @@ cocarrier_recv(coport_t *port, size_t len)
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
         return (NULL);
-    }
+    } else if (cocall_args.oob_data.len != 0) {
+        errno = EBADMSG;
+        err(EX_SOFTWARE, "%s: out-of-band data present; use cocarrier_recv_oob instead", __func__);
+    } else if (cocall_args.length != 0)
+        *buf = cocall_args.message;
 
-	return (cocall_args.message);
+	return (cocall_args.status);
 }
 
 int
@@ -666,4 +674,68 @@ colisten(coevent_type_t type, coevent_subject_t subject)
     }
 
 	return (cocall_args.coevent);
+}
+
+int
+cocarrier_send_oob(coport_t *port, const void *buf, size_t len, comsg_attachment_t *oob, size_t oob_len)
+{
+    cosend_args_t cocall_args;
+    int error;
+
+    memset(&cocall_args, '\0', sizeof(cocall_args));
+
+    cocall_args.cocarrier = port;
+    
+    buf = cheri_setbounds(buf, len);
+    cocall_args.message = cheri_andperm(buf, COCARRIER_MSG_PERMS);
+    cocall_args.length = len;
+
+    
+    if (oob != NULL) {
+        oob = cheri_setbounds(oob, oob_len * sizeof(comsg_attachment_t));
+		cocall_args.oob_data.attachments = calloc(oob_len, sizeof(comsg_attachment_t));
+        memcpy(cocall_args.oob_data.attachments, oob, cheri_getlen(oob));
+        cocall_args.oob_data.len = oob_len;
+    } else {
+        //ignore length if oob is NULL
+        cocall_args.oob_data.attachments = NULL;
+        cocall_args.oob_data.len = 0;
+    }
+
+    error = ukern_call(COCALL_COSEND, &cocall_args);
+    if(error)
+        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+
+    if (cocall_args.status == -1) 
+        errno = cocall_args.error;
+    return (cocall_args.status);
+}
+
+int
+cocarrier_recv_oob(coport_t *port, void ** const buf, size_t len, comsg_attachment_set_t *oob)
+{
+    corecv_args_t cocall_args;
+    int error;
+
+    memset(&cocall_args, '\0', sizeof(cocall_args));
+    cocall_args.cocarrier = port;
+    cocall_args.length = len;
+
+    error = ukern_call(COCALL_CORECV, &cocall_args);
+    if(error != 0)
+        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+    if (cocall_args.status == -1) 
+        errno = cocall_args.error;
+    else {
+        if (cocall_args.length != 0)
+            *buf = cocall_args.message;
+        if (cocall_args.oob_data.len != 0) {
+            *oob = cocall_args.oob_data;
+        } else {
+            oob->attachments = 0;
+            oob->len = 0;
+       }
+    }
+
+	return (cocall_args.status);
 }

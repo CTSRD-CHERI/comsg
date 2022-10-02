@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "cosend.h"
+#include "ipcd.h"
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
@@ -41,12 +42,11 @@
 #include <cheri/cherireg.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/errno.h>
+#include <sys/param.h>
 #include <sys/queue.h>
-
-
-
 
 int validate_cosend_args(coopen_args_t *cocall_args)
 {
@@ -58,8 +58,65 @@ int validate_cosend_args(coopen_args_t *cocall_args)
 		return (0);
 	else if (!valid_cocarrier(cocall_args->cocarrier))
 		return (0);
-	else 
-		return (1);
+	else if (cocall_args->oob_data.len != 0) {
+		if (cheri_gettag(cocall_args->oob_data.attachments) == 0)
+			return (0);
+		else if (cheri_getlen(cocall_args->oob_data.attachments) < cocall_args->oob_data.len * sizeof(comsg_attachment_t))
+			return (0);
+	}
+	return (1);
+}
+
+static inline void
+clear_attachment(comsg_attachment_t *ptr)
+{
+	ptr->type = ATTACHMENT_INVALID;
+	memset(&ptr->item, '\0', sizeof(comsg_attachment_handle_t));
+}
+
+comsg_attachment_t *
+handle_attachments(comsg_attachment_t *attachments, size_t len)
+{
+	comsg_attachment_t *attachment;
+	comsg_attachment_t *attachment_buf;
+
+	if (len == 0)
+		return (NULL);
+
+	//copy into ukernel-owned buffer 
+	attachment_buf = cocall_calloc(len, sizeof(comsg_attachment_t));
+	memcpy(attachment_buf, attachments, len * sizeof(comsg_attachment_t));
+
+	//perform some basic checks and remove any items that fail
+	for (size_t i = 0; i < len; i++) {
+		attachment = &attachment_buf[i];
+		switch (attachment->type) {
+		case ATTACHMENT_COPORT:
+			if (!valid_cocarrier(attachment->item.coport)) 
+				clear_attachment(attachment);
+			break;
+		case ATTACHMENT_RESERVATION:
+			//expand checks
+			/*
+			if (!__builtin_cheri_tag_get(attachment->item.reservation))
+				clear_attachment(attachment);
+			else if (!__builtin_cheri_sealed_get(attachment->item.reservation))
+				clear_attachment(attachment);
+			else if (__builtin_cheri_length_get(attachment->item.reservation) != sizeof(nsobject_t))
+				clear_attachment(attachment);*/
+			break;
+		case ATTACHMENT_COEVENT:
+			if (!__builtin_cheri_tag_get(attachment->item.coevent))
+				clear_attachment(attachment);
+			else if (__builtin_cheri_length_get(attachment->item.coevent) < sizeof(coevent_t))
+				clear_attachment(attachment);
+			break;
+		default:
+			clear_attachment(attachment);
+			break;
+		}
+	}
+	return (attachment_buf);
 }
 
 void coport_send(coopen_args_t *cocall_args, void *token)
@@ -69,13 +126,17 @@ void coport_send(coopen_args_t *cocall_args, void *token)
 	size_t port_len, index, new_len, msg_len;
 	coport_eventmask_t event;
 	coport_t *cocarrier;
-	char *msg_buffer;
-	void **cocarrier_buf;
+	struct cocarrier_message **cocarrier_buf;
+	struct cocarrier_message *msg;
 
 	msg_len = MIN(cocall_args->length, cheri_getlen(cocall_args->message));
-	msg_buffer = cocall_flexible_malloc(msg_len);
+	msg = cocall_malloc(sizeof(struct cocarrier_message));
+	msg->buf = cocall_flexible_malloc(msg_len);
 
-	memcpy(msg_buffer, cocall_args->message, msg_len);
+	memcpy(msg->buf, cocall_args->message, msg_len);
+	msg->attachments = handle_attachments(cocall_args->oob_data.attachments, cocall_args->oob_data.len);
+	msg->nattachments = cocall_args->oob_data.len;
+	msg->can_free = false;
 
 	cocarrier = unseal_coport(cocall_args->cocarrier);
 	
@@ -86,7 +147,10 @@ void coport_send(coopen_args_t *cocall_args, void *token)
 		switch (status) {
 		case COPORT_CLOSED:
 		case COPORT_CLOSING:
-			cocall_free(msg_buffer);
+			cocall_free(msg->buf);
+			if (msg->attachments != NULL)
+				cocall_free(msg->attachments);
+			cocall_free(msg);
 			COCALL_ERR(cocall_args, EPIPE);
 			break; /* NOTREACHED */
 		default:
@@ -100,7 +164,10 @@ void coport_send(coopen_args_t *cocall_args, void *token)
 	port_len = cocarrier->info->length;
 
 	if ((port_len >= COCARRIER_SIZE) || ((event & COPOLL_OUT) == 0)) {
-		cocall_free(msg_buffer);
+		cocall_free(msg->buf);
+		if (msg->attachments != NULL)
+			cocall_free(msg->attachments);
+		cocall_free(msg);
 		event = (event | COPOLL_WERR);
         atomic_store_explicit(&cocarrier->info->event, event, memory_order_release);
         atomic_store_explicit(&cocarrier->info->status, COPORT_OPEN, memory_order_release);
@@ -112,7 +179,7 @@ void coport_send(coopen_args_t *cocall_args, void *token)
     cocarrier->info->end = (index + 1) % COCARRIER_SIZE;
     cocarrier->info->length = new_len;
 
-    cocarrier_buf[index] = msg_buffer;
+    cocarrier_buf[index] = msg;
 
     if(new_len == COCARRIER_SIZE)
     	event = (COPOLL_IN | event) & ~(COPOLL_WERR | COPOLL_OUT);

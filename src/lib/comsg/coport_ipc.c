@@ -75,8 +75,6 @@ open_named_coport(const char *coport_name, coport_type_t type, namespace_t *ns)
             return (NULL);
         }
     }
-    
-
     return (port_obj);
 }
 
@@ -127,7 +125,7 @@ cosend(const coport_t *port, const void *buf, size_t len)
 }
 
 ssize_t 
-corecv(const coport_t *port, void **buf, size_t len)
+corecv(const coport_t *port, void ** const buf, size_t len)
 {
     void *msg;
     coport_type_t type;
@@ -140,24 +138,18 @@ corecv(const coport_t *port, void **buf, size_t len)
             errno = EINVAL;
             retval = -1;
         } else
-            retval = corecv_cinvoke_cochannel(port, buf, len);
+            retval = corecv_cinvoke_cochannel(port, *buf, len);
         break;
     case COPIPE:
         if (len == 0) {
             errno = EINVAL;
             retval = -1;
         } else
-            retval = corecv_cinvoke_copipe(port, buf, len);
+            retval = corecv_cinvoke_copipe(port, *buf, len);
         break;
     case COCARRIER:
         /* len is an optional hint here, so we're not so worried */
-        msg = cocarrier_recv(port, len);
-        if (msg == NULL)
-            retval = -1;
-        else {
-            *buf = msg;
-            retval = cheri_getlen(msg);
-        }
+        retval = cocarrier_recv(port, buf, len);
         break;
     default:
         errno = EINVAL;
@@ -181,3 +173,53 @@ set_coport_handle_type(coport_t *port, coport_type_t type)
     process_coport_handle(port, type);
 }
 
+ssize_t
+cosend_oob(const coport_t *port, const void *buf, size_t len, comsg_attachment_t *oob, size_t oob_len)
+{
+    coport_type_t type;
+    ssize_t retval;
+
+    type = coport_gettype(port);
+    switch(type) {
+    case COCHANNEL:
+    case COPIPE:
+        errno = EOPNOTSUPP;
+        retval = -1;
+        break;
+    case COCARRIER:
+        /* len is an optional hint here, so we're not so worried */
+        retval = cocarrier_send_oob(port, buf, len, oob, oob_len);
+        break;
+    default:
+        errno = EINVAL;
+        retval = -1;
+        break;
+    }
+    return (retval);
+}
+
+ssize_t 
+corecv_oob(const coport_t *port, void ** const buf, size_t len, comsg_attachment_set_t *oob)
+{
+    void *msg;
+    coport_type_t type;
+    ssize_t retval;
+
+    type = coport_gettype(port);
+    switch(type) {
+    case COCARRIER:
+        /* cocarrier_recv_oob will perform the buffer assignment etc for us */
+        retval = cocarrier_recv_oob(port, buf, len, oob);
+        break;
+    case COCHANNEL:
+    case COPIPE:
+        errno = EOPNOTSUPP;
+        retval = -1;
+        break;
+    default:
+        errno = EINVAL;
+        retval = -1;
+        break;
+    }
+    return (retval);
+}

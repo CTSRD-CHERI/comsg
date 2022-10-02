@@ -56,8 +56,8 @@ void usage(void)
 	exit(0);
 }
 
-static size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(coport_typedep_t), COCARRIER_MAX_MSG_LEN};
-static size_t nbuckets = 5;
+static size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(struct cocarrier_message), sizeof(coport_typedep_t), sizeof(comsg_attachment_t), COCARRIER_MAX_MSG_LEN};
+static size_t nbuckets = 7;
 
 /* TODO-PBB: Add a cocall allowing a coport "owner" to create send/recv only capabilities */
 

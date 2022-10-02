@@ -44,7 +44,9 @@ nsobject_t *open_named_coport(const char *, coport_type_t, namespace_t *);
 coport_t *open_coport(coport_type_t);
 
 ssize_t cosend(const coport_t *, const void *, size_t);
-ssize_t corecv(const coport_t *, void **, size_t);
+ssize_t corecv(const coport_t *,  void ** const, size_t);
+ssize_t cosend_oob(const coport_t *, const void *, size_t, comsg_attachment_t *, size_t);
+ssize_t corecv_oob(const coport_t *, void ** const, size_t, comsg_attachment_set_t *);
 coport_type_t coport_gettype(coport_t *);
 void make_pollcoport(pollcoport_t *, coport_t *, coport_eventmask_t);
 void set_coport_handle_type(coport_t *, coport_type_t);

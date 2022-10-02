@@ -28,6 +28,25 @@ typedef struct _pollcoport_t
 	coport_eventmask_t revents;
 } pollcoport_t;
 
+typedef enum {ATTACHMENT_INVALID = 0, ATTACHMENT_RESERVATION = 1, ATTACHMENT_COPORT = 2, ATTACHMENT_COEVENT = 3} coport_attachment_type_t;
+
+typedef union {
+	nsobject_t *reservation;
+	coport_t *coport;
+	coevent_t *coevent;
+} comsg_attachment_handle_t;
+
+typedef struct {
+	comsg_attachment_handle_t item;
+	coport_attachment_type_t type;
+} comsg_attachment_t;
+
+typedef struct {
+	comsg_attachment_t *attachments;
+	size_t len;
+} comsg_attachment_set_t;
+
+
 struct comsg_args {
     int status;
     int error;
@@ -56,7 +75,7 @@ struct comsg_args {
                 coport_t *coport;
             };
             void *scb_cap;
-        }; //coupdate, coinsert, codelete, coselect, codiscover
+        }; //coupdate, coinsert, codelete, coselect, codiscover, codiscover2
         struct {
             void **worker_scbs;
             int nworkers;
@@ -64,7 +83,7 @@ struct comsg_args {
             struct _coservice_endpoint *endpoint;
             coservice_flags_t service_flags;
             int target_op;
-        }; //coprovide
+        }; //coprovide, coprovide2 
         struct {
             coport_type_t coport_type;
             coport_t *port;
@@ -78,6 +97,7 @@ struct comsg_args {
             coport_t *cocarrier;
             void *message;
             size_t length;
+            comsg_attachment_set_t oob_data;
         }; //cosend/corecv
         struct {
             coevent_subject_t subject;

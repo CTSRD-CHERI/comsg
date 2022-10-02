@@ -115,14 +115,14 @@ cosend_impl(coport_t *port, void *buf, size_t len)
 }
 
 static ssize_t
-corecv_impl(coport_t *port, void **buf, size_t len)
+corecv_impl(coport_t *port, void *buf, size_t len)
 {
 	void *msg;
     coport_type_t type;
     ssize_t retval;
     GET_IDC(port);
 
-    retval = validate_coport_op_args(port, *buf, len);
+    retval = validate_coport_op_args(port, buf, len);
     if (retval != 0) {
         errno = retval;
         retval = -1;
@@ -131,10 +131,10 @@ corecv_impl(coport_t *port, void **buf, size_t len)
     type = port->type;
     switch(type) {
     case COCHANNEL:
-        retval = cochannel_recv(port, *buf, len);
+        retval = cochannel_recv(port, buf, len);
         break;
     case COPIPE:
-        retval = copipe_recv(port, *buf, len);
+        retval = copipe_recv(port, buf, len);
         break;
     default: 
         errno = EINVAL; 
@@ -146,37 +146,37 @@ corecv_impl(coport_t *port, void **buf, size_t len)
 }
 
 static ssize_t
-corecv_impl_cochannel(coport_t *port, void **buf, size_t len)
+corecv_impl_cochannel(coport_t *port, void *buf, size_t len)
 {
     void *msg;
     coport_type_t type;
     ssize_t retval;
     GET_IDC(port);
 
-    retval = validate_coport_op_args(port, *buf, len);
+    retval = validate_coport_op_args(port, buf, len);
     if (retval != 0) {
         errno = retval;
         retval = -1;
         CCALL_RETURN(retval);
     }
-    retval = cochannel_recv(port, *buf, len);
+    retval = cochannel_recv(port, buf, len);
     CCALL_RETURN(retval);
     return (retval);  /* NOTREACHED */
 }
 
 static ssize_t
-corecv_impl_copipe(coport_t *port, void **buf, size_t len)
+corecv_impl_copipe(coport_t *port, void *buf, size_t len)
 {
     ssize_t retval;
     GET_IDC(port);
 
-    retval = validate_coport_op_args(port, *buf, len);
+    retval = validate_coport_op_args(port, buf, len);
     if (retval != 0) {
         errno = retval;
         retval = -1;
         CCALL_RETURN(retval);
     }
-    retval = copipe_recv(port, *buf, len);
+    retval = copipe_recv(port, buf, len);
     CCALL_RETURN(retval);
     return (retval);  /* NOTREACHED */
 }

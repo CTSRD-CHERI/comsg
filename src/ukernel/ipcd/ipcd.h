@@ -35,7 +35,9 @@
 #define COPROC_UKERN 1
 #endif
 
+#include <comsg/comsg_args.h>
 #include <comsg/coservice_provision.h>
+#include <sys/types.h>
 
 extern coservice_provision_t COOPEN_serv, COCLOSE_serv, COPOLL_serv, SLOPOLL_serv, COSEND_serv, CORECV_serv;
 
@@ -49,6 +51,13 @@ struct ipcd_capvec {
 	void *codiscover;
 	void *coinsert;
 	void *coselect;
+};
+
+struct cocarrier_message {
+    void *buf;
+    comsg_attachment_t *attachments;
+    size_t nattachments;
+    bool can_free;
 };
 
 #endif //!defined(_IPCD_H)
