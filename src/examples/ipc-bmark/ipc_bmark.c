@@ -434,7 +434,7 @@ do_send_setup(void)
 	status = read(fd, buffer, required);
 	close(fd);
 
-	while (send_sock == NULL)
+	while (send_sock == -1)
 		sleep(1);
 }
 
