@@ -93,14 +93,14 @@ void init_coport(coport_t *port, coport_type_t type)
 void coport_open(coopen_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	//Brain-sludge is making me forget whether static is redundant here
-	coport_t *port_handle = NULL;
+	coport_t *port_handle;
 
-	if (port_handle == NULL) {
-		if(!can_allocate_coport(cocall_args->coport_type) && port_handle == NULL)
-			COCALL_ERR(cocall_args, ENOMEM);
-		port_handle = allocate_coport(cocall_args->coport_type);
-	}
+	if(!can_allocate_coport(cocall_args->coport_type))
+		COCALL_ERR(cocall_args, ENOMEM);
+	port_handle = allocate_coport(cocall_args->coport_type);
+	if (port_handle == NULL)
+		COCALL_ERR(cocall_args, ENOMEM);
+
 	init_coport(port_handle, cocall_args->coport_type);
 
 	port_handle = cheri_andperm(port_handle, COPORT_PERMS);
