@@ -11,7 +11,7 @@ INC_DIRS +=		$(COMSG_DIR)/include
 INC_FLAGS :=	$(addprefix -isystem,$(INC_DIRS))
 
 LDFLAGS :=		-fuse-ld=lld -Wl,-znow 
-CFLAGS :=		-g -v
+CFLAGS :=		-g
 
 export MK_DIR BUILD_DIR OUT_DIR CFLAGS LDFLAGS INC_FLAGS SHELL
 
@@ -41,7 +41,7 @@ $(ARCH_TGTS):
 	$(eval $@_TGT	:= $(subst -$($@_ARCH),,$@))
 	$(eval $@_DIR	:= $(patsubst $($@_TGT),examples,$(patsubst %test,tests,$(patsubst %d,ukernel,$(patsubst lib%,lib,$($@_TGT))))))
 	$(eval $@_NAME	:= $(patsubst lib%,%,$($@_TGT)))
-	$(MAKE) -C $(SRC_DIR)/$($@_DIR)/$($@_NAME) $($@_TGT) ARCH=$($@_ARCH)
+	@$(MAKE) -s -C $(SRC_DIR)/$($@_DIR)/$($@_NAME) $($@_TGT) ARCH=$($@_ARCH)
 	@if compgen -G "$(OUT_DIR)/$($@_ARCH)/$($@_TGT).so.*" > /dev/null; then \
 	cp $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so.* $(OUT_DIR)/$($@_ARCH)/$($@_TGT).so; \
 	fi
@@ -57,32 +57,36 @@ $(INSTALL_ROOTS):
 
 .SECONDEXPANSION:
 $(LIBS): $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@* $(CHERI_ROOT)/extra-files/usr/lib
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@* $(CHERI_ROOT)/extra-files-minimal/usr/lib
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@* $(CHERI_ROOT)/extra-files/usr/lib
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@* $(CHERI_ROOT)/extra-files-minimal/usr/lib
+	@echo Made $@.
 
 .PHONY: libs
 libs: $(LIBS)
 
 .SECONDEXPANSION:
 $(UKERNEL_EXECS): libs $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
+	@echo Made $@.
 
 .PHONY: ukernel
 ukernel : libs $(UKERNEL_EXECS)
 
 .SECONDEXPANSION:
 $(TESTS): libs ukernel $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
+	@echo Made $@.
 
 .PHONY: tests
 tests : libs ukernel $(TESTS)
 
 .SECONDEXPANSION:
 $(EXAMPLES): libs ukernel $$(addprefix $$@-,$$(ARCHES)) | $(INSTALL_DIRS)
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
-	cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files/usr/bin
+	@cp $(OUT_DIR)/$(DEFAULT_ARCH)/$@ $(CHERI_ROOT)/extra-files-minimal/usr/bin
+	@echo Made $@.
 
 .PHONY: examples
 examples: libs ukernel $(EXAMPLES)
@@ -91,3 +95,7 @@ examples: libs ukernel $(EXAMPLES)
 clean : 
 	rm -r build/*
 	rm -r output/*
+
+.PHONY: all
+all : examples tests
+	@echo Made $@.

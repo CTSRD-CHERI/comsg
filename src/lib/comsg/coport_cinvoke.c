@@ -68,7 +68,7 @@ const coport_func_ptr *corecv_codecap_copipe = &_corecv_codecap_copipe;
 const coport_func_ptr *cosend_codecap_cochannel = &_cosend_codecap_cochannel;
 const coport_func_ptr *corecv_codecap_cochannel = &_corecv_codecap_cochannel;
 
-const void **return_stack_sealcap = &_stack_sealcap;
+const void **return_stack_sealcap = (const void **)&_stack_sealcap;
 
 
 static inline __always_inline int

@@ -536,7 +536,7 @@ do_benchmark_send(void *buffer, size_t buffer_length, ipc_type type)
 }
 
 static int 
-do_benchmark_recv(void **buffer, size_t buffer_length, ipc_type type)
+do_benchmark_recv(void *buffer, size_t buffer_length, ipc_type type)
 {
 	statcounters_bank_t end_bank;
 	struct rusage end_rusage;

@@ -125,7 +125,7 @@ do_recv(void)
 
 	msg_buf = malloc(msg_len);
 	memset(msg_buf, '\0', cheri_getlen(msg_buf));
-	recv_len = corecv(port_obj->coport, &msg_buf, cheri_getlen(msg_buf));
+	recv_len = corecv(port_obj->coport, (void **)&msg_buf, cheri_getlen(msg_buf));
 	if (recv_len == -1)
 		err(errno, "do_recv: error in corecv");
 	

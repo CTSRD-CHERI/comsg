@@ -105,7 +105,7 @@ get_ukernel_service(cocall_num_t func)
 			err(EX_SOFTWARE, "get_ukernel_service: called before %s was initialized", ukern_func_names[COCALL_CODISCOVER2]);
 		}
 		scb = codiscover2(s);
-	set_cocall_target(ukern_call_set, (int)func, scb);
+		set_cocall_target(ukern_call_set, (int)func, scb);
 	}
 	return (s);
 }
@@ -462,10 +462,12 @@ coproc_init(namespace_t *root_ns_cap, void *coinsert_scb, void *coselect_scb, vo
 	coproc_init_args_t cocall_args;
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
-	cocall_args.ns_cap = root_ns_cap;
-	cocall_args.coinsert = coinsert_scb;
-	cocall_args.codiscover = codiscover_scb;
-	cocall_args.coselect = coselect_scb;
+	if (is_ukernel) {
+		cocall_args.ns_cap = root_ns_cap;
+		cocall_args.coinsert = coinsert_scb;
+		cocall_args.codiscover = codiscover_scb;
+		cocall_args.coselect = coselect_scb;
+	}
 
 	//the target of this varies based on whether caller is a microkernel compartment & which compartment
 	if (is_ukernel)
@@ -518,7 +520,7 @@ coproc_init_done(void)
 }
 
 int 
-cocarrier_send(coport_t *port, const void *buf, size_t len)
+cocarrier_send(const coport_t *port, const void *buf, size_t len)
 {
 	/* Currently only for cocarriers, likely to change soon */
 	cosend_args_t cocall_args;
@@ -526,9 +528,9 @@ cocarrier_send(coport_t *port, const void *buf, size_t len)
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	
-	cocall_args.cocarrier = port;
+	cocall_args.cocarrier = (coport_t *)port;
     buf = cheri_setbounds(buf, len);
-    cocall_args.message = cheri_andperm(buf, COCARRIER_MSG_PERMS);
+    cocall_args.message = (void *)cheri_andperm(buf, COCARRIER_MSG_PERMS);
     cocall_args.length = len;
 	cocall_args.oob_data.len = 0;
 	cocall_args.oob_data.attachments = NULL;
@@ -567,14 +569,14 @@ coopen(coport_type_t type)
 }
 
 int
-cocarrier_recv(coport_t *port, void ** const buf, size_t len)
+cocarrier_recv(const coport_t *port, void ** const buf, size_t len)
 {
 	/* Currently only for cocarriers, likely to change soon */
 	corecv_args_t cocall_args;
 	int error;
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
-	cocall_args.cocarrier = port;
+	cocall_args.cocarrier = (coport_t *)port;
 	cocall_args.length = len;
 	cocall_args.oob_data.len = 0;
 	cocall_args.oob_data.attachments = NULL;
@@ -793,17 +795,17 @@ colisten(coevent_type_t type, coevent_subject_t subject)
 }
 
 int
-cocarrier_send_oob(coport_t *port, const void *buf, size_t len, comsg_attachment_t *oob, size_t oob_len)
+cocarrier_send_oob(const coport_t *port, const void *buf, size_t len, comsg_attachment_t *oob, size_t oob_len)
 {
     cosend_args_t cocall_args;
     int error;
 
     memset(&cocall_args, '\0', sizeof(cocall_args));
 
-    cocall_args.cocarrier = port;
+    cocall_args.cocarrier = (coport_t *)port;
     
     buf = cheri_setbounds(buf, len);
-    cocall_args.message = cheri_andperm(buf, COCARRIER_MSG_PERMS);
+    cocall_args.message = (void *)cheri_andperm(buf, COCARRIER_MSG_PERMS);
     cocall_args.length = len;
 
     
@@ -828,13 +830,13 @@ cocarrier_send_oob(coport_t *port, const void *buf, size_t len, comsg_attachment
 }
 
 int
-cocarrier_recv_oob(coport_t *port, void ** const buf, size_t len, comsg_attachment_set_t *oob)
+cocarrier_recv_oob(const coport_t *port, void ** const buf, size_t len, comsg_attachment_set_t *oob)
 {
     corecv_args_t cocall_args;
     int error;
 
     memset(&cocall_args, '\0', sizeof(cocall_args));
-    cocall_args.cocarrier = port;
+    cocall_args.cocarrier = (coport_t *)port;
     cocall_args.length = len;
 
     error = ukern_call(COCALL_CORECV, &cocall_args);

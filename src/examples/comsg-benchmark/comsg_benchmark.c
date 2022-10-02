@@ -488,14 +488,14 @@ do_warmup_recv(void)
 
 
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
-	error = corecv(copipe, &buffer, message_len);
+	error = corecv(copipe, (void **)&buffer, message_len);
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: error occurred in copipe corecv", __func__);
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
 	max_retries = 10;
 	retries = 0;
 	for (retries = 0; retries < max_retries; retries++) {
-		error = corecv(cocarrier, &cocarrier_buf, message_len);
+		error = corecv(cocarrier, (void **)&cocarrier_buf, message_len);
 		if (error < 0) {
 			if (errno == EAGAIN) {
 				if (retries < max_retries){
@@ -508,7 +508,7 @@ do_warmup_recv(void)
 	}
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
 	for (retries = 0; retries < max_retries; retries++) {
-		error = corecv(cochannel, &buffer, MIN(message_len, 4096));
+		error = corecv(cochannel, (void **)&buffer, MIN(message_len, 4096));
 		if (error < 0) {
 			if (errno == EAGAIN) {
 				if (retries < max_retries){
@@ -521,7 +521,7 @@ do_warmup_recv(void)
 	}
 	memset(buffer, '\0', message_len);
 	lwpid_ptr = &sender_lwpid;
-	error = corecv(copipe, &lwpid_ptr, sizeof(sender_lwpid));
+	error = corecv(copipe, (void **)&lwpid_ptr, sizeof(sender_lwpid));
 	assert(error > 0);
 }
 
@@ -631,7 +631,7 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 	} 
 
 	if (aggregate_mode)
-		return (-1);
+		return (void *)(-1);
 	//calculate differences in counters
 	result = calloc(1, sizeof(struct benchmark_result));
 	clock_diff(&result->timespec_diff, &end_ts, &start_ts);
@@ -669,7 +669,7 @@ do_benchmark_recv(void **buffer, size_t buffer_length, coport_t *port)
 	}
 
 	//perform operation
-	status = corecv(port, buffer, buffer_length);
+	status = corecv(port, (void **)buffer, buffer_length);
 
 	//get new values for counters
 	if (!aggregate_mode) {
@@ -685,7 +685,7 @@ do_benchmark_recv(void **buffer, size_t buffer_length, coport_t *port)
 	}
 
 	if (aggregate_mode)
-		return (-1);
+		return (void *)(-1);
 	//calculate differences in counters
 	result = calloc(1, sizeof(struct benchmark_result));
 	clock_diff(&result->timespec_diff, &end_ts, &start_ts);
@@ -708,7 +708,7 @@ do_benchmark_run(coport_op op_mode, coport_t *port)
 		if (op_mode == OP_COSEND) {
 			result = do_benchmark_send(buffer, message_len, port);
 		} else {
-			result = do_benchmark_recv(&buffer, message_len, port);
+			result = do_benchmark_recv((void **)&buffer, message_len, port);
 		}
 		if (result == NULL) {
 			sleep(1);

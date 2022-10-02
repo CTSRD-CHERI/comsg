@@ -106,7 +106,7 @@ coeventd_startup(void)
 	process_capvec();
 	if (root_ns == NULL)
 		err(errno, "coeventd_startup: cocall failed");
-		coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, root_ns);
+	coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, root_ns);
 	if(coprovide_nsobj == NULL) {
 		errno = ENOTCONN;
 		err(EX_UNAVAILABLE, "%s: coprovide nsobject was malformed or null", __func__);

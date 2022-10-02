@@ -176,7 +176,7 @@ int main(int argc, char * const argv[])
 	setenv("LD_BIND_NOW", "yesplease", 1);
 
 	iter_str = calloc(32, sizeof(char));
-	sprintf(iter_str, "-i %d", iterations);
+	sprintf(iter_str, "-i %ld", iterations);
 
 	cochatter_args[0] = strdup("/usr/bin/comsg-benchmark");
 	cochatter_args[1] = strdup(iter_str);

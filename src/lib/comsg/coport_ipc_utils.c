@@ -59,7 +59,7 @@ static struct object_type *allocated_otypes[] = {&copipe_otype, &cochannel_otype
 #define IPCD_OTYPE_RANGE_END (63)
 
 coport_type_t 
-coport_gettype(coport_t *port)
+coport_gettype(const coport_t *port)
 {
     long port_otype;
     
@@ -225,7 +225,7 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
         return (-1);
     }
     port_buffer = port->buffer->buf;
-    msg_buffer = buf;
+    msg_buffer = (char *)buf;
     
     new_end = (old_end + len) % COPORT_BUF_LEN;
     if (old_end + len > COPORT_BUF_LEN) {

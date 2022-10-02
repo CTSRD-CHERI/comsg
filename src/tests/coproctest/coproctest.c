@@ -123,10 +123,10 @@ do_procdeath_test(void)
 		coexecvec(my_pid, child_args[0], child_args, environ, capv);
 		_exit(EX_UNAVAILABLE);
 	}
-	error = corecv(copipe, &buf, sizeof(coevent_t *));
+	error = corecv(copipe, (void **)&buf, sizeof(coevent_t *));
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: failed to corecv from coeventtest via copipe", __func__);
-	error = corecv_oob(cocarrier, &buf, sizeof(coevent_t *), &oob);
+	error = corecv_oob(cocarrier, (void **)&buf, sizeof(coevent_t *), &oob);
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: failed to corecv from coeventtest via cocarrier", __func__);
 	death = oob.attachments[0].item.coevent;
@@ -145,7 +145,7 @@ static void *
 do_copipe_recv(void *argp)
 {
 	corecv_thr_args_t *args = argp;
-	*args->result_ptr = corecv(args->port, args->dest_buf, args->len);
+	*args->result_ptr = corecv(args->port, (void **)args->dest_buf, args->len);
 	return (NULL);
 }
 
@@ -171,7 +171,7 @@ do_cocarrier(void *argp)
 	pthread_mutex_lock(&start);
 	printf("coproctest: receiving message and out-of-band attachment...");
 	comsg_attachment_set_t oob;
-	error = corecv_oob(args->port, args->dest_buf, cheri_getlen(test_str), &oob);
+	error = corecv_oob(args->port, (void **)args->dest_buf, cheri_getlen(test_str), &oob);
 	*args->result_ptr = cheri_getlen(*args->dest_buf);
 	result_str = (char **)args->dest_buf;
 	if (cheri_gettag(args->dest_buf) && oob.len > 0) {
@@ -303,7 +303,7 @@ cocreate_lbl:
 	printf("coproctest: sending message...");
 	recv = malloc(strlen(test_str)+1);
 	recvr_args->port = port;
-	recvr_args->dest_buf = &recv;
+	recvr_args->dest_buf = (void **)&recv;
 	recvr_args->len = strlen(test_str);
 	recvr_args->result_ptr = &recvd;
 	recvd = 0;

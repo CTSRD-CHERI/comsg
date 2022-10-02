@@ -50,7 +50,7 @@ get_scb_index(struct _coservice_endpoint *service)
 			if (atomic_compare_exchange_strong(&service->next_worker, &idx, 0))
 				return (0);
 			else
-            continue;
+            	continue;
 		};
         break;
 	}

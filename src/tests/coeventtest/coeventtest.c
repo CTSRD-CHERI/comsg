@@ -84,7 +84,7 @@ int main(int argc, char const *argv[])
     error = cosend(copipe, buf, sizeof(coevent_t *));
     if (error < 0)
 		err(EX_SOFTWARE, "%s: failed to corecv to coproctest via copipe", __func__);
-    error = corecv(copipe, &buf, sizeof(coevent_t *));
+    error = corecv(copipe, (void **)&buf, sizeof(coevent_t *));
     if (error < 0)
 		err(EX_SOFTWARE, "%s: failed to corecv from coproctest via copipe", __func__);
 	sleep(5);
