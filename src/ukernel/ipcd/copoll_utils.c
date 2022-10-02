@@ -33,6 +33,7 @@
 #include <comsg/coport.h>
 
 #include <err.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -86,8 +87,10 @@ copoll_wait(pthread_cond_t *wait_cond, long timeout)
 	int locked;
 
 	locked = pthread_mutex_lock(&global_copoll_lock);
-	if (locked != EDEADLK)
-		err(locked, "copoll_wait: lock acquisition failed");
+	if (locked != EDEADLK) { /* we might already hold the lock, which is fine */ 
+		errno = locked;
+		err(EX_SOFTWARE, "copoll_wait: lock acquisition failed");
+	}
 	if (timeout > 0) {
 		wait_time.tv_sec = timeout / 1000;
 		wait_time.tv_nsec = (timeout % 1000) * 1000000;
