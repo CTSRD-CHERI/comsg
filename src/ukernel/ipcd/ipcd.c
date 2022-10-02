@@ -47,7 +47,23 @@
 #include <stdio.h>
 #include <unistd.h>
 
-coservice_provision_t COOPEN_serv, COCLOSE_serv, COPOLL_serv, SLOPOLL_serv, COSEND_serv, CORECV_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
+
+#pragma push_macro("DECLARE_SLOACCEPT_ENDPOINT")
+#pragma push_macro("DECLARE_SLOACCEPT_ENDPOINT")
+#define DECLARE_SLOACCEPT_ENDPOINT(name, validate_f, operation_f) SLOACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define SLOACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "sloaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_SLOACCEPT_ENDPOINT")
+#pragma pop_macro("DECLARE_SLOACCEPT_ENDPOINT")
 
 static 
 void usage(void)

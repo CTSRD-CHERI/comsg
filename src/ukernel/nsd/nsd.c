@@ -67,7 +67,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-coservice_provision_t COINSERT_serv, COSELECT_serv, COUPDATE_serv, CODELETE_serv, COCREATE_serv, CODROP_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 static 
 void usage(void)

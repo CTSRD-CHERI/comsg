@@ -47,7 +47,14 @@
 #include <sys/errno.h>
 #include <unistd.h>
 
-coservice_provision_t CODISCOVER_serv, COPROVIDE_serv, COPROVIDE2_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 size_t buckets[] = {CHERICAP_SIZE * COSERVICE_MAX_WORKERS};
 size_t nbuckets = 1;
