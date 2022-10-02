@@ -73,7 +73,7 @@
 #define NSOBJ_PERMS_D_MASK ( NSOBJ_PERMS_MASK | NSOBJ_PERM_D ) 
 #define NSOBJ_PERMS_OWN_MASK ( NSOBJ_PERMS_MASK | NSOBJ_PERM_OWN ) 
 
-#define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_andperm(c, ~NSOBJ_PERM_W) )
+#define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_clearperm(c, NSOBJ_PERM_W) )
 
 typedef enum {INVALID_NSOBJ=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
 static const nsobject_type_t last_nsobj_type = COSERVICE;
