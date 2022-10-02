@@ -32,12 +32,15 @@
 #include <comsg/ukern_calls.h>
 #include <comsg/coevent.h>
 
+#include <assert.h>
 #include <unistd.h>
 #include <err.h>
+#include <stdlib.h>
 #include <sysexits.h>
 #include <sys/auxv.h>
 
-static coport_t *copipe;
+static coport_t *cocarrier = NULL;
+static coport_t *copipe = NULL;
 
 static void
 process_capvec(void)
@@ -46,10 +49,11 @@ process_capvec(void)
     void **capv;
 
     error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
-    if (capv[1] != NULL)
+    if (capv[2] != NULL)
         err(EX_SOFTWARE, "%s: invalid capvec format", __func__);
 
-    copipe = capv[0];
+    cocarrier = capv[0];
+    copipe = capv[1];
 }
 
 int main(int argc, char const *argv[])
@@ -58,9 +62,12 @@ int main(int argc, char const *argv[])
 	(void)argv;
     int error;
 	void *coproc_init_scb;
-    coevent_t *my_death;
+    coevent_t *my_death = NULL;
+    comsg_attachment_t attachment;
     coevent_subject_t subject_death;
+    char *buf = calloc(2, sizeof(coevent_t *));
 
+    process_capvec();
     error = colookup(U_COPROC_INIT, &coproc_init_scb);
     if (error != 0){
         err(EX_SOFTWARE, "%s: comsg microkernel not available", __func__);
@@ -69,7 +76,17 @@ int main(int argc, char const *argv[])
     root_ns = coproc_init(NULL, NULL, NULL, NULL);
     subject_death.ces_pid = 0; //NOTUSED
     my_death = colisten(PROCESS_DEATH, subject_death);
-    error = cosend(copipe, &my_death, sizeof(my_death));
+    attachment.item.coevent = my_death;
+    attachment.type = ATTACHMENT_COEVENT;
+    error = cosend_oob(cocarrier, buf, sizeof(coevent_t *), &attachment, 1);
+    if (error < 0)
+		err(EX_SOFTWARE, "%s: failed to cosend to coproctest via cocarrier", __func__);
+    error = cosend(copipe, buf, sizeof(coevent_t *));
+    if (error < 0)
+		err(EX_SOFTWARE, "%s: failed to corecv to coproctest via copipe", __func__);
+    error = corecv(copipe, &buf, sizeof(coevent_t *));
+    if (error < 0)
+		err(EX_SOFTWARE, "%s: failed to corecv from coproctest via copipe", __func__);
 	sleep(5);
 	sleep(5);
 
