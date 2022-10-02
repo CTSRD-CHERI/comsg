@@ -28,12 +28,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COPROVIDE_H
-#define _COPROVIDE_H
+#ifndef _COPROVIDE2_H
+#define _COPROVIDE2_H
 
 #include <comsg/comsg_args.h>
 
-int validate_coprovide_args(coprovide_args_t *args);
-void provide_coservice(coprovide_args_t *cocall_args, void *token);
+int validate_coprovide2_args(coprovide_args_t *cocall_args);
+void provide_coservice2(coprovide_args_t *cocall_args, void *token);
 
-#endif //!defined(_COPROVIDE_H)
+#endif //!defined(_COPROVIDE2_H)
