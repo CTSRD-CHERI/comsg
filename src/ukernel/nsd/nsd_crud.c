@@ -182,7 +182,7 @@ int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 
 	LIST_FOREACH_SAFE (member, &ns_cap->members->objects, entries, member_temp) {
 		result = member->nsobj;
-		if(result == ns_obj) 
+		if(result == ns_obj) {
 			LIST_REMOVE(member, entries);
 			memset(result->name, '\0', NS_NAME_LEN);
 			result->obj = NULL;
@@ -190,6 +190,7 @@ int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 			nsobject_deleted();
 			cocall_free(member);
 			return (1);
+		}
 	}
 	return (0);
 }
