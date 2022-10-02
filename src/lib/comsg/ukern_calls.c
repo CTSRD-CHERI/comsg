@@ -42,6 +42,8 @@
 #include <err.h>
 #include <signal.h>
 #include <unistd.h>
+#include <stdatomic.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -56,13 +58,13 @@ static const char *ukern_func_names[] = {
 #pragma pop_macro("UKERN_ENDPOINT")
 };
 
+static _Atomic(coservice_t *) ukernel_services[] = {
+	NULL,
 #pragma push_macro("UKERN_ENDPOINT")
-#define UKERN_ENDPOINT(name) static coservice_t * name##_coservice = NULL;
+#define UKERN_ENDPOINT(name) NULL,
 #include <comsg/ukern_calls.inc>
 #pragma pop_macro("UKERN_ENDPOINT")
-
-static int slocall_funcs[] = {COCALL_SLOPOLL};
-static int n_slocalls = 1;
+};
 
 namespace_t *root_ns = NULL;
 bool is_ukernel = false;
@@ -81,6 +83,37 @@ init_ukern_calls(void)
 	root_ns = NULL;
 }
 
+coservice_t *
+get_ukernel_service(cocall_num_t func)
+{
+	nsobject_t *service_obj;
+	coservice_t *s, *tmp;
+	void *scb;
+
+	if ((s = atomic_load(&ukernel_services[func])) == NULL) {
+		service_obj = coselect(ukern_func_names[func], COSERVICE, root_ns);
+		if (service_obj == NULL) {
+			errno = ENOSYS;
+			err(EX_SOFTWARE, "ukern_call: function %s is not present in the root namespace", ukern_func_names[func]);
+		}
+		tmp = codiscover(service_obj, &scb);
+		atomic_compare_exchange_strong(&ukernel_services[func], &s, tmp);
+	} else {
+		scb = codiscover2(s);
+	}
+	set_cocall_target(ukern_call_set, (int)func, scb);
+	return (s);
+}
+
+void
+set_ukernel_service(cocall_num_t func, coservice_t *s)
+{
+	if (is_ukernel)
+		atomic_store(&ukernel_services[func], s);
+	else
+		return;
+}
+
 static void
 init_new_thread_calls(void)
 {
@@ -94,53 +127,95 @@ init_new_thread_calls(void)
 	set_cocall_target(ukern_call_set, COCALL_CODISCOVER,  get_global_target(COCALL_CODISCOVER));
 	set_cocall_target(ukern_call_set, COCALL_COSELECT, get_global_target(COCALL_COSELECT));
 	
-	service_obj = coselect(U_COSELECT, COSERVICE, root_ns);
-	discover_ukern_func(service_obj, COCALL_COSELECT);
-
-	service_obj = coselect(U_CODISCOVER, COSERVICE, root_ns);
-	discover_ukern_func(service_obj, COCALL_CODISCOVER);
+	get_ukernel_service(COCALL_CODISCOVER);
+	get_ukernel_service(COCALL_COSELECT);
 }
 
 static inline bool
 is_slocall(cocall_num_t func)
 {
-	for (int i = 0; i < n_slocalls; i++) {
-		if (slocall_funcs[i] == func)
+	coservice_t *s;
+
+	if ((s = atomic_load(&ukernel_services[func])) != NULL) {
+		if ((s->flags & SLOWPATH) != 0)
 			return (true);
 	}
 	return (false);
 }
 
+static void *
+refresh_target_scb(cocall_num_t func)
+{
+	coservice_t *s;
+	void *scb;
+	if ((s = atomic_load(&ukernel_services[func])) == NULL) {
+		errno = EDOOFUS;
+		err(EX_SOFTWARE, "%s: should not be called before initial get of ukernel service (%s)", __func__, ukern_func_names[func]);
+	}
+	scb = codiscover2(s);
+	set_cocall_target(ukern_call_set, func, scb);
+	return (scb);
+}
+
 static int
 call_ukern_target(cocall_num_t func, comsg_args_t *args)
 {
-	args->op = func;
+	coservice_t *s;
+
+	if ((s = atomic_load(&ukernel_services[func])) != NULL)
+		args->op = s->op;
+	else
+		args->op = func;
 	if (is_slocall(func))
 		return (targeted_slocall(ukern_call_set, (int)func, args, sizeof(comsg_args_t)));
 	else 
 		return (targeted_cocall(ukern_call_set, (int)func, args, sizeof(comsg_args_t)));
 }
 
+static int
+call_ukern_service(cocall_num_t func, cocall_args_t *args, void *scb)
+{
+	int error;
+	void *func_scb;
+	void *orig_func_scb;
+	
+	if (scb != NULL)
+		func_scb = scb;
+	else
+		func_scb = get_cocall_target(ukern_call_set, (int)func);
+	orig_func_scb = func_scb;
+	do {
+		error = call_ukern_target(func, args);
+		/* try the alternative endpoints if we failed because it's busy, else fail */
+		if (error != 0) {
+			if (errno == EAGAIN) {
+				func_scb = refresh_target_scb(func);
+			} else {
+				return (error);
+			}
+		}
+	} while(orig_func_scb != func_scb); 
+	return (error);
+}
+
 static int 
 ukern_call(cocall_num_t func, comsg_args_t *args)
 {
-	nsobject_t *func_obj;
+	void *func_scb, *orig_func_scb;
 	void *global_coselect_scb, *coselect_scb;
+	int error;
 
 	args->op = func;
 	errno = 0;
-	if (get_cocall_target(ukern_call_set, (int)func) == NULL) {
-		if ((get_global_target(COCALL_CODISCOVER) == NULL) || (get_global_target(COCALL_COSELECT) == NULL))
-			err(ESRCH, "ukern_call: coproc_init either failed or has not been called");
-		else if ((get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL) || (get_cocall_target(ukern_call_set, COCALL_COSELECT) == NULL))
+	if ((func_scb = get_cocall_target(ukern_call_set, (int)func)) == NULL) {
+		if ((get_global_target(COCALL_CODISCOVER) == NULL) || (get_global_target(COCALL_COSELECT) == NULL)) {
+			errno = ESRCH;
+			err(EX_SOFTWARE, "ukern_call: coproc_init either failed or has not been called; attempted call was %s", ukern_func_names[func]);
+		} else if ((get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL) || (get_cocall_target(ukern_call_set, COCALL_COSELECT) == NULL))
 			init_new_thread_calls();
-
-		func_obj = coselect(ukern_func_names[func], COSERVICE, root_ns);
-		if (func_obj == NULL)
-			err(ENOSYS, "ukern_call: function %s is not present in the root namespace", ukern_func_names[func]);
-		discover_ukern_func(func_obj, func);
+		get_ukernel_service(func);
 	}
-	return (call_ukern_target(func, args));
+	return (call_ukern_service(func, args, func_scb));
 }
 
 void 
@@ -154,7 +229,7 @@ discover_ukern_func(nsobject_t *service_obj, cocall_num_t function)
 
     service = codiscover(service_obj, &scb);
     if (service == NULL)
-    	err(errno, "discover_ukern_func: invalid service_obj");
+    	err(EX_SOFTWARE, "discover_ukern_func: invalid service_obj");
     set_cocall_target(ukern_call_set, (int)function, scb);
 }
 
@@ -171,8 +246,10 @@ coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns)
 	int error;
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
-	if (strlen(name) > NS_NAME_LEN)
-		err(ENAMETOOLONG, "coinsert: name exceeds maximum supported length of %lu", NS_NAME_LEN);
+	if (strlen(name) > NS_NAME_LEN) {
+		errno = ENAMETOOLONG;
+		err(EX_SOFTWARE, "coinsert: name exceeds maximum supported length of %lu", NS_NAME_LEN);
+	}
 
 	strncpy(cocall_args.nsobj_name, name, NS_NAME_LEN);
 	cocall_args.ns_cap = ns;
@@ -191,14 +268,15 @@ coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns)
 		break;
 	case INVALID_NSOBJ:
 	default:
-		err(EINVAL, "coinsert: invalid object type %d for coinsert", type);
+		errno = EINVAL;
+		err(EX_SOFTWARE, "coinsert: invalid object type %d for coinsert", type);
 		break;
 	}
 	cocall_args.nsobj_type = type;
 
 	error = ukern_call(COCALL_COINSERT, &cocall_args);
 	if (error != 0) 
-		err(errno, "coinsert: error performing cocall");
+		err(EX_SOFTWARE, "coinsert: error performing cocall");
 	else if (cocall_args.status == -1) {
 		//TODO-PBB: handle errors better? or leave it to consumers?
 		errno = cocall_args.error;
@@ -215,17 +293,19 @@ coselect(const char *name, nsobject_type_t type, namespace_t *ns)
 	coselect_args_t cocall_args;
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
-	if (strlen(name) > NS_NAME_LEN)
-		err(ENAMETOOLONG, "coselect: name exceeds maximum supported length of %lu", NS_NAME_LEN);
+	if (strlen(name) > NS_NAME_LEN) {
+		errno = ENAMETOOLONG;
+		err(EX_SOFTWARE, "coselect: name exceeds maximum supported length of %lu", NS_NAME_LEN);
+	}
 	strncpy(cocall_args.nsobj_name, name, NS_NAME_LEN);
 
 	cocall_args.nsobj_type = type;
 	cocall_args.nsobj = NULL;
 	cocall_args.ns_cap = ns;
 	
-	error = call_ukern_target(COCALL_COSELECT, &cocall_args);
+	error = call_ukern_service(COCALL_COSELECT, &cocall_args, NULL);
 	if (error == -1)
-		err(errno, "coselect: error performing cocall to coselect");
+		err(EX_SOFTWARE, "coselect: error performing cocall to coselect");
 	else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
@@ -243,16 +323,16 @@ codiscover(nsobject_t *nsobj, void **scb)
 	cocall_args.nsobj = nsobj;
 	cocall_args.scb_cap = NULL;
 	
-	error = call_ukern_target(COCALL_CODISCOVER, &cocall_args);;
+	error = call_ukern_service(COCALL_CODISCOVER, &cocall_args, NULL);
 	if (error == -1)
-		err(errno, "codiscover: error performing cocall to codiscover");
+		err(EX_SOFTWARE, "codiscover: error performing cocall to codiscover");
 	else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
-		err(errno, "codiscover: error during cocall to codiscover");
+		err(EX_SOFTWARE, "codiscover: error during cocall to codiscover");
 		return (NULL);
 	}
-	
-	*scb = cocall_args.scb_cap;
+	if (cheri_gettag(scb))
+		*scb = cocall_args.scb_cap;
 	return (cocall_args.coservice);
 	
 }
@@ -267,8 +347,10 @@ coprovide(void **worker_scbs, int nworkers, coservice_flags_t flags, int op)
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	size_t min_scb_array_len = nworkers * sizeof(void *);
 
-	if (cheri_getlen(worker_scbs) < min_scb_array_len)
-		err(EINVAL, "coprovide: length of worker_scbs %lu too short for %d workers", cheri_getlen(worker_scbs), nworkers);
+	if (cheri_getlen(worker_scbs) < min_scb_array_len) {
+		errno = EINVAL;
+		err(EX_SOFTWARE, "coprovide: length of worker_scbs %lu too short for %d workers", cheri_getlen(worker_scbs), nworkers);
+	}
 	
 	//TODO-PBB: check scb validity here.
 	scbs = calloc(nworkers, sizeof(void *));
@@ -281,7 +363,7 @@ coprovide(void **worker_scbs, int nworkers, coservice_flags_t flags, int op)
 
 	error = ukern_call(COCALL_COPROVIDE, &cocall_args);
 	if(error) {
-		err(errno, "coprovide: error in cocall");
+		err(EX_SOFTWARE, "coprovide: error in cocall");
 	}
 	
 	free(scbs);
@@ -308,7 +390,7 @@ coprovide2(struct _coservice_endpoint *ep, coservice_flags_t flags, int op)
 
 	error = ukern_call(COCALL_COPROVIDE2, &cocall_args);
 	if(error) {
-		err(errno, "coprovide: error in cocall");
+		err(EX_SOFTWARE, "coprovide: error in cocall");
 	}
 
 	if (cocall_args.status == -1) {
@@ -334,7 +416,7 @@ cocreate(const char *name, nstype_t type, namespace_t *parent)
 
 	error = ukern_call(COCALL_COCREATE, &cocall_args);
 	if (error != 0)
-		err(errno, "cocreate: cocall failed");
+		err(EX_SOFTWARE, "cocreate: cocall failed");
 	else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
@@ -363,14 +445,17 @@ coproc_init(namespace_t *root_ns_cap, void *coinsert_scb, void *coselect_scb, vo
 	else 
 		error = call_ukern_target(COCALL_COPROC_INIT, &cocall_args);
 	if (error != 0){
-		err(errno, "coproc_init: cocall failed");
+		err(EX_SOFTWARE, "coproc_init: cocall failed");
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
 	}
-	if (cocall_args.ns_cap == NULL && cocall_args.codiscover != NULL && root_ns != NULL) {
+	if (is_ukernel && root_ns != NULL && cocall_args.ns_cap == NULL) {
 		set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args.codiscover);
 		return (root_ns);
+	} else if (!is_ukernel && cocall_args.ns_cap == NULL) {
+		errno = EDOOFUS;
+		err(EX_SOFTWARE, "coproc_init: coproc_init failed but did not report an error");
 	}
 	root_ns = cocall_args.ns_cap;
 	set_cocall_target(ukern_call_set, COCALL_COINSERT, cocall_args.coinsert);
@@ -387,12 +472,14 @@ coproc_init_done(void)
 	coproc_init_args_t cocall_args;
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
-	if (!is_ukernel)
-		err(EPERM, "coproc_init_done: microkernel only calls should not be made by user programs");
+	if (!is_ukernel) {
+		errno = EPERM;
+		err(EX_SOFTWARE, "coproc_init_done: microkernel only calls should not be made by user programs");
+	}
 
 	error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT_DONE, &cocall_args, sizeof(coproc_init_args_t));
 	if(error){
-		err(errno, "coproc_init_done: cocall failed");
+		err(EX_SOFTWARE, "coproc_init_done: cocall failed");
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (-1);
@@ -419,7 +506,7 @@ cocarrier_send(coport_t *port, const void *buf, size_t len)
     
     error = ukern_call(COCALL_COSEND, &cocall_args);
     if(error)
-        err(error, "cocarrier_send: cocall failed");
+        err(EX_SOFTWARE, "cocarrier_send: cocall failed");
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
@@ -440,7 +527,7 @@ coopen(coport_type_t type)
     
     error = ukern_call(COCALL_COOPEN, &cocall_args);
     if(error)
-        err(error, "coopen: cocall failed");
+        err(EX_SOFTWARE, "coopen: cocall failed");
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
@@ -484,9 +571,7 @@ copoll(pollcoport_t *coports, int ncoports, int timeout)
 {
 	copoll_args_t cocall_args;
 	int error;
-	int function_variant;
 
-	function_variant = COCALL_COPOLL; /* Use fastpath by default */
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	cocall_args.ncoports = ncoports;
 	cocall_args.timeout = timeout;
@@ -495,13 +580,14 @@ copoll(pollcoport_t *coports, int ncoports, int timeout)
 	cocall_args.coports = malloc(ncoports * sizeof(pollcoport_t));
 	memcpy(cocall_args.coports, coports, sizeof(pollcoport_t) * ncoports);
 do_copoll:
-	error = ukern_call(function_variant, &cocall_args);
+	error = ukern_call(COCALL_COPOLL, &cocall_args);
 	if(error != 0)
-		err(errno, "copoll: cocall failed");
+		err(EX_SOFTWARE, "copoll: cocall failed");
 	if (cocall_args.status == -1) {
-		if (cocall_args.error == EWOULDBLOCK && timeout != 0 && function_variant != COCALL_SLOPOLL) {
-			function_variant = COCALL_SLOPOLL;
-			goto do_copoll;
+		if (cocall_args.error == EWOULDBLOCK && timeout != 0) {
+			error = ukern_call(COCALL_SLOPOLL, &cocall_args);
+			if(error != 0)
+				err(EX_SOFTWARE, "copoll: cocall failed (slopoll)");
 		} else {
 			errno = cocall_args.error;
 			free(cocall_args.coports);
@@ -524,7 +610,7 @@ coclose(coport_t *coport)
 	cocall_args.port = coport;
 	error = ukern_call(COCALL_COCLOSE, &cocall_args);
 	if(error != 0)
-		err(error, "coclose: cocall failed");
+		err(EX_SOFTWARE, "coclose: cocall failed");
 	if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (-1);
@@ -554,7 +640,8 @@ coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 	case INVALID_NSOBJ:
 	case RESERVATION:
 	default:
-		err(EINVAL, "coupdate: invalid object type %d for coupdate", type);
+		errno = EINVAL;
+		err(EX_SOFTWARE, "coupdate: invalid object type %d for coupdate", type);
 		break;
 	}
 	cocall_args.nsobj_type = type;
@@ -562,7 +649,7 @@ coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 
 	error = ukern_call(COCALL_COUPDATE, &cocall_args);
 	if (error != 0) 
-		err(errno, "coupdate: error performing cocall");
+		err(EX_SOFTWARE, "coupdate: error performing cocall");
 	else if (cocall_args.status == -1) {
 		//TODO-PBB: handle errors better? or leave it to consumers?
 		errno = cocall_args.error;
@@ -584,7 +671,7 @@ codelete(nsobject_t *nsobj, namespace_t *parent)
 
 	error = ukern_call(COCALL_CODELETE, &cocall_args);
 	if (error != 0) 
-		err(errno, "codelete: error performing cocall");
+		err(EX_SOFTWARE, "%s: error performing cocall", __func__);
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 
@@ -603,7 +690,7 @@ codrop(namespace_t *ns, namespace_t *parent)
 
 	error = ukern_call(COCALL_CODROP, &cocall_args);
 	if (error != 0)
-		err(errno, "codrop: error performing cocall");
+		err(EX_SOFTWARE, "codrop: error performing cocall");
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 
@@ -623,7 +710,7 @@ ccb_install(cocallback_func_t *ccb_func, struct cocallback_args *ccb_args, coeve
 
 	error = ukern_call(COCALL_CCB_INSTALL, &cocall_args);
 	if (error != 0)
-		err(errno, "ccb_install: error performing cocall");
+		err(EX_SOFTWARE, "ccb_install: error performing cocall");
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 
@@ -643,7 +730,7 @@ ccb_register(void *scb, cocallback_flags_t flags)
 
 	error = ukern_call(COCALL_CCB_REGISTER, &cocall_args);
     if(error != 0)
-        err(error, "ccb_register: cocall failed");
+        err(EX_SOFTWARE, "ccb_register: cocall failed");
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
@@ -666,7 +753,7 @@ colisten(coevent_type_t type, coevent_subject_t subject)
 
 	error = ukern_call(COCALL_COLISTEN, &cocall_args);
     if(error != 0)
-        err(error, "colisten: cocall failed");
+        err(EX_SOFTWARE, "colisten: cocall failed");
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;

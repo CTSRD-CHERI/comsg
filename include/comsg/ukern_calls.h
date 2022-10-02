@@ -81,6 +81,9 @@ void discover_ukern_func(nsobject_t *, cocall_num_t);
 void set_ukern_target(cocall_num_t , void *);
 void set_ukern_func(nsobject_t *, cocall_num_t);
 
+void set_ukernel_service(cocall_num_t, coservice_t *);
+coservice_t *get_ukernel_service(cocall_num_t);
+
 __END_DECLS
 
 #endif //!defined(_UKERN_CALLS_H)

@@ -69,6 +69,7 @@ init_service(coservice_provision_t *serv, char *name, int op)
 	serv->nsobj = coinsert(name, COSERVICE, serv->service, root_ns);
 	if (serv->nsobj == NULL)
 		err(EX_SOFTWARE, "%s: error inserting %s into root namespace", __func__, name);
+	set_ukernel_service(op, serv->service);
 }
 
 static void
