@@ -81,6 +81,8 @@ void provide_coservice(coprovide_args_t *cocall_args, void *token)
 	int i;
 	coservice_t *coservice_ptr = allocate_coservice();
 	coservice_ptr->impl = allocate_endpoint();
+	coservice_ptr->flags = cocall_args->service_flags;
+	coservice_ptr->op = cocall_args->target_op;
 	
 	coservice_ptr->impl->next_worker = 0;
 	coservice_ptr->impl->nworkers = cocall_args->nworkers;
