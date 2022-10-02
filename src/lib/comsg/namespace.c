@@ -37,11 +37,14 @@
 int valid_ns_name(const char *name)
 {
 	int i;
-	if(name[0]=='\0')
+
+	if (!__builtin_cheri_tag_get(name))
+		return (0);
+	else if(name[0]=='\0')
 		return (0);
 
 	for(i = 0; i < strnlen(name, NS_NAME_LEN); i++) {
-		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
+		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_' && name[i] != '.')
 			return (0);
 	}
 	return (1);
