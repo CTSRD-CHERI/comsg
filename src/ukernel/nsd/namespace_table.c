@@ -103,7 +103,7 @@ new_namespace_entry(void)
 		return (NULL);
 	} else {
 		index = atomic_fetch_add(&namespace_table.next_namespace, 1);
-		if(index == max_namespaces) {
+		if(index >= max_namespaces) {
 			warn("new_namespace_entry: namespace table exhausted. further attempts to create namespaces will fail.");
 			full = 1;
 		}
@@ -133,7 +133,7 @@ new_nsobject_entry(void)
 	}
 	else {
 		index = atomic_fetch_add(&nsobject_table.next_nsobject, 1);
-		if(index == max_nsobjects) {
+		if(index >= max_nsobjects) {
 			warn("new_nsobject_entry: nsobject table exhausted. further attempts to create namespaces will fail.");
 			full = 1;
 		}
