@@ -69,17 +69,22 @@ void init_worker_mutexes(void)
 static void 
 coaccept_endpoint_init(endpoint_args_t *worker_args)
 {
+    int error;
     pthread_mutex_lock(&registration_mutex);
 #ifdef COSETUP_COGETPID
-    cosetup(COSETUP_COGETPID);
+    error = cosetup(COSETUP_COGETPID);
+    if (error != 0)
+        err(EX_OSERR, "%s: failed to cosetup for COGETPID", __func__);
 #endif
 #ifdef COSETUP_COGETTID
-    cosetup(COSETUP_COGETTID);
+    error = cosetup(COSETUP_COGETTID);
+    if (error != 0)
+        err(EX_OSERR, "%s: failed to cosetup for COSETUP_COGETTID", __func__);
 #endif
 
     if(coregister(NULL, &worker_args->scb_cap) != 0) {
         pthread_cond_signal(&registration_cond);
-        pthread_exit(NULL);
+        pthread_exit(NULL); /* should release robust mutex */
     }
 
     pthread_cond_signal(&registration_cond);
