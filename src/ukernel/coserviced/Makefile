@@ -1,6 +1,7 @@
 PROG := coserviced
 
 SRCS :=	codiscover.c \
+	codiscover2.c \
 	coprovide.c \
 	coprovide2.c \
 	coservice_cap.c \

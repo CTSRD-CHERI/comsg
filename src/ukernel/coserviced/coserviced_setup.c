@@ -32,7 +32,9 @@
 #include "coserviced_endpoints.h"
 
 #include "codiscover.h"
+#include "codiscover2.h"
 #include "coprovide.h"
+#include "coprovide2.h"
 #include "coserviced.h"
 #include "coservice_table.h"
 #include "coservice_cap.h"

@@ -739,3 +739,25 @@ cocarrier_recv_oob(coport_t *port, void ** const buf, size_t len, comsg_attachme
 
 	return (cocall_args.status);
 }
+
+void *
+codiscover2(coservice_t *s)
+{
+	int error;
+	codiscover_args_t cocall_args;
+
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	cocall_args.scb_cap = NULL;
+	cocall_args.coservice = s;
+	
+	error = ukern_call(COCALL_CODISCOVER2, &cocall_args);;
+	if (error == -1) {
+		err(EX_SOFTWARE, "codiscover2: error performing cocall to codiscover2");
+	} else if (cocall_args.status == -1) {
+		errno = cocall_args.error;
+		err(EX_SOFTWARE, "codiscover2: error during cocall to codiscover2");
+		return (NULL);
+	}
+	return (cocall_args.scb_cap);
+	
+}

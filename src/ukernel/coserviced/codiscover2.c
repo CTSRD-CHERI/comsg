@@ -28,15 +28,39 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_CAP_H
-#define _COSERVICE_CAP_H
+#include "codiscover.h"
+#include "coservice_cap.h"
+#include "coservice_table.h"
 
+#include <comsg/comsg_args.h>
 #include <comsg/coservice.h>
-#include <stdbool.h>
+#include <comsg/utils.h>
 
-coservice_t *create_coservice_handle(coservice_t *);
-struct _coservice_endpoint *get_service_endpoint(coservice_t *);
-struct _coservice_endpoint *unseal_endpoint(struct _coservice_endpoint *);
-bool is_valid_endpoint(struct _coservice_endpoint *);
+#include <sys/errno.h>
 
-#endif
+int validate_codiscover2_args(codiscover_args_t *cocall_args)
+{
+	coservice_t *service_handle = cocall_args->coservice;
+	if(service_handle == NULL)
+		return (0);
+	else if (cheri_getsealed(service_handle))
+		return (0);
+	else if (cheri_getlen(service_handle) < sizeof(coservice_t))
+		return (0);
+	else if (!in_table(service_handle))
+		return (0);
+	else
+		return (1);
+}
+
+void discover_coservice2(codiscover_args_t *cocall_args, void *token)
+{
+	UNUSED(token);
+
+	coservice_t *service;
+
+	service = cocall_args->coservice;
+	cocall_args->scb_cap = get_coservice_scb(get_service_endpoint(service));
+	
+	COCALL_RETURN(cocall_args, 0);
+}

@@ -28,15 +28,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _COSERVICE_CAP_H
-#define _COSERVICE_CAP_H
+#ifndef _CODISCOVER2_H
+#define _CODISCOVER2_H
 
-#include <comsg/coservice.h>
-#include <stdbool.h>
+#include <comsg/comsg_args.h>
 
-coservice_t *create_coservice_handle(coservice_t *);
-struct _coservice_endpoint *get_service_endpoint(coservice_t *);
-struct _coservice_endpoint *unseal_endpoint(struct _coservice_endpoint *);
-bool is_valid_endpoint(struct _coservice_endpoint *);
+int validate_codiscover2_args(codiscover_args_t *args);
 
-#endif
+void discover_coservice2(codiscover_args_t *cocall_args, void *token);
+
+#endif //!defined(_CODISCOVER2_H)
