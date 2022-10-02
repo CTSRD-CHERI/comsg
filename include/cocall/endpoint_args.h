@@ -28,39 +28,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COCALL_WORKER_ARGS_H
+#define _COCALL_WORKER_ARGS_H
 
-#include <coproc/coservice.h>
-#include <stdatomic.h>
+#include <pthread.h>
+#include <stdbool.h>
 
-#include <stddef.h>
-
-static int
-get_scb_index(coservice_t *service)
+typedef struct _worker_args
 {
-	int idx;
-	int max;
+	/* the worker thread */
+	pthread_t worker;
+	/* result of coregister */
+	void *scb_cap;
+	/* should use slowpath */
+	bool slow;
+} endpoint_args_t;
 
-	max = service->nworkers;
-	for (;;) {
-		idx = atomic_fetch_add_explicit(&service->next_worker, 1, memory_order_acq_rel);
-		if (idx >= max) {
-			atomic_store_explicit(&service->next_worker, 1, memory_order_release);
-            continue;
-		};
-        break;
-	}
+typedef struct _worker_args endpoint_args_t;
 
-	return (idx);
-}
-
-void *
-get_coservice_scb(coservice_t *service)
-{
-	void *scb;
-	int index;
-
-	index = get_scb_index(service);
-	scb = service->worker_scbs[index];
-
-	return (scb);
-}
+#endif //!defined(_COCALL_WORKER_ARGS_H)

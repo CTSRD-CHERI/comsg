@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  */
 
-#include <coproc/module.h>
+#include <comsg/module.h>
 
 #include <assert.h>
 #include <stdbool.h>

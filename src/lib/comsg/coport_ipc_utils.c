@@ -32,8 +32,8 @@
 #include "coport_ipc_utils.h"
 #include "coport_cinvoke.h"
 
-#include <coproc/coport.h>
-#include <coproc/utils.h>
+#include <comsg/coport.h>
+#include <comsg/utils.h>
 #include <comsg/ukern_calls.h>
 
 #include <assert.h>
@@ -54,7 +54,9 @@ static nsobject_t *cosend_obj = NULL;
 static nsobject_t *corecv_obj = NULL;
 
 static struct object_type copipe_otype, cochannel_otype, cocarrier_otype;
-static struct object_type *allocated_otypes[] = {&copipe_otype};
+static struct object_type *allocated_otypes[] = {&copipe_otype, &cochannel_otype};
+#define IPCD_OTYPE_RANGE_START (32)
+#define IPCD_OTYPE_RANGE_END (63)
 
 coport_type_t 
 coport_gettype(coport_t *port)
@@ -71,19 +73,24 @@ coport_gettype(coport_t *port)
         return (COCHANNEL);
     else if (port_otype == copipe_otype.otype)
         return (COPIPE);
-    else
-        return (INVALID_COPORT);  
+    else if (cocarrier_otype.otype == 0) {
+        if (port_otype >= IPCD_OTYPE_RANGE_START && port_otype <= IPCD_OTYPE_RANGE_END) {
+            cocarrier_otype.otype = port_otype;
+            return (COCARRIER);
+        }
+    }
+    return (INVALID_COPORT);  
 }
 
 static void
 cocarrier_preload(void)
 {
-    if (global_ns == NULL)
-        global_ns = coproc_init(NULL, NULL, NULL, NULL);
+    if (root_ns == NULL)
+        root_ns = coproc_init(NULL, NULL, NULL, NULL);
     if (cosend_obj == NULL)
-        cosend_obj = coselect(U_COSEND, COSERVICE, global_ns);
+        cosend_obj = coselect(U_COSEND, COSERVICE, root_ns);
     if (corecv_obj == NULL)
-        corecv_obj = coselect(U_CORECV, COSERVICE, global_ns);
+        corecv_obj = coselect(U_CORECV, COSERVICE, root_ns);
     discover_ukern_func(cosend_obj, COCALL_COSEND);
     discover_ukern_func(corecv_obj, COCALL_CORECV);
 }
@@ -254,6 +261,7 @@ cochannel_recv(const coport_t *port, void *buf, size_t len)
     size_t port_size, port_buf_len;
     size_t old_start, port_end, new_start, len_to_end, new_len;
     coport_eventmask_t event;
+    coport_status_t status;
 
     port_size = port->info->length;
     if (cheri_getlen(buf) < len) {
@@ -261,7 +269,9 @@ cochannel_recv(const coport_t *port, void *buf, size_t len)
         return (-1);
     }
     new_len = port_size - len;
-    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
+    if((status & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+        /* port is closed */
         errno = EPIPE;
         return (-1);
     }
@@ -304,8 +314,13 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
     coport_status_t status;
     ssize_t received_len;
 
-    if (cheri_getlen(buf) < len)
+    if (cheri_getlen(buf) > len)
         buf = cheri_setbounds(buf, len);
+    else if (cheri_getlen(buf) < len) {
+        errno = EMSGSIZE;
+        return (-1);
+    }
+
     buf = cheri_andperm(buf, COPIPE_RECVBUF_PERMS);
 
     status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);

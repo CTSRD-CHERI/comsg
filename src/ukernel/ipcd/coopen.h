@@ -31,7 +31,7 @@
 #ifndef _COOPEN_H
 #define _COOPEN_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
 int validate_coopen_args(coclose_args_t *cocall_args);
 void coport_open(coclose_args_t *cocall_args, void *token);

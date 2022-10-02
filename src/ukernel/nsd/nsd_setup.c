@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "nsd_setup.h"
+#include "nsd_endpoints.h"
 
 #include "namespace_table.h"
 #include "nsd.h"
@@ -36,23 +37,33 @@
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 #include <cocall/cocalls.h>
-#include <cocall/cocall_args.h>
-#include <cocall/worker.h>
-#include <cocall/worker_map.h>
+#include <comsg/comsg_args.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/coservice.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/coservice.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
 #include <err.h>
+#include <sysexits.h>
 #include <sys/auxv.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+
+static coservice_t *fast_endpoints = NULL;
+
+static struct _coservice_endpoint *
+get_fast_coservice_endpoint(void)
+{
+	if (fast_endpoints == NULL)
+		return (NULL);
+	return (fast_endpoints->impl);
+}
 
 /*
  * There is a race condition inherent in use of pids to identify processes.
@@ -61,58 +72,75 @@
 
 /* TODO-PBB: make this implementation more uniform with ipcd and coserviced */
 
-static
-void startup_dance(void)
+static void 
+startup_dance(void)
 {
 	//init own services
-	void *codiscover_scb;
-	void **coinsert_scbs, **coselect_scbs;
+	void *coprovide_scb;
+	void **endpoint_scbs;
 	coservice_t *codiscover_service;
 	nsobject_t *coprovide_nsobj;
-	namespace_t *unsealed_global_ns;
+	coservice_t *coprovide_service;
 
-	unsealed_global_ns  = get_global_namespace();
+	root_ns = make_ns_handle(get_root_namespace());
+	if (!cheri_gettag(root_ns))
+		err(EX_SOFTWARE, "%s: root namespace cap lacks tag!!", __func__);
 
-	global_ns = seal_ns(unsealed_global_ns);
-
-	coinsert_scbs = get_worker_scbs(coinsert_serv.function_map);
-	coselect_scbs = get_worker_scbs(coselect_serv.function_map);
-
+	endpoint_scbs = get_fast_endpoints();
+	set_ukern_target(COCALL_COSELECT, endpoint_scbs[0]);
+	set_ukern_target(COCALL_COINSERT, endpoint_scbs[1]);
+	
 	/* codiscover no longer returned from coproc_init */
 	/* this wrecks load balancing by putting all main threads on the first worker */
 
 	//connect to process daemon and do the startup dance (we can dance if we want to)
-	if (coproc_init(global_ns, coinsert_scbs[0], coselect_scbs[0], NULL) == NULL)
-		err(errno, "startup_dance: cocall failed");
+	if (coproc_init(root_ns, endpoint_scbs[0], endpoint_scbs[1], NULL) == NULL)
+		err(EX_SOFTWARE, "%s: cocall failed", __func__);
 
-	/* Once coprovide has been inserted into the global namespace, we can make progress */
-	while(lookup_coservice(U_COPROVIDE, global_ns) == NULL)
+	if (!cheri_gettag(root_ns))
+		err(EX_SOFTWARE, "%s: root namespace cap lacks tag!!", __func__);
+
+	/* Once coprovide has been inserted into the root namespace, we can make progress */
+	while(lookup_coservice(U_COPROVIDE, root_ns) == NULL)
 		sched_yield(); /* would microsleep be better? or proper event delivery? */
-
-	codiscover_service = lookup_coservice(U_CODISCOVER, global_ns);
-	set_ukern_target(COCALL_CODISCOVER, get_coservice_scb(codiscover_service));
-
-	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, global_ns);
-	discover_ukern_func(coprovide_nsobj, COCALL_COPROVIDE);
-
-}
-
-static
-void start_global_service(coservice_provision_t *service_prov)
-{
-	void **scbs;
 	
-	scbs = get_worker_scbs(service_prov->function_map);
-	service_prov->service = coprovide(scbs, NSD_NWORKERS);
+	do {
+		if (coproc_init(NULL, NULL, NULL, NULL) != root_ns) {
+			if (errno == EAGAIN) {
+				sched_yield();
+				continue;
+			} else
+				err(EX_SOFTWARE, "%s: failed to get codiscover scb from coprocd", __func__);
+		}
+	} while (0);
 
-	update_nsobject(service_prov->nsobj, service_prov->service, COSERVICE);
+	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, root_ns);
+	coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
+	set_ukernel_service(COCALL_COPROVIDE, coprovide_service);
+	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
+	set_ukernel_service(COCALL_CODISCOVER, lookup_coservice(U_CODISCOVER, root_ns));
 }
 
 static void 
-init_service(coservice_provision_t *service_prov, const char * name,  void *func, void *validate)
+start_fast_service(coservice_provision_t *serv, int op)
 {
-	service_prov->function_map = spawn_workers(func, validate, NSD_NWORKERS);
-	service_prov->nsobj = new_nsobject(name, RESERVATION, global_ns);
+	struct _coservice_endpoint *ep = get_fast_coservice_endpoint();
+	if (ep == NULL) {
+		fast_endpoints = coprovide(get_fast_endpoints(), (int)get_fast_endpoint_count(), (coservice_flags_t)NONE, op);
+		serv->service = fast_endpoints;
+	} else
+		serv->service = coprovide2(ep, NONE, op);
+	if (serv->service == NULL)
+		err(EX_SOFTWARE, "%s: error creating/getting endpoint coservice when initing %s", __func__, serv->nsobj->name);
+	if (update_nsobject(serv->nsobj, serv->service, COSERVICE) != 0)
+		err(EX_SOFTWARE, "%s: error inserting %s into root namespace", __func__, serv->nsobj->name);
+	set_ukernel_service(op, serv->service);
+}
+
+static void 
+init_service(coservice_provision_t *service_prov, const char * name)
+{
+	service_prov->nsobj = new_nsobject(name, RESERVATION, root_ns);
 }
 
 static void
@@ -132,24 +160,27 @@ process_capvec(void)
 void init_services(void)
 {
 	process_capvec();
+	init_endpoints();
 
-	init_service(&coinsert_serv, U_COINSERT, namespace_object_insert, validate_coinsert_args);
-	init_service(&coupdate_serv, U_COUPDATE, namespace_object_update, validate_coupdate_args);
-	init_service(&codelete_serv, U_CODELETE, namespace_object_delete, validate_codelete_args);
-	init_service(&coselect_serv, U_COSELECT, namespace_object_select, validate_coselect_args);
-	init_service(&cocreate_serv, U_COCREATE, namespace_create, validate_cocreate_args);
-	init_service(&codrop_serv, U_CODROP, namespace_drop, validate_codrop_args);
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+	init_service(&name##_serv, #name);
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 	startup_dance();
-	/* COINSERT and COSELECT inited by safety_dance */
-	start_global_service(&coinsert_serv);
-	start_global_service(&coselect_serv);
-	start_global_service(&coupdate_serv);
-	start_global_service(&codelete_serv);
-	start_global_service(&cocreate_serv);
-	start_global_service(&codrop_serv);
+
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+	start_fast_service(&name##_serv, op);
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 	coproc_init_done();
-
-	return;
 }

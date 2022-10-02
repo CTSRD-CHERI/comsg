@@ -31,8 +31,9 @@
 #ifndef _COPORT_IPC_CINVOKE_H
 #define _COPORT_IPC_CINVOKE_H
 
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 #include <stddef.h>
+#include <sys/cdefs.h>
 #include <sys/types.h>
 
 typedef ssize_t (*coport_func_ptr)(coport_t *, void *, size_t);
@@ -47,6 +48,8 @@ extern const coport_func_ptr *cosend_codecap_cochannel;
 extern const coport_func_ptr *corecv_codecap_cochannel;
 
 extern const void **return_stack_sealcap;
+
+__BEGIN_DECLS
 
 extern ssize_t coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
 
@@ -90,5 +93,7 @@ corecv_cinvoke_cochannel(coport_t *port, void *buffer, size_t length)
 {
     return (cochannel_corecv_cinvoke(*corecv_codecap_cochannel, port, buffer, (*return_stack_sealcap), length));
 }
+
+__END_DECLS
 
 #endif

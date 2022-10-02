@@ -34,8 +34,8 @@
 #include "copoll_utils.h"
 
 #include <ccmalloc.h>
-#include <cocall/cocall_args.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <pthread.h>
@@ -172,7 +172,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 
 
 void 
-cocarrier_poll_slow(cocall_args_t *cocall_args, void *token)
+cocarrier_poll_slow(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	uint ncoports; 

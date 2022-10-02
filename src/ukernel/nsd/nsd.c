@@ -56,6 +56,7 @@
 
 #include <ccmalloc.h>
 #include <comsg/ukern_calls.h>
+#include <cocall/endpoint.h>
 
 #include <err.h>
 #include <stdio.h>
@@ -66,7 +67,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-coservice_provision_t coinsert_serv, coselect_serv, coupdate_serv, codelete_serv, cocreate_serv, codrop_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 static 
 void usage(void)
@@ -100,13 +108,10 @@ int main(int argc, char *const argv[])
 	}
 	ccmalloc_init(buckets, nbuckets);
 	//we can dance if we want to
-	global_ns = new_namespace("coproc", GLOBAL, NULL);
+	root_ns = new_namespace("coproc", ROOT, NULL);
 	init_services();
 
-	for (int i = 0; i < coinsert_serv.function_map->nworkers; i++)
-		pthread_join(coinsert_serv.function_map->workers[i].worker, NULL);
-	for (int i = 0; i < codelete_serv.function_map->nworkers; i++)
-		pthread_join(codelete_serv.function_map->workers[i].worker, NULL);
+	join_endpoint_thread();
 
 
 	return (0);

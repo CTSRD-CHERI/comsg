@@ -30,11 +30,13 @@
  */
 #include "ipcd.h"
 #include "ipcd_startup.h"
+#include <cocall/endpoint.h>
 
 #include <ccmalloc.h>
 #include <cocall/cocalls.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/coport.h>
+
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <err.h>
@@ -45,7 +47,23 @@
 #include <stdio.h>
 #include <unistd.h>
 
-coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_serv, cosend_serv, corecv_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
+
+#pragma push_macro("DECLARE_SLOACCEPT_ENDPOINT")
+#pragma push_macro("DECLARE_SLOACCEPT_ENDPOINT")
+#define DECLARE_SLOACCEPT_ENDPOINT(name, validate_f, operation_f) SLOACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define SLOACCEPT_ENDPOINT(name, op, validate, func) \
+coservice_provision_t name##_serv;
+#include "sloaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_SLOACCEPT_ENDPOINT")
+#pragma pop_macro("DECLARE_SLOACCEPT_ENDPOINT")
 
 static 
 void usage(void)
@@ -54,8 +72,8 @@ void usage(void)
 	exit(0);
 }
 
-static size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(coport_typedep_t), COCARRIER_MAX_MSG_LEN};
-static size_t nbuckets = 5;
+static size_t buckets[] = {COPORT_BUF_LEN, sizeof(coport_info_t), sizeof(coport_buf_t), sizeof(struct cocarrier_message), sizeof(coport_typedep_t), sizeof(comsg_attachment_t), COCARRIER_MAX_MSG_LEN};
+static size_t nbuckets = 7;
 
 /* TODO-PBB: Add a cocall allowing a coport "owner" to create send/recv only capabilities */
 
@@ -77,12 +95,7 @@ int main(int argc, char *const argv[])
 	ccmalloc_init(buckets, nbuckets);
 	ipcd_startup();
 
-	for(;;) {
-		for (int i = 0; i < coopen_serv.function_map->nworkers; i++)
-			pthread_join(coopen_serv.function_map->workers[i].worker, NULL);
-		for (int i = 0; i < coclose_serv.function_map->nworkers; i++)
-			pthread_join(coclose_serv.function_map->workers[i].worker, NULL);
-	}
+	join_endpoint_thread();
 
 	return (0);
 }

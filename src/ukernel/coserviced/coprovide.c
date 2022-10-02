@@ -34,9 +34,9 @@
 
 #include <ccmalloc.h>
 #include <cheri/cherireg.h>
-#include <cocall/cocall_args.h>
-#include <coproc/namespace.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/namespace.h>
+#include <comsg/utils.h>
 
 #include <cheri/cheric.h>
 #include <ctype.h>
@@ -53,6 +53,7 @@ int validate_coprovide_args(coprovide_args_t *cocall_args)
 	 * The only type of error return from failing these checks is EINVAL.
 	 * Other checks, e.g. for permissions, should happen elsewhere.
 	 */
+	void **scbs;
 	if(cocall_args->nworkers <= 0)
 		return (0);
 	else if (cocall_args->nworkers > COSERVICE_MAX_WORKERS)
@@ -60,9 +61,15 @@ int validate_coprovide_args(coprovide_args_t *cocall_args)
 	else if(cheri_getlen(cocall_args->worker_scbs) < (CHERICAP_SIZE * cocall_args->nworkers))
 		return (0);
 	else {
-		for(i = 0; i < cocall_args->nworkers; i++) 
-			if(!valid_scb(cocall_args->worker_scbs[i]))
+		scbs = cocall_calloc(cocall_args->nworkers, sizeof(void *));
+		memcpy(scbs, cocall_args->worker_scbs, cheri_getlen(scbs));
+		for(i = 0; i < cocall_args->nworkers; i++) {
+			if(!valid_scb(cocall_args->worker_scbs[i])) {
+				cocall_free(scbs);
 				return (0);
+			}
+		}
+		cocall_args->worker_scbs = scbs;
 	}
 
 	return (1);
@@ -73,15 +80,20 @@ void provide_coservice(coprovide_args_t *cocall_args, void *token)
 	UNUSED(token);
 	int i;
 	coservice_t *coservice_ptr = allocate_coservice();
-
-	coservice_ptr->next_worker = 0;
-	coservice_ptr->nworkers = cocall_args->nworkers;
-	coservice_ptr->worker_scbs = cocall_calloc(CHERICAP_SIZE, cocall_args->nworkers);
-	for (i = 0; i < coservice_ptr->nworkers; i++) {
-		coservice_ptr->worker_scbs[i] = cocall_args->worker_scbs[i];
+	coservice_ptr->impl = allocate_endpoint();
+	coservice_ptr->flags = cocall_args->service_flags;
+	coservice_ptr->op = cocall_args->target_op;
+	
+	coservice_ptr->impl->next_worker = 0;
+	coservice_ptr->impl->nworkers = cocall_args->nworkers;
+	coservice_ptr->impl->worker_scbs = cocall_calloc(cocall_args->nworkers, sizeof(void *));
+	for (i = 0; i < coservice_ptr->impl->nworkers; i++) {
+		coservice_ptr->impl->worker_scbs[i] = cocall_args->worker_scbs[i];
 	}
 
 	cocall_args->service = create_coservice_handle(coservice_ptr);
+	cocall_free(cocall_args->worker_scbs);
+	cocall_args->worker_scbs = NULL;
 
 	COCALL_RETURN(cocall_args, 0);
 }

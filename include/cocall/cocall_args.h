@@ -31,12 +31,6 @@
 #ifndef _COCALL_ARGS_H
 #define _COCALL_ARGS_H
 
-#include <coproc/coevent.h>
-#include <coproc/coport.h>
-#include <coproc/coservice.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-
 #ifndef COCALL_ERR
 #define COCALL_ERR(c, n) do { c->status = (-1);\
 	c->error = (n);\
@@ -49,112 +43,22 @@
 	return; } while(0)
 #endif //!defined(COCALL_RETURN)
 
-#if 0
-struct commap 
-{
-	void *mapped;
-	token_t token;
-	int prot;
-};
+/* arbitrary-ish. */
+#ifndef MAX_COCALL_ARGS_SIZE
+#define MAX_COCALL_ARGS_SIZE (256) 
+#endif
 
-struct comunmap 
-{
-	token_t token;
-};
-#endif //0
-
-//There is an unsatisfying situation here which arises from the fact that
-//cocall/coaccept data lengths must (sort of) be symmetrical, so to pass a variable 
-//length array, even though we can derive its length, we must pass a pointer
-//to memory we cannot guarantee will not be touched or unmapped during the call.
-typedef struct _pollcoport_t
-{
-	coport_t *coport;
-	coport_eventmask_t events;
-	coport_eventmask_t revents;
-} pollcoport_t;
-
+// Minimal cocall args struct
+// Consumers of this library will define their own, but it must match this
 struct _cocall_args
 {
 	int status;
 	int error;
-	namespace_t *ns_cap;
-	union 
-	{
-		struct {
-			void *codiscover;
-			void *coinsert;
-			void *coselect;
-			void *done_scb;
-		}; //coproc_init, coproc_init_done
-		struct {
-			char ns_name[NS_NAME_LEN];
-			nstype_t ns_type;
-			namespace_t *child_ns_cap;
-		}; //cocreate, codrop
-		struct {
-			char nsobj_name[NS_NAME_LEN];
-			nsobject_t *nsobj;
-			nsobject_type_t nsobj_type;
-			union {
-				void *obj;
-				coservice_t *coservice;
-				coport_t *coport;
-			};
-			void *scb_cap;
-		}; //coupdate, coinsert, codelete, coselect, codiscover
-		struct {
-			void **worker_scbs;
-			int nworkers;
-			coservice_t *service;
-		}; //coprovide
-		struct {
-			coport_type_t coport_type;
-			coport_t *port;
-		}; //coopen, coclose
-		struct {
-			pollcoport_t *coports;
-			uint ncoports;
-			long timeout; 
-		}; //copoll
-		struct {
-			coport_t *cocarrier;
-			void *message;
-			size_t length;
-		}; //cosend/corecv
-		struct {
-			coevent_subject_t subject;
-			coevent_t *coevent;
-			cocallback_func_t *ccb_func;
-			struct cocallback_args ccb_args;
-			coevent_type_t event;
-		}; //colisten, ccb_install
-		struct {
-			void *provider_scb;
-			cocallback_flags_t flags;
-		}; //ccb_register
-	};
+	int op;
+#define PAD_LENGTH (MAX_COCALL_ARGS_SIZE - (sizeof(int) * 3))
+	char pad[PAD_LENGTH];
 } __attribute__((__aligned__(16)));
 
 typedef struct _cocall_args cocall_args_t;
-typedef struct _cocall_args copoll_args_t;
-typedef struct _cocall_args cosend_args_t;
-typedef struct _cocall_args corecv_args_t;
-typedef struct _cocall_args codiscover_args_t;
-typedef struct _cocall_args coprovide_args_t;
-typedef struct _cocall_args coopen_args_t;
-typedef struct _cocall_args coclose_args_t;
-typedef struct _cocall_args coselect_args_t;
-typedef struct _cocall_args coinsert_args_t;
-typedef struct _cocall_args coproc_init_args_t;
-typedef struct _cocall_args codrop_args_t;
-typedef struct _cocall_args codelete_args_t;
-typedef struct _cocall_args coupdate_args_t;
-typedef struct _cocall_args cocreate_args_t;
-typedef struct _cocall_args colisten_args_t;
-typedef struct _cocall_args ccb_register_args_t;
-typedef struct _cocall_args ccb_install_args_t;
-
-
 
 #endif //!defined(_COCALL_ARGS_H)

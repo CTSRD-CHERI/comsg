@@ -29,13 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#include <cocall/worker_map.h>
 #include <comsg/ukern_calls.h>
 #include <comsg/coport_ipc.h>
 #include <comsg/coport_ipc_cinvoke.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-#include <coproc/coport.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
+#include <comsg/coport.h>
 
 #include <assert.h>
 #include <err.h>
@@ -46,16 +45,20 @@
 #include <pthread.h>
 #include <string.h>
 #include <sysexits.h>
+#include <sys/fcntl.h>
 #include <sys/errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "dynamic_endpoint.h"
+#include "dynamic_endpoint_map.h"
 
 static char *coprocd_args[] = {"/usr/bin/coprocd", NULL};
 extern char **environ;
 static void *sealroot;
 static pid_t monitored_child;
 
-static const char default_name[] = "coproctestA";
+static const char default_name[] = "coproctest";
 static char test_str[] = "Testing...";
 
 typedef struct {
@@ -72,7 +75,7 @@ pthread_mutex_t procdeath;
 pthread_cond_t proc_died;
 
 static void 
-ccb_example(cocall_args_t *cocall_args, void *token)
+ccb_example(comsg_args_t *cocall_args, void *token)
 {
 	(void)(token);
 	(void)(cocall_args);
@@ -89,10 +92,11 @@ do_procdeath_test(void)
 	coevent_subject_t subject_death;
 	char *child_args[] = {"/usr/bin/coeventtest", NULL};
 	pid_t child_pid, my_pid;
-	cocall_args_t args;
+	comsg_args_t args;
 	struct cocallback_args ccb_args;
-	coport_t *copipe;
-	coevent_t *death;
+	coport_t *copipe, *cocarrier;
+	coevent_t *death = NULL;
+	comsg_attachment_set_t oob;
 	int error;
 
 	void **scbs, *scb;
@@ -100,32 +104,41 @@ do_procdeath_test(void)
 
 	fmap = spawn_slow_worker(NULL, ccb_example, NULL);
 	scbs = get_worker_scbs(fmap);
+	cocarrier = open_coport(COCARRIER);
 	copipe = open_coport(COPIPE);
 	scb = scbs[0];
-	capv = calloc(2, sizeof(void *));
-	capv[0] = scb;
-	capv[1] = NULL;
+	capv = calloc(3, sizeof(void *));
+	capv[0] = cocarrier;
+	capv[1] = copipe;
+	capv[2] = NULL;
+	char *buf = calloc(1, sizeof(coevent_t *));
 
 	cocallback_func_t *ccb_func = ccb_register(scb, FLAG_SLOCALL);
+
+	pthread_mutex_lock(&procdeath);
 	
 	my_pid = getpid();
 	child_pid = vfork();
 	if (child_pid == 0) {
 		coexecvec(my_pid, child_args[0], child_args, environ, capv);
 		_exit(EX_UNAVAILABLE);
-	} 
-
-	pthread_mutex_lock(&procdeath);
-	error = corecv(copipe, &death, sizeof(death));
-	assert(error > 0);
-	ccb_args.len = sizeof(cocall_args_t);
+	}
+	error = corecv(copipe, &buf, sizeof(coevent_t *));
+	if (error < 0)
+		err(EX_SOFTWARE, "%s: failed to corecv from coeventtest via copipe", __func__);
+	error = corecv_oob(cocarrier, &buf, sizeof(coevent_t *), &oob);
+	if (error < 0)
+		err(EX_SOFTWARE, "%s: failed to corecv from coeventtest via cocarrier", __func__);
+	death = oob.attachments[0].item.coevent;
+	ccb_args.len = sizeof(comsg_args_t);
 	ccb_args.cocall_data = (void *)&args;
 	ccb_install(ccb_func, &ccb_args, death);
+	error = cosend(copipe, buf, sizeof(coevent_t *));
+    if (error < 0)
+		err(EX_SOFTWARE, "%s: failed to cosend from coeventtest via copipe", __func__);
 	pthread_cond_wait(&proc_died, &procdeath);
 	printf("coproctest: coeventd test passed\n");
 	pthread_mutex_unlock(&procdeath);
-	
-
 }
 
 static void *
@@ -156,13 +169,17 @@ do_cocarrier(void *argp)
 	} else
 		printf("coproctest: polling coport... \t\t\tsuccess!\n");
 	pthread_mutex_lock(&start);
-	printf("coproctest: receiving message...");
-	error = corecv(args->port, args->dest_buf, cheri_getlen(test_str));
+	printf("coproctest: receiving message and out-of-band attachment...");
+	comsg_attachment_set_t oob;
+	error = corecv_oob(args->port, args->dest_buf, cheri_getlen(test_str), &oob);
 	*args->result_ptr = cheri_getlen(*args->dest_buf);
 	result_str = (char **)args->dest_buf;
-	if (cheri_gettag(args->dest_buf))
-		printf("\t\tsuccess!\ncoproctest: (received \"%s\")\n", (*result_str));
-	else
+	if (cheri_gettag(args->dest_buf) && oob.len > 0) {
+		if (oob.attachments[0].item.coport == args->port)
+			printf("\t\tsuccess!\ncoproctest: (received \"%s\" and coport handle)\n", (*result_str));
+		else
+			err(errno, "coproctest: do_tests: corecv failed");
+	} else
 		err(errno, "coproctest: do_tests: corecv failed");
 	pthread_mutex_unlock(&start);
 	return (NULL);
@@ -188,13 +205,16 @@ do_tests(void)
 
  	recvr_args = calloc(1, sizeof(corecv_thr_args_t));
 	ns_name = calloc(32, sizeof(char));
-	strcpy(ns_name, default_name);
+	unsigned long *rand_buffer = calloc(1, sizeof(unsigned long));
+	int fd = open("/dev/random", O_RDONLY);
+	int status = read(fd, rand_buffer, sizeof(unsigned long));
+	snprintf(ns_name, 31, "%s%lX", default_name, *rand_buffer);
 	
 
 coproc_init_lbl:
 	printf("coproctest: initializing coproc...");
-	global_ns = coproc_init(NULL, NULL, NULL, NULL);
-	if (global_ns != NULL) 
+	root_ns = coproc_init(NULL, NULL, NULL, NULL);
+	if (root_ns != NULL) 
 		printf("\t\tsuccess!\n");
 	else {
 		if (errno == EAGAIN) {
@@ -208,7 +228,7 @@ coproc_init_lbl:
 	
 	printf("coproctest: creating namespace...");
 cocreate_lbl:
-	proc_ns = cocreate(ns_name, APPLICATION, global_ns);
+	proc_ns = cocreate(ns_name, APPLICATION, root_ns);
 	if (proc_ns != NULL) 
 		printf("\t\tsuccess!\n");
 	else {
@@ -350,12 +370,15 @@ cocreate_lbl:
 	pthread_mutex_unlock(&start);
 	/* Still racey, but mildly less so. */
 	pthread_yield();
-	printf("coproctest: sending message...");
-	sent = cosend(port_obj->coport, test_str, cheri_getlen(test_str));
+	printf("coproctest: sending message with out-of-band attachment...");
+	comsg_attachment_t oob_data;
+	oob_data.item.coport = port_obj->coport;
+	oob_data.type = ATTACHMENT_COPORT;
+	sent = cosend_oob(port_obj->coport, test_str, cheri_getlen(test_str), &oob_data, 1);
 	if (sent > 0)
-		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\")\n", test_str);
+		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\" and handle to coport)\n", test_str);
 	else
-		err(errno, "coproctest: do_tests: cosend failed");
+		err(errno, "coproctest: do_tests: cosend_oob failed");
 	
 	pthread_join(recvr, NULL);
 	
@@ -372,8 +395,6 @@ cocreate_lbl:
 		printf("\t\t\tsuccess!\n");
 	else
 		err(errno, "coproctest: do_tests: coclose failed");
-
-
 }
 
 int main(int argc, char *const argv[])

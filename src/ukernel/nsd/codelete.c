@@ -34,9 +34,9 @@
 #include "nsd_crud.h"
 #include "nsd_lookup.h"
 
-#include <cocall/cocall_args.h>
-#include <coproc/namespace_object.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/namespace_object.h>
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <string.h>

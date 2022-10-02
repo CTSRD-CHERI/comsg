@@ -31,7 +31,7 @@
 #ifndef _COEVENTD_PROCDEATH_H
 #define _COEVENTD_PROCDEATH_H
 
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 
 void *handle_proc_events(void *);
 int monitor_proc(struct coevent *);

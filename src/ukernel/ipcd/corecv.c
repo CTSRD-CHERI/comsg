@@ -29,12 +29,13 @@
  * SUCH DAMAGE.
  */
 #include "corecv.h"
+#include "ipcd.h"
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
-#include <cocall/cocall_args.h>
-#include <coproc/coport.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coport.h>
+#include <comsg/utils.h>
 
 #include <sys/errno.h>
 #include <stdatomic.h>
@@ -55,7 +56,7 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	coport_t *cocarrier;
-	void **cocarrier_buf;
+	struct cocarrier_message **cocarrier_buf, *msg;
 	coport_eventmask_t event;
 	coport_status_t status;
 	size_t port_len, index, new_len;
@@ -93,7 +94,7 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	cocarrier->info->start = (index + 1) % COCARRIER_SIZE;
 	cocarrier->info->length = new_len;
 
-	cocall_args->message = cocarrier_buf[index];
+	msg = cocarrier_buf[index];
 	if (!closing)
 		event |= COPOLL_OUT;
 	if (new_len == 0)
@@ -103,6 +104,14 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	cocarrier->info->event = event;
 	/* Restore status value (might be COPORT_CLOSING or COPORT_OPEN) */
 	atomic_store_explicit(&cocarrier->info->status, status, memory_order_release);
+
+	cocall_args->message = __builtin_cheri_perms_and(msg->buf, COCARRIER_MSG_PERMS);
+	cocall_args->length = __builtin_cheri_length_get(msg->buf);
+	if (msg->attachments != NULL)
+		cocall_args->oob_data.attachments = __builtin_cheri_perms_and(msg->attachments, COCARRIER_MSG_PERMS);
+	else
+		cocall_args->oob_data.attachments = NULL;
+	cocall_args->oob_data.len = msg->nattachments;
 
 	copoll_notify(cocarrier, COPOLL_OUT);
 	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));

@@ -28,13 +28,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _COSERVICE_PROV_H
+#define _COSERVICE_PROV_H
 
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/coservice.h>
+#include <comsg/namespace_object.h>
 
+#ifdef COPROC_UKERN
 
-int valid_nsobj_name(const char *name)
-{
-	return (valid_ns_name(name));
-}
+typedef struct coservice_prov {
+	coservice_t *service;
+	nsobject_t *nsobj;
+} coservice_provision_t;
 
+#endif 
+
+#endif //!defined(_COSERVICE_PROV_H)

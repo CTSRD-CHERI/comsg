@@ -29,9 +29,9 @@
  * SUCH DAMAGE.
  */
 #include <comsg/coport_ipc.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
-#include <coproc/coport.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
+#include <comsg/coport.h>
 #include <comsg/ukern_calls.h>
 
 #include <err.h>
@@ -70,7 +70,7 @@ static void
 setup_coport_ipc(void)
 {
 	/* create/lookup ipc namespace */
-	ipc_ns = cocreate(ns_name, APPLICATION, global_ns);
+	ipc_ns = cocreate(ns_name, APPLICATION, root_ns);
 	if (ipc_ns == NULL)
 		err(errno, "setup_coport_ipc: could not create namespace %s", ns_name);
 	/* create coport + add a named handle to it in our ipc namespace */
@@ -121,7 +121,7 @@ int main(int argc, char *const argv[])
 		}
 	}
 	init_microkernel_access();
-	global_ns = coproc_init(NULL, NULL, NULL, NULL);
+	root_ns = coproc_init(NULL, NULL, NULL, NULL);
 
 	setup_coport_ipc();
 	do_send();

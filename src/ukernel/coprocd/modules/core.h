@@ -33,20 +33,20 @@
 
 #include "../daemon.h"
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
-void ipcd_setup_complete(cocall_args_t *, void *);
+void ipcd_setup_complete(comsg_args_t *, void *);
 void get_ipcd_capv(struct coexecve_capvec *);
 
-void nsd_setup(cocall_args_t *, void *);
-void nsd_setup_complete(cocall_args_t *, void *);
+void nsd_setup(comsg_args_t *, void *);
+void nsd_setup_complete(comsg_args_t *, void *);
 
-void coserviced_setup(cocall_args_t *, void *);
+void coserviced_setup(comsg_args_t *, void *);
 void get_coserviced_capv(struct coexecve_capvec *);
 
-void coproc_user_init(cocall_args_t *, void *);
+void coproc_user_init(comsg_args_t *, void *);
 
-void coeventd_setup_complete(cocall_args_t *, void *);
+void coeventd_setup_complete(comsg_args_t *, void *);
 void get_coeventd_capv(struct coexecve_capvec *);
 
 void core_init_start(struct ukernel_module *);

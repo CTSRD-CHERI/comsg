@@ -31,9 +31,9 @@
 #ifndef _NSOBJ_H
 #define _NSOBJ_H
 
-#include <coproc/coport.h>
-#include <coproc/coservice.h>
-#include <coproc/namespace.h>
+#include <comsg/coport.h>
+#include <comsg/coservice.h>
+#include <comsg/namespace.h>
 
 #include <sys/cdefs.h>
 
@@ -73,24 +73,32 @@
 #define NSOBJ_PERMS_D_MASK ( NSOBJ_PERMS_MASK | NSOBJ_PERM_D ) 
 #define NSOBJ_PERMS_OWN_MASK ( NSOBJ_PERMS_MASK | NSOBJ_PERM_OWN ) 
 
-#define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_andperm(c, ~NSOBJ_PERM_W) )
+#define CLEAR_NSOBJ_STORE_PERM(c) ( cheri_clearperm(c, NSOBJ_PERM_W) )
 
 typedef enum {INVALID_NSOBJ=-1, RESERVATION=0, COMMAP=1, COPORT=2, COSERVICE=4} nsobject_type_t;
+static const nsobject_type_t last_nsobj_type = COSERVICE;
+
+#define NSOBJECT_PAD ( ((CHERICAP_SIZE * 8) - ((CHERICAP_SIZE) + sizeof(nsobject_type_t) + NS_NAME_LEN))  )
 
 typedef struct _nsobject
 {
-	char 			name[NS_NAME_LEN];
-	nsobject_type_t	type;
 	union
 	{
 		_Atomic(void *)			obj;
 		_Atomic(coservice_t	*)	coservice;
 		_Atomic(coport_t	*)	coport;
 	};
+	char 			name[NS_NAME_LEN];
+	nsobject_type_t	type;
+	char pad[NSOBJECT_PAD];
 } nsobject_t;
 
 #define VALID_NSOBJ_TYPE(type) ( type == RESERVATION || type == COMMAP || type == COPORT || type == COSERVICE )
 
+__BEGIN_DECLS
+
 int valid_nsobj_name(const char *name);
+
+__END_DECLS
 
 #endif

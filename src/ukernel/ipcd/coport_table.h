@@ -32,7 +32,7 @@
 #ifndef _COPORT_TABLE_H
 #define _COPORT_TABLE_H
 
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 
 #define N_COPORT_TABLES 3
 

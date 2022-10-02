@@ -39,7 +39,6 @@
 static thread_local bool did_cocall_setup = false;
 static thread_local bool did_coaccept_setup = false;
 
-
 static void
 cocall_init(int what)
 {

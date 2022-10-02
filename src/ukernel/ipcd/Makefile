@@ -12,7 +12,7 @@ SRCS :=	coclose.c \
 	ipcd_cap.c \
 	ipcd_startup.c 
 
-DEP_LIBS := pthread comsg ccmalloc coproc cocall
+DEP_LIBS := pthread comsg ccmalloc cocall
 
 include $(MK_DIR)/comsg.prog.mk
 

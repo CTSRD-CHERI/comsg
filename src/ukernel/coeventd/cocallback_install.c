@@ -32,12 +32,12 @@
 #include "coevent_utils.h"
 
 
-#include <coproc/coevent.h>
-#include <cocall/cocall_args.h>
+#include <comsg/coevent.h>
+#include <comsg/comsg_args.h>
 #include <sys/errno.h>
 
 int
-validate_cocallback_install(cocall_args_t *cocall_args)
+validate_cocallback_install(comsg_args_t *cocall_args)
 {
 	if (!validate_coevent(cocall_args->coevent))
 		return (0);
@@ -58,7 +58,7 @@ get_coevent_from_handle(coevent_t *coevent)
  * coevent - event that cocallback should be assigned to
  */
 void 
-install_cocallback(cocall_args_t *cocall_args, void *token)
+install_cocallback(comsg_args_t *cocall_args, void *token)
 {
 	cocallback_t *cocallback;
 	coevent_t *coevent;

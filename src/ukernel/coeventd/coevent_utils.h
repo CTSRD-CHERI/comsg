@@ -32,7 +32,7 @@
 #define _COEVENT_UTILS_H
 
 #include <stdbool.h>
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 
 void lock_coevent(coevent_t *);
 void unlock_coevent(coevent_t *);

@@ -33,19 +33,26 @@
 
 #define COPROC_UKERN
 
-#include <cocall/worker_map.h>
-#include <coproc/namespace.h>
+#include <comsg/coservice_provision.h>
+#include <comsg/namespace.h>
 
 /* Must match the capv coprocd provides exactly */
 struct coeventd_capvec {
 	void *coproc_init_done;
-	namespace_t *global_ns;
+	namespace_t *root_ns;
 	void *codiscover;
 	void *coinsert;
 	void *coselect;
 };
 
-extern coservice_provision_t ccb_install_serv, ccb_register_serv, coevent_listen_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name,  COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+extern coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 
 #endif //!defined(_COEVENTD_H)

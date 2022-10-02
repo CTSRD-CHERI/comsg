@@ -35,9 +35,27 @@
 #define COPROC_UKERN 1
 #endif
 
-#include <cocall/worker_map.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coservice_provision.h>
+#include <sys/types.h>
 
-extern coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_serv, cosend_serv, corecv_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name,  COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+extern coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
+
+#pragma push_macro("DECLARE_SLOACCEPT_ENDPOINT")
+#pragma push_macro("SLOACCEPT_ENDPOINT")
+#define DECLARE_SLOACCEPT_ENDPOINT(name, validate_f, operation_f) SLOACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define SLOACCEPT_ENDPOINT(name, op, validate, func) \
+extern coservice_provision_t name##_serv;
+#include "sloaccept_endpoints.inc"
+#pragma pop_macro("SLOACCEPT_ENDPOINT")
+#pragma pop_macro("DECLARE_SLOACCEPT_ENDPOINT")
 
 //TODO-PBB: Revisit
 #define IPCD_NWORKERS 12
@@ -45,10 +63,17 @@ extern coservice_provision_t coopen_serv, coclose_serv, copoll_serv, slopoll_ser
 /* Must match the capv coprocd provides exactly */
 struct ipcd_capvec {
 	void *coproc_init_done;
-	namespace_t *global_ns;
+	namespace_t *root_ns;
 	void *codiscover;
 	void *coinsert;
 	void *coselect;
+};
+
+struct cocarrier_message {
+    void *buf;
+    comsg_attachment_t *attachments;
+    size_t nattachments;
+    bool can_free;
 };
 
 #endif //!defined(_IPCD_H)

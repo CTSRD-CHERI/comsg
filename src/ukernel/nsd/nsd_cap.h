@@ -31,18 +31,16 @@
 #ifndef _NSD_CAP_H
 #define _NSD_CAP_H
 
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
 #include <cheri/cherireg.h>
 
 #define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
 	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
 
-#if 0 //not sure what this was about
-typedef struct _nsobject nsobject_t;
-typedef struct _namespace namespace_t;
-#endif
+namespace_t *make_ns_handle(namespace_t *);
+nsobject_t *make_nsobj_handle(nsobject_t *);
 
 namespace_t *unseal_ns(namespace_t *ns_cap);
 namespace_t *seal_ns(namespace_t *ns_cap);
@@ -50,9 +48,9 @@ namespace_t *seal_ns(namespace_t *ns_cap);
 nsobject_t *seal_nsobj(nsobject_t *nsobj_cap);
 nsobject_t *unseal_nsobj(nsobject_t *nsobj_cap);
 
-int valid_namespace_cap(namespace_t *ns_cap);
-int valid_nsobject_cap(nsobject_t *obj_cap);
-int valid_reservation_cap(nsobject_t *obj_cap);
+bool valid_namespace_cap(namespace_t *ns_cap);
+bool valid_nsobject_cap(nsobject_t *obj_cap);
+bool valid_reservation_cap(nsobject_t *obj_cap);
 
 nstype_t get_ns_type(namespace_t *ns);
 

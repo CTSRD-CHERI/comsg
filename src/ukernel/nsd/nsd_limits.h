@@ -36,10 +36,10 @@
 /* Per-namespace caps for number of nsobjects */
 /*
  * XXX: One option is to have the size defined by combining the parent and the type.
- * An explicit namespace in the global namespace could therefore be larger than one in a thread namespace.
+ * An explicit namespace in the root namespace could therefore be larger than one in a thread namespace.
  * We should also allow creators to tell us if they definitely won't use more than N objects.
  */ 
-static const size_t global_max_objects;
+static const size_t root_max_objects;
 static const size_t thread_max_objects;
 static const size_t explicit_max_objects;
 static const size_t library_max_objects;
@@ -49,12 +49,12 @@ static const size_t process_max_objlen;
 static const size_t thread_max_objlen;
 static const size_t explicit_max_objlen;
 static const size_t library_max_objlen;
-static const size_t global_max_objlen;
+static const size_t root_max_objlen;
 
 /* Set by namespace_table.c:setup_table */
 /* Determines how many child namespaces may be assigned per type */
 /*
-static size_t global_max_namespaces;
+static size_t root_max_namespaces;
 static size_t thread_max_namespaces;
 static size_t explicit_max_namespaces;
 static size_t library_max_namespaces;
@@ -64,6 +64,6 @@ static size_t process_max_nslen;
 static size_t thread_max_nslen;
 static size_t explicit_max_nslen;
 static size_t library_max_nslen;
-static size_t global_max_nslen = (global_max_namespaces * sizeof(namespace_t));
+static size_t root_max_nslen = (root_max_namespaces * sizeof(namespace_t));
 */
 #endif

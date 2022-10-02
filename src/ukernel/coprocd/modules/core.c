@@ -32,8 +32,8 @@
 
 #include "../daemon.h"
 
-#include <cocall/cocall_args.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/utils.h>
 
 #include <assert.h>
 #include <err.h>
@@ -71,7 +71,7 @@ module_setup_info core_init = {
 static _Atomic(void *) codiscover_scb = NULL;
 
 /* Provided by namespace daemon */
-static _Atomic(namespace_t *) global_namespace = NULL;
+static _Atomic(namespace_t *) root_namespace = NULL;
 static void *coinsert_scb = NULL;
 static void *coselect_scb = NULL;
 
@@ -104,21 +104,30 @@ core_fini(void)
 	if (atomic_load_explicit(&coproc_inited, memory_order_acquire) == false)
 		return;
 	codiscover_scb = NULL;
-	global_namespace = NULL;
+	root_namespace = NULL;
 	atomic_store_explicit(&ukern_inited, false, memory_order_release);
 	atomic_store_explicit(&coproc_inited, false, memory_order_release);
 }
 
 void
-nsd_setup(cocall_args_t *cocall_args, void *token)
+nsd_setup(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
+	
+	if (cocall_args->coinsert == NULL) {
+		void *scb = atomic_load(&codiscover_scb);
+		if (scb != NULL) {
+			cocall_args->codiscover = scb;
+			COCALL_RETURN(cocall_args, 0);
+		} else 
+			COCALL_ERR(cocall_args, EAGAIN);	
+	}
 	/* clear old codiscover; whether valid or not it refers to the old universe */
 	codiscover_scb = NULL;
-	/* I give you: a global namespace capability, a scb capability for create nsobj (coinsert) and lookup nsobj (coselect) */
+	/* I give you: a root namespace capability, a scb capability for create nsobj (coinsert) and lookup nsobj (coselect) */
 	coinsert_scb = cocall_args->coinsert;
 	coselect_scb = cocall_args->coselect;
-	atomic_store_explicit(&global_namespace, cocall_args->ns_cap, memory_order_release);
+	atomic_store_explicit(&root_namespace, cocall_args->ns_cap, memory_order_release);
 
 	nsd->status = CONTINUING;
 	
@@ -126,10 +135,9 @@ nsd_setup(cocall_args_t *cocall_args, void *token)
 }
 
 void
-coserviced_setup(cocall_args_t *cocall_args, void *token)
+coserviced_setup(comsg_args_t *cocall_args, void *token)
 {
-	UNUSED(token);
-	while((cocall_args->ns_cap = atomic_load_explicit(&global_namespace, memory_order_acquire)) == NULL) {
+	while((cocall_args->ns_cap = atomic_load_explicit(&root_namespace, memory_order_acquire)) == NULL) {
 		/* TODO-PBB: should consider returning and having two calls here instead */
 		// this implementation may not do what we want (priority inversion?)
 		sched_yield();
@@ -138,12 +146,13 @@ coserviced_setup(cocall_args_t *cocall_args, void *token)
 	 * I give you: scb capability for codiscover 
 	 */
 	atomic_store_explicit(&codiscover_scb, cocall_args->codiscover, memory_order_release);
-
+	
+	coeventd_setup_complete(cocall_args, token);
 	COCALL_RETURN(cocall_args, 0);
 }
 
 void
-nsd_setup_complete(cocall_args_t *cocall_args, void *token)
+nsd_setup_complete(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	if (atomic_load_explicit(&coproc_inited, memory_order_acquire) == true)
@@ -158,7 +167,7 @@ nsd_setup_complete(cocall_args_t *cocall_args, void *token)
 }
 
 void
-coeventd_setup_complete(cocall_args_t *cocall_args, void *token)
+coeventd_setup_complete(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	if (coeventd->status == RUNNING)
@@ -170,7 +179,7 @@ coeventd_setup_complete(cocall_args_t *cocall_args, void *token)
 }
 
 void
-ipcd_setup_complete(cocall_args_t *cocall_args, void *token)
+ipcd_setup_complete(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	if (atomic_load_explicit(&ukern_inited, memory_order_acquire) == true)
@@ -184,7 +193,7 @@ ipcd_setup_complete(cocall_args_t *cocall_args, void *token)
 }
 
 void
-coproc_user_init(cocall_args_t *cocall_args, void *token)
+coproc_user_init(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	if (!atomic_load_explicit(&ukern_inited, memory_order_acquire)) {
@@ -192,7 +201,7 @@ coproc_user_init(cocall_args_t *cocall_args, void *token)
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
 
-	cocall_args->ns_cap = global_namespace;
+	cocall_args->ns_cap = root_namespace;
 	cocall_args->codiscover = codiscover_scb;
 	cocall_args->coinsert = coinsert_scb;
 	cocall_args->coselect = coselect_scb;
@@ -203,11 +212,11 @@ coproc_user_init(cocall_args_t *cocall_args, void *token)
 void
 get_coserviced_capv(struct coexecve_capvec *capvec)
 {
-	assert(global_namespace != NULL);
+	assert(root_namespace != NULL);
 	assert(coinsert_scb != NULL);
 	assert(coselect_scb != NULL);
 
-	capvec_append(capvec, global_namespace);
+	capvec_append(capvec, root_namespace);
 	capvec_append(capvec, coinsert_scb);
 	capvec_append(capvec, coselect_scb);
 }
@@ -216,12 +225,12 @@ void
 get_coeventd_capv(struct coexecve_capvec *capvec)
 {
 	assert(coproc_inited);
-	assert(global_namespace != NULL);
+	assert(root_namespace != NULL);
 	assert(codiscover_scb != NULL);
 	assert(coinsert_scb != NULL);
 	assert(coselect_scb != NULL);
 
-	capvec_append(capvec, global_namespace);
+	capvec_append(capvec, root_namespace);
 	capvec_append(capvec, codiscover_scb);
 	capvec_append(capvec, coinsert_scb);
 	capvec_append(capvec, coselect_scb);
@@ -231,12 +240,12 @@ void
 get_ipcd_capv(struct coexecve_capvec *capvec)
 {
 	assert(coproc_inited);
-	assert(global_namespace != NULL);
+	assert(root_namespace != NULL);
 	assert(codiscover_scb != NULL);
 	assert(coinsert_scb != NULL);
 	assert(coselect_scb != NULL);
 
-	capvec_append(capvec, global_namespace);
+	capvec_append(capvec, root_namespace);
 	capvec_append(capvec, codiscover_scb);
 	capvec_append(capvec, coinsert_scb);
 	capvec_append(capvec, coselect_scb);

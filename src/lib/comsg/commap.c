@@ -31,7 +31,7 @@
 #define COMMAP_C
 
 #include <comsg/commap.h>
-#include <coproc.h>
+#include <comsg.h>
 
 #include <sys/errno.h>
 #include <err.h>

@@ -31,7 +31,7 @@
 #ifndef _COPOLL_H
 #define _COPOLL_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
 int validate_copoll_args(coclose_args_t *cocall_args);
 

@@ -28,68 +28,47 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef UKERN_UTILS_H
-#define UKERN_UTILS_H
+#ifndef _UKERN_WORKER_H
+#define _UKERN_WORKER_H
 
-#define KEYSPACE (62)
+#include <cocall/cocall_args.h>
 
-#include <cheri/cheric.h>
+#include <cheri/cherireg.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 
-#include <stddef.h>
-#include <sys/mman.h>
-
-#ifndef UNUSED
-#define UNUSED(x) (void)(x)
-#endif
-
-struct object_type
+typedef struct _worker_args
 {
-	otype_t sc;
-	otype_t usc;
-	long otype;
-};
+	/* the worker thread */
+	pthread_t worker;
+	/* 
+	 * pointer to a function that: 
+	 *  + takes a pointer to cocall_args_t, 
+	 *  + modifies it in place,
+	 *  + sets status and error values before returning.
+	 */
+	void (*worker_function)(cocall_args_t *, void *);
+	/* 
+	 * pointer to a function that:
+	 * 	+ takes a pointer to cocall_args_t,
+	 * 	+ validates the arguments passed from a cocall
+	 * 	+ returns 0 if they fail, else non-zero
+	 */
+	int (*validation_function)(cocall_args_t *);
+	/* name to coregister under */
+	char *name;
+	/* result of coregister */
+	void *scb_cap;
+	/* should use slowpath */
+	bool slow;
+} worker_args_t;
 
-int generate_id(void);
-int rand_string(char * buf, size_t len);
-int valid_scb(void * scb);
-void *make_otypes(void *rootcap, int n_otypes, struct object_type **results);
-int get_maxprocs(void);
+typedef struct _worker_args handler_args_t;
 
-//Handy for working with mmap(2) prot values vs CHERI permissions
-inline
-int perms_to_prot(int perms)
-{
-	int prot = 0;
-
-	if (perms & (CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP))
-		prot |=  PROT_READ;
-	if (perms & (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_STORE_LOCAL_CAP))
-		prot |= PROT_WRITE;
-	if (perms & CHERI_PERM_EXECUTE )
-		prot |= PROT_EXEC;
-
-	return (prot);
-}
-
-inline
-int prot_to_perms(int prot)
-{
-	int perms = 0;
-
-	if (prot & PROT_READ)
-		perms |= (CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP);
-	if (prot & PROT_WRITE)
-		perms |= (CHERI_PERM_STORE | CHERI_PERM_STORE_CAP |
-		CHERI_PERM_STORE_LOCAL_CAP);
-	if (prot & PROT_EXEC)
-		perms |= (CHERI_PERM_EXECUTE);
-
-	return (perms);
-}
-
-#define GET_PROT(c) perms_to_prot(cheri_getperm(c))
-#define SET_PROT(c, p) cheri_andperm(c, prot_to_perms(p))
-#define HAS_PROT(a, b) ( a <= ( a & b ) )
-#define HAS_PROT_PERMS(c, p) ( p <= ( GET_PROT(c) & p ) )
+bool start_coaccept_worker(worker_args_t *thread_args);
+void *coaccept_worker(void *worker_argp);
+bool start_sloaccept_worker(worker_args_t *thread_args);
+void *sloaccept_worker(void *worker_argp);
 
 #endif

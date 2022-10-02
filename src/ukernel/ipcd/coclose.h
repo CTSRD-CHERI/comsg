@@ -31,7 +31,7 @@
 #ifndef _COCLOSE_H
 #define _COCLOSE_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
 int validate_coclose_args(coclose_args_t *cocall_args);
 void coport_close(coclose_args_t *cocall_args, void *token);

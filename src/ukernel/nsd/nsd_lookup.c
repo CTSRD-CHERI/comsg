@@ -32,14 +32,14 @@
 #include "nsd_cap.h"
 #include "namespace_table.h"
 
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
 #include <cheri/cheric.h>
 #include <string.h>
 #include <sys/queue.h>
 
-coservice_t *lookup_coservice(char *name, namespace_t *ns_cap)
+coservice_t *lookup_coservice(const char *name, namespace_t *ns_cap)
 {
 	nsobject_t *ns_obj = lookup_nsobject(name, COSERVICE, ns_cap);
 	if(ns_obj != NULL)
@@ -48,7 +48,7 @@ coservice_t *lookup_coservice(char *name, namespace_t *ns_cap)
 		return (NULL);
 }
 
-coport_t *lookup_coport(char *name, namespace_t *ns_cap)
+coport_t *lookup_coport(const char *name, namespace_t *ns_cap)
 {
 	nsobject_t *ns_obj = lookup_nsobject(name, COPORT, ns_cap);
 	if(ns_obj != NULL)
@@ -57,7 +57,7 @@ coport_t *lookup_coport(char *name, namespace_t *ns_cap)
 		return (NULL);
 }
 
-void *lookup_commap(char *name, namespace_t *ns_cap)
+void *lookup_commap(const char *name, namespace_t *ns_cap)
 {
 	nsobject_t *ns_obj = lookup_nsobject(name, COMMAP, ns_cap);
 	if(ns_obj != NULL)

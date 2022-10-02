@@ -28,22 +28,39 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "codiscover.h"
+#include "coservice_cap.h"
+#include "coservice_table.h"
 
-#include <coproc/namespace.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coservice.h>
+#include <comsg/utils.h>
 
-#include <ctype.h>
-#include <string.h>
+#include <sys/errno.h>
 
-int valid_ns_name(const char *name)
+int validate_codiscover2_args(codiscover_args_t *cocall_args)
 {
-	int i;
-	if(name[0]=='\0')
+	coservice_t *service_handle = cocall_args->coservice;
+	if(service_handle == NULL)
 		return (0);
-
-	for(i = 0; i < strnlen(name, NS_NAME_LEN); i++) {
-		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_')
-			return (0);
-	}
-	return (1);
+	else if (cheri_getsealed(service_handle))
+		return (0);
+	else if (cheri_getlen(service_handle) < sizeof(coservice_t))
+		return (0);
+	else if (!in_table(service_handle))
+		return (0);
+	else
+		return (1);
 }
 
+void discover_coservice2(codiscover_args_t *cocall_args, void *token)
+{
+	UNUSED(token);
+
+	coservice_t *service;
+
+	service = cocall_args->coservice;
+	cocall_args->scb_cap = get_coservice_scb(get_service_endpoint(service));
+	
+	COCALL_RETURN(cocall_args, 0);
+}

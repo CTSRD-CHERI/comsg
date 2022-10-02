@@ -28,11 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <cocall/worker.h>
+#include "dynamic_endpoint.h"
 #include <cocall/cocall_args.h>
 #include <cocall/tls_cocall.h>
-#include <coproc/namespace.h>
-#include <coproc/utils.h>
 
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
@@ -89,7 +87,6 @@ coaccept_init(
         pthread_exit(NULL);
     }
 
-    
     pthread_cond_signal(&registration_cond);
     pthread_mutex_unlock(&registration_mutex);
 }

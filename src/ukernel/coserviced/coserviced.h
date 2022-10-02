@@ -35,14 +35,21 @@
 #define COPROC_UKERN 1
 #endif
 
-#include <cocall/worker_map.h>
+#include <comsg/coservice_provision.h>
 
-extern coservice_provision_t codiscover_serv, coprovide_serv;
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name, COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+extern coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 /* Must match the capv coprocd provides exactly */
 struct coserviced_capvec {
 	void *coproc_init;
-	namespace_t *global_ns;
+	namespace_t *root_ns;
 	void *coinsert;
 	void *coselect;
 };

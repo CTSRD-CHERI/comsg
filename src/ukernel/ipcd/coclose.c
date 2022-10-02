@@ -32,9 +32,9 @@
 #include "ipcd_cap.h"
 #include "coport_table.h"
 
-#include <cocall/cocall_args.h>
-#include <coproc/coport.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coport.h>
+#include <comsg/utils.h>
 
 #include <sys/errno.h>
 

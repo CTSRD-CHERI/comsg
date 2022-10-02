@@ -35,13 +35,17 @@
 #define COPROC_UKERN 1
 #endif
 
-#include <cocall/cocall_args.h>
-#include <cocall/worker_map.h>
-#include <coproc/coservice.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coservice_provision.h>
 
-
-extern coservice_provision_t coinsert_serv, coselect_serv, coupdate_serv, codelete_serv, cocreate_serv, codrop_serv;
-
+#pragma push_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma push_macro("COACCEPT_ENDPOINT")
+#define DECLARE_COACCEPT_ENDPOINT(name, validate_f, operation_f) COACCEPT_ENDPOINT(name,  COCALL_##name, validate_f, operation_f)
+#define COACCEPT_ENDPOINT(name, op, validate, func) \
+extern coservice_provision_t name##_serv;
+#include "coaccept_endpoints.inc"
+#pragma pop_macro("DECLARE_COACCEPT_ENDPOINT")
+#pragma pop_macro("COACCEPT_ENDPOINT")
 
 void namespace_object_update(coupdate_args_t *cocall_args, void *token);
 void namespace_object_delete(codelete_args_t *cocall_args, void *token);

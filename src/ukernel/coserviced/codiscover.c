@@ -32,9 +32,9 @@
 #include "coservice_cap.h"
 #include "coservice_table.h"
 
-#include <cocall/cocall_args.h>
-#include <coproc/coservice.h>
-#include <coproc/utils.h>
+#include <comsg/comsg_args.h>
+#include <comsg/coservice.h>
+#include <comsg/utils.h>
 
 #include <sys/errno.h>
 
@@ -47,8 +47,6 @@ int validate_codiscover_args(codiscover_args_t *cocall_args)
 	else if (cheri_getsealed(obj))
 		return (0);
 	else if (obj->type != COSERVICE)
-		return (0);
-	else if ((cheri_getperm(service_handle) & (COSERVICE_CODISCOVER_PERMS)) == 0)
 		return (0);
 	else if (cheri_getlen(obj) < sizeof(nsobject_t))
 		return (0);
@@ -69,7 +67,7 @@ void discover_coservice(codiscover_args_t *cocall_args, void *token)
 	service = cocall_args->nsobj->coservice;
 	cocall_args->coservice = service;
 
-	cocall_args->scb_cap = get_coservice_scb(service);
+	cocall_args->scb_cap = get_coservice_scb(get_service_endpoint(service));
 	
 	COCALL_RETURN(cocall_args, 0);
 }

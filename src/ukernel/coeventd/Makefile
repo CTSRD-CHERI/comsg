@@ -10,7 +10,7 @@ SRCS :=	coeventd.c \
 	procdeath.c \
 	procdeath_tbl.c
 
-DEP_LIBS := pthread comsg ccmalloc coproc cocall
+DEP_LIBS := pthread comsg ccmalloc cocall
 
 include $(MK_DIR)/comsg.prog.mk
 

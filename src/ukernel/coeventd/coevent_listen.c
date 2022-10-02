@@ -33,14 +33,14 @@
 #include "procdeath_tbl.h"
 
 #include <assert.h>
-#include <coproc/coevent.h>
-#include <cocall/cocall_args.h>
+#include <comsg/coevent.h>
+#include <comsg/comsg_args.h>
 #include <sys/errno.h>
 #include <stdio.h>
 #include <unistd.h>
 
 int
-validate_colisten(cocall_args_t *cocall_args)
+validate_colisten(comsg_args_t *cocall_args)
 {
 	return (1);
 }
@@ -62,7 +62,7 @@ make_coevent_handle(coevent_t *coevent)
  		* it limits process death monitoring to processes in the caller's address space
  */
 void 
-add_event_listener(cocall_args_t *cocall_args, void *token)
+add_event_listener(comsg_args_t *cocall_args, void *token)
 {
 	coevent_t *coevent;
 	pid_t target_pid, requested_pid;

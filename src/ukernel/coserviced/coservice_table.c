@@ -31,7 +31,7 @@
 #include "coservice_table.h"
 
 
-#include <coproc/coservice.h>
+#include <comsg/coservice.h>
 
 #include <cheri/cheric.h>
 #include <err.h>
@@ -39,6 +39,7 @@
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/param.h>
@@ -48,7 +49,13 @@ static const int coservice_table_prot = ( PROT_READ | PROT_WRITE );
 static const int coservice_table_flags = ( MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_CHERI );
 static const int coservice_table_len = 1024 * 1024;
 
-static size_t max_services;
+static size_t max_services = 256;
+
+static struct {
+	struct _coservice_endpoint *endpoints;
+	_Atomic size_t active_endpoints;
+	_Atomic size_t next_endpoint;
+} endpoint_table;
 
 static struct {
 	coservice_t *services;
@@ -59,24 +66,49 @@ static struct {
 __attribute__ ((constructor)) static 
 void setup_table(void)
 {
-	coservice_table.services = mmap(NULL, coservice_table_len, coservice_table_prot, coservice_table_flags, -1, 0);
-	if (coservice_table.services == MAP_FAILED)
-		err(errno, "setup_table: mmap failed");
-	max_services = cheri_getlen(coservice_table.services) / sizeof(coservice_t);
-	coservice_table.next_service = max_services - 1;
+	coservice_table.services = calloc(max_services, sizeof(coservice_t));
+	if (coservice_table.services == NULL)
+		err(errno, "setup_table: allocating coservice table failed");
+	coservice_table.next_service = 0UL;
 	coservice_table.active_services = 0UL;
+
+	endpoint_table.endpoints = calloc(max_services, sizeof(struct _coservice_endpoint));
+	if (endpoint_table.endpoints == NULL)
+		err(errno, "setup_table: allocating coservice table failed");
+	endpoint_table.next_endpoint = 0UL;
+	endpoint_table.active_endpoints = 0UL;
 }
 
 coservice_t *allocate_coservice(void)
 {
 	coservice_t *ptr;
-	size_t index = atomic_fetch_sub(&coservice_table.next_service, 1);
+	size_t index = atomic_fetch_add(&coservice_table.next_service, 1);
 	
+	if (index >= max_services) {
+		atomic_fetch_sub(&coservice_table.next_service, 1);
+		return (NULL);
+	}
 	ptr = &coservice_table.services[index];
 	ptr = cheri_setboundsexact(ptr, sizeof(coservice_t));
 	memset(ptr, '\0', sizeof(coservice_t));
 
 	atomic_fetch_add(&coservice_table.active_services, 1);
+
+	return (ptr);
+}
+
+struct _coservice_endpoint *allocate_endpoint(void)
+{
+	struct _coservice_endpoint *ptr;
+	size_t index = atomic_fetch_add(&endpoint_table.next_endpoint, 1);
+	
+	if (index >= max_services)
+		return (NULL);
+	ptr = &endpoint_table.endpoints[index];
+	ptr = cheri_setboundsexact(ptr, sizeof(struct _coservice_endpoint));
+	memset(ptr, '\0', sizeof(struct _coservice_endpoint));
+
+	atomic_fetch_add(&endpoint_table.active_endpoints, 1);
 
 	return (ptr);
 }

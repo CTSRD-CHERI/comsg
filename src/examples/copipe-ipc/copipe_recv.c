@@ -30,9 +30,9 @@
  */
 #include <comsg/coport_ipc.h>
 #include <comsg/ukern_calls.h>
-#include <coproc/coport.h>
-#include <coproc/namespace.h>
-#include <coproc/namespace_object.h>
+#include <comsg/coport.h>
+#include <comsg/namespace.h>
+#include <comsg/namespace_object.h>
 
 #include <err.h>
 #include <stdio.h>
@@ -104,7 +104,7 @@ static void
 setup_coport_ipc(void)
 {
 	/* create/lookup ipc namespace */
-	ipc_ns = cocreate(ns_name, APPLICATION, global_ns);
+	ipc_ns = cocreate(ns_name, APPLICATION, root_ns);
 	if (ipc_ns == NULL)
 		err(errno, "setup_coport_ipc: could not create namespace %s", ns_name);
 	/* create coport + add a named handle to it in our ipc namespace */
@@ -146,7 +146,7 @@ teardown_coport_ipc(void)
 	if (error != 0)
 		err(errno, "teardown_coport_ipc: could not delete coport nsobj");
 
-	/* error = codrop(ipc_ns, global_ns);
+	/* error = codrop(ipc_ns, root_ns);
 	if (error != 0)
 		err(errno, "teardown_coport_ipc: could not delete ipc namespace"); */
 }
@@ -175,10 +175,10 @@ int main(int argc, char *const argv[])
 	}
 	start_microkernel();
 	do {
-		global_ns = coproc_init(NULL, NULL, NULL, NULL);
+		root_ns = coproc_init(NULL, NULL, NULL, NULL);
 		if (errno == EAGAIN)
 			sched_yield();
-	} while (global_ns == NULL);
+	} while (root_ns == NULL);
 
 	setup_coport_ipc();
 

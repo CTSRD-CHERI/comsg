@@ -32,7 +32,7 @@
 #ifndef _COPORT_IPC_UTILS_H
 #define _COPORT_IPC_UTILS_H
 
-#include <coproc/coport.h>
+#include <comsg/coport.h>
 #include <stddef.h>
 #include <sys/types.h>
 

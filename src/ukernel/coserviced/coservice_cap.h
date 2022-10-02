@@ -31,8 +31,12 @@
 #ifndef _COSERVICE_CAP_H
 #define _COSERVICE_CAP_H
 
-#include <coproc/coservice.h>
+#include <comsg/coservice.h>
+#include <stdbool.h>
 
 coservice_t *create_coservice_handle(coservice_t *);
+struct _coservice_endpoint *get_service_endpoint(coservice_t *);
+struct _coservice_endpoint *unseal_endpoint(struct _coservice_endpoint *);
+bool is_valid_endpoint(struct _coservice_endpoint *);
 
 #endif

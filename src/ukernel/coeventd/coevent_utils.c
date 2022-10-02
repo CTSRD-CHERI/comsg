@@ -33,7 +33,7 @@
 
 #include <assert.h>
 #include <ccmalloc.h>
-#include <coproc/coevent.h>
+#include <comsg/coevent.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <string.h>

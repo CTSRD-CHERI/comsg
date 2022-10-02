@@ -34,8 +34,8 @@
 #include "nsd_lookup.h"
 
 #include <cheri/cherireg.h>
-#include <cocall/cocall_args.h>
-#include <coproc/namespace_object.h>
+#include <comsg/comsg_args.h>
+#include <comsg/namespace_object.h>
 
 #include <sys/errno.h>
 

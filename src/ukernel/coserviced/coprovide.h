@@ -31,7 +31,7 @@
 #ifndef _COPROVIDE_H
 #define _COPROVIDE_H
 
-#include <cocall/cocall_args.h>
+#include <comsg/comsg_args.h>
 
 int validate_coprovide_args(coprovide_args_t *args);
 void provide_coservice(coprovide_args_t *cocall_args, void *token);
