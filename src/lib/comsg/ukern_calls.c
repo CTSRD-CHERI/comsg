@@ -196,7 +196,7 @@ call_ukern_target(cocall_num_t func, comsg_args_t *args)
 		args->op = s->op;
 	else
 		args->op = func;
-
+	errno = 0;
 	if (!is_slocall(func))
 		return (targeted_cocall(ukern_call_set, (int)func, args, sizeof(comsg_args_t)));
 	else 
