@@ -131,15 +131,19 @@ void *get_cocall_target(pthread_key_t set_key, int target_func)
 int targeted_slocall(pthread_key_t set_key, int target, void *buf, size_t len)
 {
 	void *target_cap = get_cocall_target(set_key, target);
-	if (target_cap == NULL)
+	if (target_cap == NULL) {
+		errno = ENOTCONN;
 		return (-1);
+	}
 	return (slocall_tls(target_cap, buf, len));
 }
 
 int targeted_cocall(pthread_key_t set_key, int target, void *buf, size_t len)
 {
 	void *target_cap = get_cocall_target(set_key, target);
-	if (target_cap == NULL)
+	if (target_cap == NULL){
+		errno = ENOTCONN;
 		return (-1);
+	}
 	return (cocall_tls(target_cap, buf, len));
 }
