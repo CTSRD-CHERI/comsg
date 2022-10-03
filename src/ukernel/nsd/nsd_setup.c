@@ -94,6 +94,7 @@ startup_dance(void)
 		err(EX_SOFTWARE, "%s: coproc_init failed", __func__);
 	if (!cheri_gettag(root_ns))
 		err(EX_SOFTWARE, "%s: root namespace cap lacks tag!!", __func__);
+	sleep(1);
 	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, root_ns);
 	coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
 	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
