@@ -85,40 +85,19 @@ startup_dance(void)
 	root_ns = make_ns_handle(get_root_namespace());
 	if (!cheri_gettag(root_ns))
 		err(EX_SOFTWARE, "%s: root namespace cap lacks tag!!", __func__);
-
 	endpoint_scbs = get_fast_endpoints();
 	set_ukern_target(COCALL_COSELECT, endpoint_scbs[0]);
 	set_ukern_target(COCALL_COINSERT, endpoint_scbs[1]);
-	
-	/* codiscover no longer returned from coproc_init */
-	/* this wrecks load balancing by putting all main threads on the first worker */
 
 	//connect to process daemon and do the startup dance (we can dance if we want to)
-	if (coproc_init(root_ns, endpoint_scbs[0], endpoint_scbs[1], NULL) == NULL)
-		err(EX_SOFTWARE, "%s: cocall failed", __func__);
-
+	if (coproc_init(root_ns, endpoint_scbs[2], endpoint_scbs[3], NULL) == NULL)
+		err(EX_SOFTWARE, "%s: coproc_init failed", __func__);
 	if (!cheri_gettag(root_ns))
 		err(EX_SOFTWARE, "%s: root namespace cap lacks tag!!", __func__);
-
-	/* Once coprovide has been inserted into the root namespace, we can make progress */
-	while(lookup_coservice(U_COPROVIDE, root_ns) == NULL)
-		sched_yield(); /* would microsleep be better? or proper event delivery? */
-	
-	do {
-		if (coproc_init(NULL, NULL, NULL, NULL) != root_ns) {
-			if (errno == EAGAIN) {
-				sched_yield();
-				continue;
-			} else
-				err(EX_SOFTWARE, "%s: failed to get codiscover scb from coprocd", __func__);
-		}
-	} while (0);
 	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, root_ns);
 	coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
-	set_ukernel_service(COCALL_COPROVIDE, coprovide_service);
 	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
-	set_ukernel_service(COCALL_CODISCOVER, lookup_coservice(U_CODISCOVER, root_ns));
-	set_ukernel_service(COCALL_CODISCOVER2, lookup_coservice(U_CODISCOVER2, root_ns));
+	set_ukernel_service(COCALL_COPROVIDE, lookup_coservice(U_COPROVIDE, root_ns));
 }
 
 static void 

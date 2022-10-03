@@ -159,5 +159,4 @@ void ipcd_startup(void)
 #pragma pop_macro("DECLARE_SLOACCEPT_ENDPOINT")
 #pragma pop_macro("SLOACCEPT_ENDPOINT")
 	coproc_init_done();
-
 }

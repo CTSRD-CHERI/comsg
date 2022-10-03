@@ -63,17 +63,18 @@ init_service(coservice_provision_t *serv, char *name, int op)
 {
 	coservice_t *service = allocate_coservice();
 
+	service->op = op;
+	service->flags = NONE;
 	service->impl = get_fast_coservice_endpoint();
 	if (service->impl == NULL) {
 		service->impl = allocate_endpoint();
 		service->impl->worker_scbs = get_fast_endpoints();
 		service->impl->nworkers = get_fast_endpoint_count();
 		service->impl->next_worker = 1;
-		fast_endpoint = create_coservice_handle(service)->impl;
+		create_coservice_handle(service);
+		fast_endpoint = service->impl;
 	}
 	set_ukern_target(op, get_coservice_scb(unseal_endpoint(service->impl)));
-	service->op = op;
-	service->flags = NONE;
 	serv->service = create_coservice_handle(service);
 
 	serv->nsobj = coinsert(name, COSERVICE, serv->service, root_ns);

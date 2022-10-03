@@ -80,6 +80,9 @@ static _Atomic bool ukern_inited = false;
 
 struct ukernel_daemon *nsd, *coserviced, *ipcd, *coeventd;
 
+static pthread_mutex_t ukernel_init_lock;
+static pthread_cond_t nsd_wakeup, coserviced_wakeup;
+
 void
 core_init_start(struct ukernel_module *m)
 {
@@ -87,6 +90,12 @@ core_init_start(struct ukernel_module *m)
 	coserviced = &m->daemons[2];
 	coeventd = &m->daemons[3];
 	ipcd = &m->daemons[4];
+	
+    pthread_mutexattr_t mtxattr;
+    pthread_mutexattr_init(&mtxattr);
+    pthread_mutex_init(&ukernel_init_lock, &mtxattr);
+    pthread_cond_init(&nsd_wakeup, NULL);
+	pthread_cond_init(&coserviced_wakeup, NULL);
 }
 
 void
@@ -114,40 +123,40 @@ nsd_setup(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	
-	if (cocall_args->coinsert == NULL) {
-		void *scb = atomic_load(&codiscover_scb);
-		if (scb != NULL) {
-			cocall_args->codiscover = scb;
-			COCALL_RETURN(cocall_args, 0);
-		} else 
-			COCALL_ERR(cocall_args, EAGAIN);	
-	}
+	pthread_mutex_lock(&ukernel_init_lock);
 	/* clear old codiscover; whether valid or not it refers to the old universe */
+	nsd->status = CONTINUING;
 	codiscover_scb = NULL;
 	/* I give you: a root namespace capability, a scb capability for create nsobj (coinsert) and lookup nsobj (coselect) */
 	coinsert_scb = cocall_args->coinsert;
 	coselect_scb = cocall_args->coselect;
 	atomic_store_explicit(&root_namespace, cocall_args->ns_cap, memory_order_release);
 
-	nsd->status = CONTINUING;
-	
+	pthread_cond_signal(&coserviced_wakeup);
+	pthread_cond_wait(&nsd_wakeup, &ukernel_init_lock);
+	cocall_args->codiscover = atomic_load(&codiscover_scb);
+	pthread_mutex_unlock(&ukernel_init_lock);
 	COCALL_RETURN(cocall_args, 0);
 }
 
 void
 coserviced_setup(comsg_args_t *cocall_args, void *token)
 {
-	while((cocall_args->ns_cap = atomic_load_explicit(&root_namespace, memory_order_acquire)) == NULL) {
-		/* TODO-PBB: should consider returning and having two calls here instead */
-		// this implementation may not do what we want (priority inversion?)
-		sched_yield();
+	UNUSED(token);
+	
+	pthread_mutex_lock(&ukernel_init_lock);
+	if ((cocall_args->ns_cap = atomic_load_explicit(&root_namespace, memory_order_acquire)) == NULL) {
+		pthread_cond_wait(&coserviced_wakeup, &ukernel_init_lock);
 	}
 	/* 
 	 * I give you: scb capability for codiscover 
 	 */
+	cocall_args->coinsert = coinsert_scb;
+	cocall_args->coselect = coselect_scb;
 	atomic_store_explicit(&codiscover_scb, cocall_args->codiscover, memory_order_release);
 	
-	coeventd_setup_complete(cocall_args, token);
+	pthread_cond_signal(&nsd_wakeup);
+	pthread_mutex_unlock(&ukernel_init_lock);
 	COCALL_RETURN(cocall_args, 0);
 }
 
@@ -200,12 +209,10 @@ coproc_user_init(comsg_args_t *cocall_args, void *token)
 		/* nsd and coserviced have not yet completed their startup routines */
 		COCALL_ERR(cocall_args, EAGAIN);
 	}
-
 	cocall_args->ns_cap = root_namespace;
 	cocall_args->codiscover = codiscover_scb;
 	cocall_args->coinsert = coinsert_scb;
 	cocall_args->coselect = coselect_scb;
-	
 	COCALL_RETURN(cocall_args, 0);
 }
 
