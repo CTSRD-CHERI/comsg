@@ -15,7 +15,7 @@ SRCS := ukern_calls.c \
 VPATH := $(CURDIR)/$(ARCH)
 INC_FLAGS += -I$(CURDIR)/$(ARCH)
 
-DEP_LIBS := pthread statcounters
+DEP_LIBS := pthread
 DEP_ARS := cocall
 
 SHLIB_MAJOR=	2
