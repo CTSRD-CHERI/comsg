@@ -112,6 +112,7 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	else
 		cocall_args->oob_data.attachments = NULL;
 	cocall_args->oob_data.len = msg->nattachments;
+	atomic_store(&msg->recvd, true);
 
 	copoll_notify(cocarrier, COPOLL_OUT);
 	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));

@@ -683,6 +683,9 @@ do_benchmark_recv(void **buffer, size_t buffer_length, coport_t *port)
 			return (NULL); //message not available
 		err(EX_SOFTWARE, "error occurred in corecv for coport type %d", coport_type);
 	}
+	
+	if (coport_type == COCARRIER)
+		coport_msg_free(port, cocarrier_buf);
 
 	if (aggregate_mode)
 		return (void *)(-1);

@@ -73,7 +73,9 @@ struct cocarrier_message {
     void *buf;
     comsg_attachment_t *attachments;
     size_t nattachments;
-    bool can_free;
+    _Atomic bool freed;
+	_Atomic bool recvd;
+	char _pad[6];
 };
 
 #endif //!defined(_IPCD_H)

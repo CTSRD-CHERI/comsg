@@ -10,7 +10,8 @@ SRCS :=	coclose.c \
 	cosend.c \
 	ipcd.c \
 	ipcd_cap.c \
-	ipcd_startup.c 
+	ipcd_startup.c  \
+	comsg_free.c
 
 DEP_LIBS := pthread comsg ccmalloc cocall
 

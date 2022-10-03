@@ -7,6 +7,7 @@
 #include "copoll.h"
 #include "cosend.h"
 #include "corecv.h"
+#include "comsg_free.h"
 
 #define COCALL_ENDPOINT_IMPL
 #include <cocall/endpoint.h>

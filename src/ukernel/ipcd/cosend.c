@@ -136,7 +136,8 @@ void coport_send(coopen_args_t *cocall_args, void *token)
 	memcpy(msg->buf, cocall_args->message, msg_len);
 	msg->attachments = handle_attachments(cocall_args->oob_data.attachments, cocall_args->oob_data.len);
 	msg->nattachments = cocall_args->oob_data.len;
-	msg->can_free = false;
+	msg->freed = false;
+	msg->recvd = false;
 
 	cocarrier = unseal_coport(cocall_args->cocarrier);
 	

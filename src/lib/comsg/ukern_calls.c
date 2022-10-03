@@ -855,3 +855,24 @@ codiscover2(coservice_t *s)
 	return (cocall_args.scb_cap);
 	
 }
+
+int
+coport_msg_free(coport_t *port, void *ptr)
+{
+	cosend_args_t cocall_args;
+	int error;
+	
+	memset(&cocall_args, '\0', sizeof(cocall_args));
+	cocall_args.message = ptr;
+	cocall_args.cocarrier = port;
+	
+	error = ukern_call(COCALL_COPORT_MSG_FREE, &cocall_args);
+    if(error != 0)
+        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+
+    if (cocall_args.status == -1) {
+        errno = cocall_args.error;
+    }
+	
+	return (cocall_args.status);
+}
