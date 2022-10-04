@@ -64,6 +64,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/sysctl.h>
 
 typedef enum {OP_INVALID = 0, OP_COSEND = 1, OP_CORECV = 2} coport_op;
 
@@ -89,7 +90,7 @@ static char *child_path = "/usr/bin/comsg-benchmark";
 
 extern char **environ;
 
-static pid_t coprocd_pid;
+static pid_t coprocd_pid = -1;
 
 static pid_t sender_pid = -1;
 static pid_t recver_pid = -1;
@@ -105,12 +106,19 @@ static coport_t *cochannel = NULL;
 
 static _Thread_local char *buffer = NULL;
 static _Thread_local char *cocarrier_buf = NULL;
-static const ssize_t maxlen = 1024 * 1024; //128MiB because not sure how much ram we have, and must account  multiple copies
+static const ssize_t maxlen = 16 * 1024 * 1024;
 static ssize_t message_len = maxlen;
 static ssize_t iterations = 1;
 
 static uint64_t instruction_count_id = 0;
-static statcounters_fmt_flag_t format = CSV_HEADER; 
+static statcounters_fmt_flag_t format = CSV_HEADER;
+static void **cocarrier_msgs = NULL;
+
+static struct rtprio rtp_params;
+
+static bool copipe_enabled = false;
+static bool cochannel_enabled = false;
+static bool cocarrier_enabled = true;
 
 #ifdef BMARK_PROC
 #undef BMARK_PROC
@@ -304,13 +312,13 @@ int rusage_dump_with_args (
             fprintf(fp, "%lu,",b->ru_idrss);
             fprintf(fp, "%lu,",b->ru_isrss);
             fprintf(fp, "%lu,",b->ru_minflt);
-            fprintf(fp, "%lu",b->ru_majflt);
+            fprintf(fp, "%lu,",b->ru_majflt);
             fprintf(fp, "%lu,",b->ru_nswap);
             fprintf(fp, "%lu,",b->ru_inblock);
             fprintf(fp, "%lu,",b->ru_oublock);
             fprintf(fp, "%lu,",b->ru_msgsnd);
             fprintf(fp, "%lu,",b->ru_msgrcv);
-            fprintf(fp, "%lu",b->ru_nsignals);
+            fprintf(fp, "%lu,",b->ru_nsignals);
             fprintf(fp, "%lu,",b->ru_nvcsw);
             fprintf(fp, "%lu",b->ru_nivcsw);
             fprintf(fp, "\n");
@@ -339,15 +347,14 @@ int rusage_dump_with_args (
     }
     pname = cheri_setoffset(pname,0);
 	free(pname);
-    //if (!use_stdout)
-    //    fclose(fp);
+    if (!use_stdout)
+        fclose(fp);
     return 0;
 }
 
 static void
 set_priority(void)
 {
-	struct sched_param sched_params;
 	struct rtprio rt_params;
 	int error;
 
@@ -362,13 +369,9 @@ set_priority(void)
 static void
 unset_priority(void)
 {
-	struct sched_param sched_params;
-	struct rtprio rt_params;
 	int error;
 
-	rt_params.type = RTP_PRIO_NORMAL;
-	rt_params.prio = RTP_PRIO_MIN;
-	error = rtprio_thread(RTP_SET, 0, &rt_params);
+	error = rtprio_thread(RTP_SET, 0, &rtp_params);
 	assert(error == 0);
 }
 
@@ -386,11 +389,9 @@ spawn_ukernel(pid_t my_pid)
 	    	error = coexecve(my_pid, coprocd_args[0], coprocd_args, environ);
 	    	_exit(EX_SOFTWARE);
 	    }
-
 	    do {
-	    	sleep(1);
+			sleep(1);
 	    	error = colookup(U_COPROC_INIT, &coproc_init_scb);
-	    	sleep(1);
 	    } while(error != 0);
 	}
     set_ukern_target(COCALL_COPROC_INIT, coproc_init_scb);
@@ -404,7 +405,7 @@ coproc_init_lbl:
 			retries++;
 			goto coproc_init_lbl;
 		}
-		err(errno, "do_setup: coproc_init failed");
+		err(errno, "%s: coproc_init failed", __func__);
 	}
 
 }
@@ -473,7 +474,8 @@ do_recv_setup(void)
     sender_pid = child_pid;
 #endif
     //allocate message buffer
-    buffer = calloc(1, message_len);
+    buffer = calloc(message_len, sizeof(char));
+	cocarrier_msgs = calloc(iterations, sizeof(void *));
 
     //initialize results list
     SLIST_INIT(&results_list);
@@ -488,14 +490,14 @@ do_warmup_recv(void)
 
 
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
-	error = corecv(copipe, (void **)&buffer, message_len);
+	error = corecv(copipe, (void**)&buffer, message_len);
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: error occurred in copipe corecv", __func__);
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
 	max_retries = 10;
 	retries = 0;
 	for (retries = 0; retries < max_retries; retries++) {
-		error = corecv(cocarrier, (void **)&cocarrier_buf, message_len);
+		error = corecv(cocarrier, (void**)&cocarrier_buf, message_len);
 		if (error < 0) {
 			if (errno == EAGAIN) {
 				if (retries < max_retries){
@@ -503,12 +505,14 @@ do_warmup_recv(void)
 				}
 			} else
 				err(EX_SOFTWARE, "%s: error occurred in cocarrier corecv", __func__);
-		} else
+		} else {
+			coport_msg_free(cocarrier, cocarrier_buf);
 			break;
+		}
 	}
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
 	for (retries = 0; retries < max_retries; retries++) {
-		error = corecv(cochannel, (void **)&buffer, MIN(message_len, 4096));
+		error = corecv(cochannel, (void**)&buffer, MIN(message_len, COPORT_BUF_LEN));
 		if (error < 0) {
 			if (errno == EAGAIN) {
 				if (retries < max_retries){
@@ -521,7 +525,7 @@ do_warmup_recv(void)
 	}
 	memset(buffer, '\0', message_len);
 	lwpid_ptr = &sender_lwpid;
-	error = corecv(copipe, (void **)&lwpid_ptr, sizeof(sender_lwpid));
+	error = corecv(copipe, (void**)&lwpid_ptr, sizeof(sender_lwpid));
 	assert(error > 0);
 }
 
@@ -538,7 +542,6 @@ do_send_setup(void)
 	fd = open("/dev/random", O_RDONLY);
 	status = read(fd, buffer, required);
 
-	
 #ifdef BMARK_PROC
 	error = colookup(U_COPROC_INIT, &coproc_init_scb);
     if (error != 0)
@@ -566,7 +569,7 @@ do_warmup_send(void)
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: error occurred in cocarrier cosend", __func__);
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
-	error = cosend(cochannel, buffer, MIN(message_len, 4096));
+	error = cosend(cochannel, buffer, MIN(message_len, COPORT_BUF_LEN));
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: error occurred in cochannel cosend", __func__);
 	error = cosend(copipe, &sender_lwpid, sizeof(sender_lwpid));
@@ -576,7 +579,7 @@ do_warmup_send(void)
 static struct benchmark_result * 
 do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 {
-	struct benchmark_result *result;
+	struct benchmark_result *result, dummy;
 	statcounters_bank_t start_bank, end_bank;
 	struct rusage start_rusage, end_rusage;
 	struct timespec start_ts, end_ts;
@@ -586,7 +589,7 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 
 	coport_type = coport_gettype(port);
 	if (coport_type == COCHANNEL)
-		buffer_length = MIN(4096, buffer_length);
+		buffer_length = MIN(COPORT_BUF_LEN, buffer_length);
 	
 	if (!aggregate_mode) {
 		//statcounters
@@ -595,14 +598,14 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 		//get initial values for counters, for later comparison
 		getrusage(RUSAGE_SELF, &start_rusage);
 		clock_gettime(CLOCK_REALTIME_PRECISE, &start_ts);
-
-		/*if (coport_type == COCHANNEL) {
+		/*
+		if (coport_type == COCHANNEL) {
 			intval = 1;
 			//QEMU_SET_TRACE_BUFFERED_MODE;
 			sysarch(QEMU_SET_QTRACE_USER, &intval);
 			CHERI_START_USER_TRACE;
-		}*/
-
+		}
+		*/
 		statcounters_sample(&start_bank);
 	}
 	//perform operation
@@ -612,13 +615,15 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 		//get new values for counters
 		//end_bank.instructions = statcounters_sample_by_id(instruction_count_id);
 		statcounters_sample(&end_bank);
-		/*if (coport_type == COCHANNEL) {
+		/*
+		if (coport_type == COCHANNEL) {
 			//QEMU_FLUSH_TRACE_BUFFER;
 			CHERI_STOP_TRACE;
 			CHERI_STOP_USER_TRACE;
 			intval = 0;
 			sysarch(QEMU_SET_QTRACE_USER, &intval);
-		}*/
+		}
+		*/
 		clock_gettime(CLOCK_REALTIME_PRECISE, &end_ts);
 		getrusage(RUSAGE_SELF, &end_rusage);
 	}
@@ -631,7 +636,7 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 	} 
 
 	if (aggregate_mode)
-		return (void *)(-1);
+		return (&dummy);
 	//calculate differences in counters
 	result = calloc(1, sizeof(struct benchmark_result));
 	clock_diff(&result->timespec_diff, &end_ts, &start_ts);
@@ -645,9 +650,9 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 }
 
 static struct benchmark_result * 
-do_benchmark_recv(void **buffer, size_t buffer_length, coport_t *port)
+do_benchmark_recv(void **buf, size_t buffer_length, coport_t *port)
 {
-	struct benchmark_result *result;
+	struct benchmark_result *result, dummy;
 	statcounters_bank_t start_bank, end_bank;
 	struct rusage start_rusage, end_rusage;
 	struct timespec start_ts, end_ts;
@@ -656,7 +661,7 @@ do_benchmark_recv(void **buffer, size_t buffer_length, coport_t *port)
 
 	coport_type = coport_gettype(port);
 	if (coport_type == COCHANNEL)
-		buffer_length = MIN(4096, buffer_length);
+		buffer_length = MIN(COPORT_BUF_LEN, buffer_length);
 	//statcounters
 	statcounters_zero(&start_bank);
 	statcounters_zero(&end_bank);
@@ -669,7 +674,10 @@ do_benchmark_recv(void **buffer, size_t buffer_length, coport_t *port)
 	}
 
 	//perform operation
-	status = corecv(port, (void **)buffer, buffer_length);
+	if (coport_type != COCARRIER)
+		status = corecv(port, (void**)&buffer, buffer_length);
+	else
+		status = corecv(port, (void**)&cocarrier_buf, buffer_length);
 
 	//get new values for counters
 	if (!aggregate_mode) {
@@ -684,11 +692,9 @@ do_benchmark_recv(void **buffer, size_t buffer_length, coport_t *port)
 		err(EX_SOFTWARE, "error occurred in corecv for coport type %d", coport_type);
 	}
 	
-	if (coport_type == COCARRIER)
-		coport_msg_free(port, cocarrier_buf);
 
 	if (aggregate_mode)
-		return (void *)(-1);
+		return (&dummy);
 	//calculate differences in counters
 	result = calloc(1, sizeof(struct benchmark_result));
 	clock_diff(&result->timespec_diff, &end_ts, &start_ts);
@@ -711,7 +717,10 @@ do_benchmark_run(coport_op op_mode, coport_t *port)
 		if (op_mode == OP_COSEND) {
 			result = do_benchmark_send(buffer, message_len, port);
 		} else {
-			result = do_benchmark_recv((void **)&buffer, message_len, port);
+			if (port == cocarrier) {
+				result = do_benchmark_recv((void **)&cocarrier_buf, message_len, port);
+			} else
+				result = do_benchmark_recv((void **)&buffer, message_len, port);
 		}
 		if (result == NULL) {
 			sleep(1);
@@ -772,63 +781,70 @@ do_benchmark(coport_op op_mode)
 	else
 		do_warmup_recv();
 
-	if (op_mode == OP_CORECV)
-		set_priority();
-	else
-		sleep(1);
-
-	if (aggregate_mode){
-		result = calloc(1, sizeof(struct benchmark_result));
-		aggregate_sample_start(result, op_mode, COPIPE);
-	}
-	for (i = 0; i < iterations; i++) {
-		if (op_mode == OP_COSEND) {
-			ts.tv_nsec = 1;
-			ts.tv_sec = 0;
-			nanosleep(&ts, NULL);
-		}
-		do_benchmark_run(op_mode, copipe);
-	}
-	if (aggregate_mode)
-		aggregate_sample_end(result, op_mode, COPIPE);
-	unset_priority();
-
-	if (aggregate_mode){
-		result = calloc(1, sizeof(struct benchmark_result));
-		aggregate_sample_start(result, op_mode, COCARRIER);
-	}
-	for (i = 0; i < iterations; i++) 
-		do_benchmark_run(op_mode, cocarrier);
-	if (aggregate_mode)
-		aggregate_sample_end(result, op_mode, COCARRIER);
-
-	if (message_len > 4096)
-		return;
-
-	x = ((4096 + message_len - 1) / message_len);
-	if (aggregate_mode){
-		result = calloc(1, sizeof(struct benchmark_result));
-		aggregate_sample_start(result, op_mode, COCHANNEL);
-	}
-	for (i = 0; i < iterations; i++) {
-		do_benchmark_run(op_mode, cochannel);
-		if (!aggregate_mode && op_mode == OP_COSEND){
-			if (((i % x) == (x - 1)) && (i != 0))
-				sleep(1);
-		}
-
-	}
-	if (aggregate_mode)
-		aggregate_sample_end(result, op_mode, COCHANNEL);
+	if (copipe_enabled) {
+		if (op_mode == OP_CORECV)
+			set_priority();
+		else
+			sleep(1);
 		
+		if (aggregate_mode){
+			result = calloc(1, sizeof(struct benchmark_result));
+			aggregate_sample_start(result, op_mode, COPIPE);
+		}
+		for (i = 0; i < iterations; i++) {
+			if (op_mode == OP_COSEND) {
+				ts.tv_nsec = 1;
+				ts.tv_sec = 0;
+				nanosleep(&ts, NULL);
+			}
+			do_benchmark_run(op_mode, copipe);
+		}
+		if (aggregate_mode)
+			aggregate_sample_end(result, op_mode, COPIPE);
+		unset_priority();
+	}
+
+	if (cocarrier_enabled) {
+		if (aggregate_mode){
+			result = calloc(1, sizeof(struct benchmark_result));
+			aggregate_sample_start(result, op_mode, COCARRIER);
+		}
+		for (i = 0; i < iterations; i++) {
+			do_benchmark_run(op_mode, cocarrier);
+			cocarrier_msgs[i] = cocarrier_buf;
+		}
+		if (aggregate_mode)
+			aggregate_sample_end(result, op_mode, COCARRIER);
+		for (i = 0; i < iterations; i++)
+			coport_msg_free(cocarrier, cocarrier_msgs[i]);
+	}
+	if (cochannel_enabled) {
+		if (message_len > COPORT_BUF_LEN)
+			return;
+
+		x = ((COPORT_BUF_LEN + message_len - 1) / message_len);
+		if (aggregate_mode){
+			result = calloc(1, sizeof(struct benchmark_result));
+			aggregate_sample_start(result, op_mode, COCHANNEL);
+		}
+		for (i = 0; i < iterations; i++) {
+			do_benchmark_run(op_mode, cochannel);
+			if (!aggregate_mode && op_mode == OP_COSEND){
+				if (((i % x) == (x - 1)) && (i != 0))
+					sleep(1);
+			}
+		}
+		if (aggregate_mode)
+			aggregate_sample_end(result, op_mode, COCHANNEL);	
+	}
 }
 	
 
 static void
 process_results(void)
 {
-	FILE *outfile;
-	char *filename;
+	FILE *outfile, *outfile_rusage;
+	char *filename, *filename_rusage;
 	char *progname;
 	char *phase;
 	char *bandwidth;
@@ -838,7 +854,7 @@ process_results(void)
 	pid_t pid;
 	int status;
 
-	bool started[2][3] = {{false, false, false}, {false, false, false}};
+	bool started[3] = {false, false, false};
 	int idx_a, idx_b;
 
 	SLIST_FOREACH(run, &results_list, entries) {
@@ -876,20 +892,32 @@ process_results(void)
 		printf("%s -- %s: %.2FKB/s\n", progname, phase, printable_bw);
 		if (format != HUMAN_READABLE) {
 			filename = calloc(sizeof(char), 255);
+			filename_rusage = calloc(sizeof(char), 255);
 			bandwidth = calloc(sizeof(char), 255);
 			sprintf(filename, "/tmp/%s_b%lu.csv", phase, message_len);
+			sprintf(filename_rusage, "/tmp/%s_b%lu_rusage.csv", phase, message_len);
 			sprintf(bandwidth, "%.2FKB/s", printable_bw);
-			outfile = fopen(filename, "a+");
-			if (started[idx_a][idx_b])
+			if (started[idx_b]) {
+				outfile = fopen(filename, "a"); //files closed by *dump_with_args
+				outfile_rusage = fopen(filename_rusage, "a");
+				
 				statcounters_dump_with_args(&run->statcounter_diff, progname, phase, bandwidth, outfile, CSV_NOHEADER);
-			else
+				rusage_dump_with_args(&run->rusage_diff, progname, phase, bandwidth, outfile_rusage, CSV_NOHEADER);
+			} else {
+				outfile = fopen(filename, "w"); //files closed by *dump_with_args
+				outfile_rusage = fopen(filename_rusage, "w");
+				
 				statcounters_dump_with_args(&run->statcounter_diff, progname, phase, bandwidth, outfile, CSV_HEADER);
-			started[idx_a][idx_b] = true;
+				rusage_dump_with_args(&run->rusage_diff, progname, phase, bandwidth, outfile_rusage, CSV_HEADER);
+			}
+			started[idx_b] = true;
+			free(filename);
+			free(bandwidth);
+			free(filename_rusage);
 		} else {
 			statcounters_dump_with_args(&run->statcounter_diff, progname, phase, NULL, NULL, format);
 			rusage_dump_with_args(&run->rusage_diff, progname, phase, NULL, NULL, format);
 		}
-
 	}
 }
 
@@ -912,13 +940,34 @@ thread_main(void *args)
     do_benchmark(op_mode);
 
     if (op_mode == OP_CORECV) {
-    	pthread_mutex_lock(&results_mtx);
-    	process_results();
-    	pthread_mutex_unlock(&results_mtx);
-
+        pthread_mutex_lock(&results_mtx);
+        process_results();
+        pthread_mutex_unlock(&results_mtx);
+        if (coprocd_pid != -1) {
+            pid_t pid;
+			int status;
+			
+			kill(-coprocd_pid, SIGKILL);
+			pid = waitpid(coprocd_pid, &status, (WEXITED));
+		}
     }
 
 	return (args);
+}
+
+static bool
+is_multicore(void)
+{
+	int mib[2];
+    size_t len;
+    int cores;
+	
+	len = sizeof(cores); 
+    mib[0] = CTL_HW;
+    mib[1] = HW_NCPU;
+    sysctl(mib, 2, &cores, &len, NULL, 0);
+    
+	return (cores > 1);
 }
 
 static cpuset_t recv_cpu_set = CPUSET_T_INITIALIZER(CPUSET_FSET);
@@ -939,13 +988,17 @@ run_in_thread(void)
 	pthread_attr_init(&thr_attr);
 	pthread_attr_init(&thr_attr2);
 
-	/*error = cpuset_getaffinity(CPU_LEVEL_CPUSET, CPU_WHICH_PID, -1, sizeof(cpuset_t), &send_cpu_set);
-	recv_cpu_set = send_cpu_set;	
-	CPU_CLR(CPU_FFS(&send_cpu_set)-1, &send_cpu_set);
-	CPU_CLR(CPU_FFS(&send_cpu_set)-1, &recv_cpu_set);
+	if (is_multicore()) {
+		error = cpuset_getaffinity(CPU_LEVEL_CPUSET, CPU_WHICH_PID, -1, sizeof(cpuset_t), &send_cpu_set);
+		recv_cpu_set = send_cpu_set;	
+		CPU_CLR(CPU_FFS(&send_cpu_set)-1, &send_cpu_set);
+		CPU_CLR(CPU_FFS(&send_cpu_set)-1, &recv_cpu_set);
 
-	pthread_attr_setaffinity_np(&thr_attr, sizeof(cpuset_t), &recv_cpu_set);
-	pthread_attr_setaffinity_np(&thr_attr2, sizeof(cpuset_t), &send_cpu_set);*/
+		error = pthread_attr_setaffinity_np(&thr_attr, sizeof(cpuset_t), &recv_cpu_set);
+		assert(error == 0);
+		error = pthread_attr_setaffinity_np(&thr_attr2, sizeof(cpuset_t), &send_cpu_set);
+		assert(error == 0);
+	}
 
 	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 	pthread_attr_setschedpolicy(&thr_attr, SCHED_FIFO);
@@ -1004,9 +1057,10 @@ int main(int argc, char *const argv[])
 	copipe = open_coport(COPIPE);
 	cocarrier = open_coport(COCARRIER);
 	cochannel = open_coport(COCHANNEL);
+	rtprio_thread(RTP_LOOKUP, 0, &rtp_params);
 #endif
 	run_in_thread();
 
-	kill(-coprocd_pid, SIGKILL);
+	
 	return (0);
 }
