@@ -108,14 +108,6 @@ init_core(void)
     process_manager->pid = getpid();
     process_manager->status = RUNNING;
 
-    /* TODO-PBB: rework worker_map stuff */
-    process_manager->setup_state = calloc(1, sizeof(daemon_setup_state));
-    init_map = spawn_worker(U_COPROC_INIT, process_manager->setup_info->setup, NULL);
-    if (init_map == NULL)
-        err(EEXIST, "could not start microkernel in this address space. Is an old instance still running?");
-    process_manager->setup_state->setup_worker = &init_map->workers[0];
-    free(init_map);
-
     core_module->init->start(core_module);
     for (i = 1; i < core_module->ndaemons; i++) {
         d = &core_module->daemons[i];
@@ -133,6 +125,13 @@ init_core(void)
             }
         }
     }
+    /* TODO-PBB: rework worker_map stuff */
+    process_manager->setup_state = calloc(1, sizeof(daemon_setup_state));
+    init_map = spawn_worker(U_COPROC_INIT, process_manager->setup_info->setup, NULL);
+    if (init_map == NULL)
+        err(EEXIST, "could not start microkernel in this address space. Is an old instance still running?");
+    process_manager->setup_state->setup_worker = &init_map->workers[0];
+    free(init_map);
     core_module->init->complete();
 
     core_loaded = true;
