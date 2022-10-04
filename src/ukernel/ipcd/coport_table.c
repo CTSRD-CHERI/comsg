@@ -65,6 +65,7 @@ static int coport_table_flags = (MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED
 __attribute__((constructor)) static
 void setup_table(void) 
 {
+	madvise(NULL, -1, MADV_PROTECT);
 	size_t top_of_table;
 
 	cocarrier_table.coports = calloc(max_coports, sizeof(coport_tbl_entry_t));

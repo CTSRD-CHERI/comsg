@@ -69,6 +69,7 @@ static struct {
 __attribute__ ((constructor)) static 
 void setup_namespace_table(void)
 {
+	madvise(NULL, -1, MADV_PROTECT);
 	/* Add space to ensure we can map a process namespace for every process in the system */
 	int maxprocs = get_maxprocs() < 1024 ? 1024 : get_maxprocs();
 	/* Allocate namespace table */

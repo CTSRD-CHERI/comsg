@@ -50,6 +50,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 
 
 static bool core_loaded = false;
@@ -158,6 +159,7 @@ init_microkernel(void)
     int i;
 
     /* Create microkernel as a new session */
+    madvise(NULL, -1, MADV_PROTECT);
     ukernel_sid = setsid();
     /* Signal mask is inherited, we expect SIGCHLD, and we don't want to be interrupted */
     set_sigchld_handler(daemon_died);

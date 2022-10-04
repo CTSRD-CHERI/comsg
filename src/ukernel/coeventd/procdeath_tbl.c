@@ -42,6 +42,7 @@
 #include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/sysctl.h>
+#include <sys/mman.h>
 
 pid_t pid_max;
 static coevent_t *proc_table = NULL;
@@ -58,6 +59,7 @@ setup_procdeath_table(void)
 		warn("setup_table: could not get pid_max via sysctl, defaulting to 99999");
 		pid_max = 99999;
 	}
+	madvise(NULL, -1, MADV_PROTECT);
 	proc_table = calloc(pid_max, sizeof(coevent_t));
 	assert(proc_table != NULL);
 }

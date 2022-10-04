@@ -66,6 +66,7 @@ static struct {
 __attribute__ ((constructor)) static 
 void setup_table(void)
 {
+	madvise(NULL, -1, MADV_PROTECT);
 	coservice_table.services = calloc(max_services, sizeof(coservice_t));
 	if (coservice_table.services == NULL)
 		err(errno, "setup_table: allocating coservice table failed");
