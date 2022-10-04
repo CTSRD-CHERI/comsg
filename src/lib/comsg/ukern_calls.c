@@ -96,9 +96,9 @@ get_ukernel_service(cocall_num_t func)
 			errno = ENOSYS;
 			err(EX_SOFTWARE, "%s: function %s is not present in the root namespace", __func__, ukern_func_names[func]);
 		}
+		atomic_compare_exchange_strong(&ukernel_services[func], &s, service_obj->coservice);
 		tmp = codiscover(service_obj, &scb);
-		atomic_compare_exchange_strong(&ukernel_services[func], &s, tmp);
-		set_cocall_target(ukern_call_set, (int)func, scb);
+		set_ukern_target(func, scb);
 	} else {
 		if (get_cocall_target(ukern_call_set, COCALL_CODISCOVER2) == NULL)  {
 			errno = EDOOFUS;
@@ -106,7 +106,7 @@ get_ukernel_service(cocall_num_t func)
 		}
 		scb = codiscover2(s);
 		if (scb != NULL)
-			set_cocall_target(ukern_call_set, (int)func, scb);
+			set_ukern_target(func, scb);
 	}
 	return (s);
 }
@@ -147,9 +147,9 @@ init_new_thread_calls(void)
 		err(EX_UNAVAILABLE, "%s: coproc_init not called; unable to perform cocalls", __func__);
 	}
 	if (get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL)
-		set_cocall_target(ukern_call_set, COCALL_CODISCOVER,  get_global_target(COCALL_CODISCOVER));
+		set_ukern_target(COCALL_CODISCOVER,  get_global_target(COCALL_CODISCOVER));
 	if (get_cocall_target(ukern_call_set, COCALL_CODISCOVER) == NULL)
-		set_cocall_target(ukern_call_set, COCALL_CODISCOVER, get_global_target(COCALL_CODISCOVER));
+		set_ukern_target(COCALL_CODISCOVER, get_global_target(COCALL_CODISCOVER));
 	
 	if (get_cocall_target(ukern_call_set, COCALL_CODISCOVER2) == NULL) {
 		if (get_global_target(COCALL_CODISCOVER2) == NULL) {
@@ -159,7 +159,7 @@ init_new_thread_calls(void)
 			}
 			get_ukernel_service(COCALL_CODISCOVER2);
 		} else {
-			set_cocall_target(ukern_call_set, COCALL_CODISCOVER2,  get_global_target(COCALL_CODISCOVER2));
+			set_ukern_target(COCALL_CODISCOVER2,  get_global_target(COCALL_CODISCOVER2));
 			get_ukernel_service(COCALL_CODISCOVER2);
 		}
 	}
@@ -185,13 +185,14 @@ refresh_target_scb(cocall_num_t func)
 	coservice_t *s;
 	void *scb;
 
-	if ((s = atomic_load(&ukernel_services[func])) == NULL) {
+	s = atomic_load(&ukernel_services[func]);
+	if (s == NULL) {
 		s = get_ukernel_service(func);
 		return (get_cocall_target(ukern_call_set, func));
 	} 
 	scb = codiscover2(s);
 	if (scb != NULL)
-		set_cocall_target(ukern_call_set, func, scb);
+		set_ukern_target(func, scb);
 	return (scb);
 }
 
@@ -463,9 +464,9 @@ coproc_init(namespace_t *root_ns_cap, void *coinsert_scb, void *coselect_scb, vo
 		err(EX_SOFTWARE, "%s: coproc_init failed but did not report an error", __func__);
 	}
 	root_ns = cocall_args.ns_cap;
-	set_cocall_target(ukern_call_set, COCALL_COINSERT, cocall_args.coinsert);
-	set_cocall_target(ukern_call_set, COCALL_CODISCOVER, cocall_args.codiscover);
-	set_cocall_target(ukern_call_set, COCALL_COSELECT, cocall_args.coselect);
+	set_ukern_target(COCALL_COINSERT, cocall_args.coinsert);
+	set_ukern_target(COCALL_CODISCOVER, cocall_args.codiscover);
+	set_ukern_target(COCALL_COSELECT, cocall_args.coselect);
 	
 	return (cocall_args.ns_cap);
 }
@@ -510,7 +511,7 @@ cocarrier_send(const coport_t *port, const void *buf, size_t len)
 	cocall_args.oob_data.attachments = NULL;
     
     error = ukern_call(COCALL_COSEND, &cocall_args);
-    if(error)
+    if (error != 0)
         err(EX_SOFTWARE, "%s: cocall failed", __func__);
 
     if (cocall_args.status == -1) {
