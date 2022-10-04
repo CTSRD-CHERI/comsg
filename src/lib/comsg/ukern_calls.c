@@ -215,19 +215,17 @@ static int
 call_ukern_service(cocall_num_t func, comsg_args_t *args, void *scb)
 {
 	int error = 0;
-	do {
+	for(;;) {
 		error = call_ukern_target(func, args);
 		if (error != 0) { /* try the alternative endpoints if we failed because it's busy, else fail */
-			if (errno == EAGAIN) {
-				if (scb != NULL)
-					scb = refresh_target_scb(func);
-				else
-					sched_yield();
+			if (errno == EBUSY) {
+				scb = refresh_target_scb(func);
 				continue;
 			} else
 				return (error);
 		}
-	} while(0); 
+		break;
+	} 
 	return (error);
 }
 
