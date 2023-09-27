@@ -98,11 +98,69 @@ startup_dance(void)
 		err(EX_SOFTWARE, "%s: coproc_init failed", __func__);
 	if (!cheri_gettag(root_ns))
 		err(EX_SOFTWARE, "%s: root namespace cap lacks tag!!", __func__);
+	/* sleep to give the rest of the microkernel a chance to reach the state we need to make progress */
 	sleep(1);
-	coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, root_ns);
-	coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
+	coprovide_nsobj = NULL;
+	coprovide_service = NULL;
+	coprovide_scb = NULL;
+
+	for (;;) {
+		coprovide_nsobj = lookup_nsobject(U_COPROVIDE, COSERVICE, root_ns);
+		if (coprovide_nsobj != NULL)
+			break;
+		else 
+			sleep(1);
+	}
+	for (;;) {
+		coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
+		if (coprovide_service != NULL)
+			break;
+		else {
+			if (errno == EAGAIN) {
+				sleep(1);
+			} else {
+				err(EX_SOFTWARE, "%s: codiscover failed.", __func__);
+			}
+		}
+	}
 	set_ukern_target(COCALL_COPROVIDE, coprovide_scb);
-	set_ukernel_service(COCALL_COPROVIDE, lookup_coservice(U_COPROVIDE, root_ns));
+	set_ukernel_service(COCALL_COPROVIDE, coprovide_service);
+
+	coprovide_nsobj = lookup_nsobject(U_COPROVIDE2, COSERVICE, root_ns);
+	coprovide_service = NULL;
+	coprovide_scb = NULL;
+	for (;;) {
+		coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
+		if (coprovide_service != NULL)
+			break;
+		else {
+			if (errno == EAGAIN) {
+				sleep(1);
+			} else {
+				err(EX_SOFTWARE, "%s: codiscover failed.", __func__);
+			}
+		}
+	}
+	set_ukern_target(COCALL_COPROVIDE2, coprovide_scb);
+	set_ukernel_service(COCALL_COPROVIDE2, coprovide_service);
+
+	coprovide_nsobj = lookup_nsobject(U_CODISCOVER2, COSERVICE, root_ns);
+	coprovide_service = NULL;
+	coprovide_scb = NULL;
+	for (;;) {
+		coprovide_service = codiscover(coprovide_nsobj, &coprovide_scb);
+		if (coprovide_service != NULL)
+			break;
+		else {
+			if (errno == EAGAIN) {
+				sleep(1);
+			} else {
+				err(EX_SOFTWARE, "%s: codiscover failed.", __func__);
+			}
+		}
+	}
+	set_ukern_target(COCALL_CODISCOVER2, coprovide_scb);
+	set_ukernel_service(COCALL_CODISCOVER2, coprovide_service);
 }
 
 static void 
