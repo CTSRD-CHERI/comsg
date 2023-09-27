@@ -86,6 +86,10 @@ startup_dance(void)
 	if (!cheri_gettag(root_ns))
 		err(EX_SOFTWARE, "%s: root namespace cap lacks tag!!", __func__);
 	endpoint_scbs = get_fast_endpoints();
+	for (size_t i = 0; i < MIN_EXPECTED_NSD_WORKERS; i++) {
+		if (endpoint_scbs[i] == NULL)
+			err(EX_SOFTWARE, "%s: fewer valid scbs than expected", __func__);
+	}
 	set_ukern_target(COCALL_COSELECT, endpoint_scbs[0]);
 	set_ukern_target(COCALL_COINSERT, endpoint_scbs[1]);
 

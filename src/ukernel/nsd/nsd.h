@@ -62,8 +62,8 @@ int validate_codrop_args(codrop_args_t *cocall_args);
 int validate_coinsert_args(coinsert_args_t *cocall_args);
 
 
-//TODO-PBB: revisit
-#define NSD_NWORKERS 12
+/* This number is chosen based on the startup requirements of the other ukernel modules */
+#define MIN_EXPECTED_NSD_WORKERS (4)
 
 /* Must match the capv coprocd provides exactly */
 struct nsd_capvec {
