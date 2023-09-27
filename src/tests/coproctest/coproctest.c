@@ -397,11 +397,19 @@ cocreate_lbl:
 		err(errno, "coproctest: do_tests: coclose failed");
 }
 
+static pid_t coprocd_pid;
+
+void
+cleanup_microkernel(void) 
+{
+	kill(-coprocd_pid, SIGKILL);
+}
+
 int main(int argc, char *const argv[])
 {
 	int error;
 	void *coproc_init_scb;
-	pid_t test_pid, coprocd_pid;
+	pid_t test_pid;
 
     error = colookup(U_COPROC_INIT, &coproc_init_scb);
     if (error != 0) {
@@ -416,6 +424,7 @@ int main(int argc, char *const argv[])
 	    } while(error != 0);
 	}
     set_ukern_target(COCALL_COPROC_INIT, coproc_init_scb);
+	atexit(cleanup_microkernel);
 
     do_tests();
     do_procdeath_test();
