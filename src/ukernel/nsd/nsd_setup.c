@@ -185,17 +185,36 @@ init_service(coservice_provision_t *service_prov, const char * name)
 	service_prov->nsobj = new_nsobject(name, RESERVATION, root_ns);
 }
 
+static bool
+validate_scb(void *scb)
+{
+	bool res = true;
+	res &= __builtin_cheri_tag_get(scb); /* valid */
+	res &= __builtin_cheri_sealed_get(scb); /* sealed */
+	res &= (__builtin_cheri_length_get(scb) == 0x1000); /* may change, keep an eye on this */
+	return (res);
+}
+
 static void
 process_capvec(void)
 {
 	int error;
-	struct nsd_capvec *capvec;
-	void **capv;
+	struct nsd_capvec *capvec = NULL;
+	void **capv = NULL;
 
 	//todo-pbb: add checks to ensure these are valid
 	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+	if (error != 0) {
+		errno = error;
+		err(EX_SOFTWARE, "%s: capvec could not be retrieved", __func__);
+	}
 	capvec = (struct nsd_capvec *)capv;
+	if (!validate_scb(capvec->coproc_init))
+		err(EX_SOFTWARE, "%s: capvec coproc_init scb was invalid", __func__);
 	set_ukern_target(COCALL_COPROC_INIT, capvec->coproc_init);
+
+	if (!validate_scb(capvec->coproc_init_done))
+		err(EX_SOFTWARE, "%s: coproc_init_done scb was invalid", __func__);
 	set_ukern_target(COCALL_COPROC_INIT_DONE, capvec->coproc_init_done);
 }
 

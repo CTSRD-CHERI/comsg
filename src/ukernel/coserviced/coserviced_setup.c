@@ -83,6 +83,16 @@ init_service(coservice_provision_t *serv, char *name, int op)
 	set_ukernel_service(op, serv->service);
 }
 
+static bool
+validate_scb(void *scb)
+{
+	bool res = true;
+	res &= __builtin_cheri_tag_get(scb); /* valid */
+	res &= __builtin_cheri_sealed_get(scb); /* sealed */
+	res &= (__builtin_cheri_length_get(scb) == 0x1000); /* may change, keep an eye on this */
+	return (res);
+}
+
 static void
 process_capvec(void)
 {
@@ -92,10 +102,23 @@ process_capvec(void)
 
 	//todo-pbb: add checks to ensure these are valid
 	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+	if (error != 0) {
+		errno = error;
+		err(EX_SOFTWARE, "%s: capvec could not be retrieved", __func__);
+	}
 	capvec = (struct coserviced_capvec *)capv;
+	if (!validate_scb(capvec->coproc_init))
+		err(EX_SOFTWARE, "%s: capvec coproc_init scb was invalid", __func__);
 	set_ukern_target(COCALL_COPROC_INIT, capvec->coproc_init);
+
+	if (!validate_scb(capvec->coinsert))
+		err(EX_SOFTWARE, "%s: capvec coinsert scb was invalid", __func__);
 	set_ukern_target(COCALL_COINSERT, capvec->coinsert);
+
+	if (!validate_scb(capvec->coselect))
+		err(EX_SOFTWARE, "%s: capvec coselect scb was invalid", __func__);
 	set_ukern_target(COCALL_COSELECT, capvec->coselect);
+	
 	root_ns = capvec->root_ns;
 	if (root_ns == NULL)
 		err(EX_SOFTWARE, "%s: invalid root namespace in capvec!", __func__);
