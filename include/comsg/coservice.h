@@ -35,8 +35,14 @@
 #include <stdatomic.h>
 #include <sys/cdefs.h>
 
+#if !defined(__riscv)
+#define COSERVICE_PERMS_PERMS_ARCH_SPECIFIC ( CHERI_PERM_MUTABLE_LOAD )
+#else
+#define COSERVICE_PERMS_PERMS_ARCH_SPECIFIC ( 0 )
+#endif
 #define COSERVICE_HANDLE_PERMS ( CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP )
+	CHERI_PERM_LOAD_CAP | COSERVICE_PERMS_PERMS_ARCH_SPECIFIC)
+/* Mutable load not required or desired for endpoint handles */
 #define COSERVICE_ENDPOINT_HANDLE_PERMS ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
 	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE )
 #define COSERVICE_MAX_WORKERS (128)

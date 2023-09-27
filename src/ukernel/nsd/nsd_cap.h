@@ -36,8 +36,14 @@
 
 #include <cheri/cherireg.h>
 
+#if !defined(__riscv)
+#define NSD_INTERNAL_ARCH_SPECIFIC ( CHERI_PERM_MUTABLE_LOAD )
+#else
+#define NSD_INTERNAL_ARCH_SPECIFIC ( 0 )
+#endif
 #define NS_INTERNAL_HWPERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | CHERI_PERM_SW3 )
+	CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_SW2 | \
+	 CHERI_PERM_SW3 | NSD_INTERNAL_ARCH_SPECIFIC )
 
 namespace_t *make_ns_handle(namespace_t *);
 nsobject_t *make_nsobj_handle(nsobject_t *);

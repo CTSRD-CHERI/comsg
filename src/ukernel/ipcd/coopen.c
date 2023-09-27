@@ -52,19 +52,21 @@ int validate_coopen_args(coopen_args_t *cocall_args)
 		return (1);
 }
 
-static
-void init_coport(coport_t *port, coport_type_t type) 
+static void
+init_coport(coport_t *port, coport_type_t type) 
 {
+	size_t buf_perms;
 	port->type = type;
 	
-	port->info = cocall_malloc(sizeof(coport_info_t));
+	port->info = malloc(sizeof(coport_info_t));
 	port->info = cheri_andperm(port->info, COPORT_INFO_PERMS);
 	port->info->start = 0;
 	port->info->end = 0;
 	port->info->status = COPORT_OPEN;
 
-	port->buffer = cocall_malloc(sizeof(coport_buf_t));
-	port->cd = cocall_malloc(sizeof(coport_typedep_t));
+	port->buffer = malloc(sizeof(coport_buf_t));
+	port->cd = malloc(sizeof(coport_typedep_t));
+	buf_perms = COCHANNEL_BUF_PERMS;
 	switch (port->type)
 	{
 		case COPIPE:
@@ -76,10 +78,12 @@ void init_coport(coport_t *port, coport_type_t type)
 		case COCARRIER:
 			LIST_INIT(&port->cd->listeners);
 			port->cd->levent = NOEVENT;
+			buf_perms = COCARRIER_BUF_PERMS;
 		case COCHANNEL: 
 			port->info->length = 0;
 			port->info->event = COPOLL_INIT_EVENTS;
-			port->buffer->buf = cocall_malloc(COPORT_BUF_LEN);
+			port->buffer->buf = malloc(COPORT_BUF_LEN);
+			port->buffer->buf = cheri_andperm(port->buffer->buf, buf_perms);
 			port->buffer = cheri_andperm(port->buffer, DEFAULT_BUFFER_PERMS);
 			break;
 		default:

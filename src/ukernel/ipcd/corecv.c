@@ -108,7 +108,7 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	cocall_args->message = __builtin_cheri_perms_and(msg->buf, COCARRIER_MSG_PERMS);
 	cocall_args->length = __builtin_cheri_length_get(msg->buf);
 	if (msg->attachments != NULL)
-		cocall_args->oob_data.attachments = __builtin_cheri_perms_and(msg->attachments, COCARRIER_MSG_PERMS);
+		cocall_args->oob_data.attachments = __builtin_cheri_perms_and(msg->attachments, COCARRIER_OOB_PERMS);
 	else
 		cocall_args->oob_data.attachments = NULL;
 	cocall_args->oob_data.len = msg->nattachments;

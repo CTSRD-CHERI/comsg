@@ -62,9 +62,14 @@
  * 	+ allows arbitrary deletion of objects without their ns object capabilities
  * 	+ allows deletion of the namespace if the namespace
  */
-
+#if !defined(__riscv)
+#define NS_PERMS_ARCH_SPECIFIC ( CHERI_PERM_MUTABLE_LOAD )
+#else
+#define NS_PERMS_ARCH_SPECIFIC ( 0 )
+#endif
 #define NS_PERMS_MASK ( CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | \
-	CHERI_PERM_LOAD_CAP )
+	CHERI_PERM_LOAD_CAP | NS_PERMS_ARCH_SPECIFIC )
+
 
 #define NS_PERMS_OBJ ( 0 )
 #define NS_PERM_RO   ( CHERI_PERM_SW2 )
