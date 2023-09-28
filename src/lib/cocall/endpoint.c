@@ -53,6 +53,9 @@ static pthread_mutex_t registration_mutex;
 static pthread_mutex_t worker_creation_mutex;
 static pthread_cond_t registration_cond;
 
+extern void begin_cocall(void);
+extern void end_cocall(void);
+
 __attribute__ ((constructor)) static 
 void init_worker_mutexes(void)
 {
@@ -131,6 +134,11 @@ coaccept_endpoint(void *argp)
     endpoint_args_t *worker_args;
 
     worker_args = argp;
+    begin_cocall();
+    void *tmp = malloc(1);
+    free(tmp);
+    end_cocall();
+
     coaccept_endpoint_init(worker_args);
     coaccept_wrapper(worker_args->slow);
 

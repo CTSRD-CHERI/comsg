@@ -35,7 +35,6 @@
 #include "coevent_utils.h"
 
 #include <assert.h>
-#include <ccmalloc.h>
 #include <cheri/cheric.h>
 #include <comsg/comsg_args.h>
 #include <comsg/coevent.h>
@@ -116,6 +115,15 @@ cocallback_register(comsg_args_t *cocall_args, void *token)
 #else
 	pid = cogetpid();
 #endif
+	if (pid < 0) {
+		COCALL_ERR(cocall_args, EOPNOTSUPP);
+	}
+
+	/* 
+	 * set up monitoring on the provider; 
+	 * this way, we avoid executing functions 
+	 * registered by now dead processes
+	 */
 	provider_death = monitor_provider(pid);
 	ccb_func = register_cocallback_func(pid, cocall_args->provider_scb, cocall_args->flags);
 	if (ccb_func == NULL)

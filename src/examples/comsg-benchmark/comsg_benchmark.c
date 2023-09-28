@@ -28,7 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#define ENABLE_INTERNAL_COMSG_BENCHMARK
 #include <comsg/ukern_calls.h>
 #include <comsg/coport_ipc.h>
 #include <comsg/coport_ipc_cinvoke.h>
@@ -57,6 +57,7 @@
 #include <sys/errno.h>
 #include <sys/fcntl.h>
 #include <signal.h>
+#include <sys/time.h>
 #include <sys/signal.h>
 #include <sys/resource.h>
 #include <sys/rtprio.h>
@@ -117,6 +118,7 @@ static coport_t *copipe = NULL;
 static coport_t *cocarrier = NULL;
 static coport_t *cochannel = NULL;
 
+static char *message_text = NULL;
 static _Thread_local char *buffer = NULL;
 static _Thread_local char *cocarrier_buf = NULL;
 static const ssize_t maxlen = 16 * 1024 * 1024;
@@ -131,7 +133,12 @@ static struct rtprio rtp_params;
 
 static bool copipe_enabled = false;
 static bool cochannel_enabled = false;
-static bool cocarrier_enabled = true;
+static bool cocarrier_enabled = false;
+static bool dummy_workload_enabled = false;
+static bool sha_workload_enabled = true;
+static bool enable_qemu_tracing = false;
+static _Thread_local struct msg_checksum checksum;
+static _Thread_local SHA256_CTX *sha_ctx;
 
 #ifdef BMARK_PROC
 #undef BMARK_PROC
@@ -168,7 +175,6 @@ process_capvec(void)
 static void
 timevalsub(struct timeval *result, struct timeval *end, const struct timeval *start)
 {
-
 	result->tv_sec = end->tv_sec - start->tv_sec;
 	result->tv_usec = end->tv_usec - start->tv_usec;
 	if (result->tv_usec < 0) {
@@ -186,19 +192,21 @@ clock_diff(struct timespec *result, struct timespec *end, struct timespec *start
 {
 	result->tv_sec = end->tv_sec - start->tv_sec;
 	result->tv_nsec = end->tv_nsec - start->tv_nsec;
-	if (result->tv_nsec < 0) {
+	while (result->tv_nsec < 0) {
 		result->tv_sec--;
 		result->tv_nsec += 1000000000L;
+	}
+	while (result->tv_nsec >= 1000000000L) {
+		result->tv_sec++;
+		result->tv_nsec -= 1000000000L;
 	}
 }
 
 static void
 rusage_diff(struct rusage *result, struct rusage *end, struct rusage *start)
 {
-	result->ru_utime = end->ru_utime;
-	timevalsub(&result->ru_utime,&end->ru_utime, &start->ru_utime);	/* user time used */
-	result->ru_stime = end->ru_stime;
-	timevalsub(&result->ru_stime,&end->ru_stime, &start->ru_stime);	/* system time used */
+	timevalsub(&result->ru_utime, &end->ru_utime, &start->ru_utime);	/* user time used */
+	timevalsub(&result->ru_stime, &end->ru_stime, &start->ru_stime);	/* system time used */
 
 	result->ru_maxrss = end->ru_maxrss - start->ru_maxrss;		/* max resident set size */
 	result->ru_ixrss = end->ru_ixrss - start->ru_ixrss;		/* integral shared memory size */
@@ -631,7 +639,7 @@ dummy_workload(char *buf, ssize_t length)
 }
 
 static struct benchmark_result * 
-do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
+do_benchmark_send(void *buf, size_t buffer_length, coport_t *port)
 {
 	struct benchmark_result *result, dummy;
 	statcounters_bank_t start_bank, end_bank;
@@ -653,6 +661,11 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 	coport_type = coport_gettype(port);
 	if (coport_type == COCHANNEL)
 		buffer_length = MIN(COPORT_BUF_LEN, buffer_length);
+	else if (coport_type == COPIPE) {
+		while(!copipe_ready(port)) {
+			sched_yield(); //wait for recver to be ready
+		}
+	}
 	
 	if (!aggregate_mode) {
 		//statcounters
@@ -695,12 +708,28 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 			return (NULL);
 		else
 			err(EX_SOFTWARE, "%s: error occurred in cosend for coport type %d", __func__, coport_type);
-	} 
+	}
+
+	result = calloc(1, sizeof(struct benchmark_result));
+	if (coport_type != COCARRIER) {
+		if (!dummy_workload_enabled)
+			checksum = do_dummy_workload(buf, buffer_length);
+		else
+			checksum = b;
+		result->sum = checksum;
+	} else {
+		if (!dummy_workload_enabled) {
+			result->sum.buf = calloc(1, buffer_length);
+			memcpy(result->sum.buf, buf, buffer_length);
+		} else {
+			checksum = b;
+			result->sum = checksum;
+		}
+	}
 
 	if (aggregate_mode)
 		return (&dummy);
 	//calculate differences in counters
-	result = calloc(1, sizeof(struct benchmark_result));
 	clock_diff(&result->timespec_diff, &end_ts, &start_ts);
 	rusage_diff(&result->rusage_diff, &end_rusage, &start_rusage);
 	statcounters_diff(&result->statcounter_diff, &end_bank, &start_bank);
@@ -711,6 +740,13 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 	return (result);
 }
 
+static void
+statcounter_sum(statcounters_bank_t *a, statcounters_bank_t *b)
+{
+	#define STATCOUNTER_ITEM(name, field, args) a->field = a->field + b->field;
+	#include <statcounters_md.h>
+}
+
 static struct benchmark_result * 
 do_benchmark_recv(void **buf, size_t buffer_length, coport_t *port)
 {
@@ -718,8 +754,9 @@ do_benchmark_recv(void **buf, size_t buffer_length, coport_t *port)
 	statcounters_bank_t start_bank, end_bank;
 	struct rusage start_rusage, end_rusage;
 	struct timespec start_ts, end_ts;
-	int status;
+	int status = 0;
 	coport_type_t coport_type;
+	struct msg_checksum a;
 
 	coport_type = coport_gettype(port);
 	if (coport_type == COCHANNEL)
@@ -731,37 +768,63 @@ do_benchmark_recv(void **buf, size_t buffer_length, coport_t *port)
 	//get initial values for counters, for later comparison
 	if (!aggregate_mode) {
 		getrusage(RUSAGE_SELF, &start_rusage);
-		clock_gettime(CLOCK_REALTIME_PRECISE, &start_ts);
+		clock_gettime(CLOCK_MONOTONIC_PRECISE, &start_ts);
 		statcounters_sample(&start_bank);
 	}
 
 	//perform operation
-	if (coport_type != COCARRIER)
-		status = corecv(port, (void**)&buffer, buffer_length);
-	else
-		status = corecv(port, (void**)&cocarrier_buf, buffer_length);
+	status = corecv(port, buf, buffer_length);
+	a = dummy_workload((char *)*buf, status);
 
 	//get new values for counters
 	if (!aggregate_mode) {
 		statcounters_sample(&end_bank);
-		clock_gettime(CLOCK_REALTIME_PRECISE, &end_ts);
+		clock_gettime(CLOCK_MONOTONIC_PRECISE, &end_ts);
 		getrusage(RUSAGE_SELF, &end_rusage);
 	}
+	if (aggregate_mode)
+		return (&dummy);
+	
+	result = calloc(1, sizeof(struct benchmark_result));
 
+	if (coport_type != COCARRIER) {
+		if (!dummy_workload_enabled && status > 0)
+			checksum = do_dummy_workload((char *)*buf, status);
+		else
+			checksum = a;
+		result->sum = checksum;
+	} else if (status > 0) {
+		result->sum.buf = calloc(1, status);
+		memcpy(result->sum.buf, *buf, status);
+	}
+	
 	if (status < 0) {
 		if (errno == EAGAIN && coport_type != COPIPE)
 			return (NULL); //message not available
 		err(EX_SOFTWARE, "error occurred in corecv for coport type %d", coport_type);
 	}
-	
 
-	if (aggregate_mode)
-		return (&dummy);
 	//calculate differences in counters
-	result = calloc(1, sizeof(struct benchmark_result));
-	clock_diff(&result->timespec_diff, &end_ts, &start_ts);
+	if (coport_type != COPIPE) {
+		clock_diff(&result->timespec_diff, &end_ts, &start_ts);
+		statcounters_diff(&result->statcounter_diff, &end_bank, &start_bank);
+	} else {
+		statcounters_bank_t tmp_bank;
+		struct timespec tmp_ts;
+
+		get_internal_clock_copipe_corecvA(&tmp_ts);
+		clock_diff(&result->timespec_diff, &tmp_ts, &start_ts);
+		get_internal_clock_copipe_corecvB(&tmp_ts);
+		clock_diff(&tmp_ts, &end_ts, &tmp_ts);
+		timespecadd(&result->timespec_diff, &tmp_ts, &result->timespec_diff);
+
+		get_internal_statcounters_copipe_corecvA(&tmp_bank);
+		statcounters_diff(&result->statcounter_diff, &tmp_bank, &start_bank);
+		get_internal_statcounters_copipe_corecvB(&tmp_bank);
+		statcounters_diff(&tmp_bank, &end_bank, &tmp_bank);
+		statcounter_sum(&result->statcounter_diff, &tmp_bank);
+	}
 	rusage_diff(&result->rusage_diff, &end_rusage, &start_rusage);
-	statcounters_diff(&result->statcounter_diff, &end_bank, &start_bank);
 	result->op = OP_CORECV;
 	result->buf_len = buffer_length;
 	result->coport_type = coport_type;
@@ -791,6 +854,7 @@ do_benchmark_run(coport_op op_mode, coport_t *port)
 	} 
 	if (aggregate_mode)
 		return;
+
 	pthread_mutex_lock(&results_mtx);
 	SLIST_INSERT_HEAD(&results_list, result, entries);
 	pthread_mutex_unlock(&results_mtx);
@@ -854,11 +918,6 @@ do_benchmark(coport_op op_mode)
 			aggregate_sample_start(result, op_mode, COPIPE);
 		}
 		for (i = 0; i < iterations; i++) {
-			if (op_mode == OP_COSEND) {
-				ts.tv_nsec = 1;
-				ts.tv_sec = 0;
-				nanosleep(&ts, NULL);
-			}
 			do_benchmark_run(op_mode, copipe);
 		}
 		if (aggregate_mode)
@@ -867,18 +926,23 @@ do_benchmark(coport_op op_mode)
 	}
 
 	if (cocarrier_enabled) {
+		if (op_mode == OP_CORECV && enable_qemu_tracing)
+			sleep(5);
 		if (aggregate_mode){
 			result = calloc(1, sizeof(struct benchmark_result));
 			aggregate_sample_start(result, op_mode, COCARRIER);
 		}
 		for (i = 0; i < iterations; i++) {
 			do_benchmark_run(op_mode, cocarrier);
-			cocarrier_msgs[i] = cocarrier_buf;
+			if (op_mode == OP_CORECV)
+				cocarrier_msgs[i] = cocarrier_buf;
 		}
 		if (aggregate_mode)
 			aggregate_sample_end(result, op_mode, COCARRIER);
-		for (i = 0; i < iterations; i++)
-			coport_msg_free(cocarrier, cocarrier_msgs[i]);
+		if (op_mode == OP_CORECV) {
+			for (i = 0; i < iterations; i++)
+				coport_msg_free(cocarrier, cocarrier_msgs[i]);
+		}
 	}
 	if (cochannel_enabled) {
 		if (message_len > COPORT_BUF_LEN)
@@ -915,6 +979,7 @@ process_results(void)
 	ssize_t buf_len;
 	pid_t pid;
 	int status;
+	bool incl_headers;
 
 	bool started[3] = {false, false, false};
 	int idx_a, idx_b;
@@ -941,25 +1006,59 @@ process_results(void)
 		case COCARRIER:
 			phase = strdup("COCARRIER");
 			idx_b = 1;
+			run->sum = do_dummy_workload(run->sum.buf, message_len);
 			break;
 		case COCHANNEL:
 			phase = strdup("COCHANNEL");
 			idx_b = 2;
 			break;
 		default:
-			phase = strdup("UNKNOWN/UNSPECIFIED COPORT TYPE");
+			phase = strdup("UNKNOWN/UNSPECIFIED COPORT TYPE-");
 			break;
 		}
 		printable_bw = ((float)run->buf_len / 1024.0) / (((float) run->timespec_diff.tv_sec + (float)run->timespec_diff.tv_nsec) / 1000000000);
-		printf("%s -- %s: %.2FKB/s\n", progname, phase, printable_bw);
+
+		if (!run->sum.is_sha) {
+			printf("%s -- %s: %.2FKB/s (checksum: %lx)\n", progname, phase, printable_bw, run->sum.sum);
+		} else {
+			printf("%s -- %s: %.2FKB/s (checksum: ", progname, phase, printable_bw);
+			for (size_t i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+				printf("%02x", run->sum.sha_sum[i]);
+			}
+			printf(")\n");
+		}
 		if (format != HUMAN_READABLE) {
 			filename = calloc(sizeof(char), 255);
 			filename_rusage = calloc(sizeof(char), 255);
 			bandwidth = calloc(sizeof(char), 255);
+
 			sprintf(filename, "/tmp/%s_b%lu.csv", phase, message_len);
 			sprintf(filename_rusage, "/tmp/%s_b%lu_rusage.csv", phase, message_len);
 			sprintf(bandwidth, "%.2FKB/s", printable_bw);
-			if (started[idx_b]) {
+
+			if (!started[idx_b]) {
+				int s = open(filename, O_RDONLY | O_CREAT | O_EXCL);
+				incl_headers = (s != -1);
+				if (incl_headers)
+					close(s);
+			} else 
+				incl_headers = false;
+
+			if (phase != NULL) 
+				free(phase);
+			phase = calloc(sizeof(char), (2 * SHA256_DIGEST_LENGTH) + 2);
+			phase[0] = '-';
+			if (!run->sum.is_sha) {
+				sprintf(phase + 1, "%lx", run->sum.sum);
+			} else {
+				size_t i;
+				for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+					sprintf(phase + 1 + (i * 2), "%02x", run->sum.sha_sum[i]);
+				}
+				phase[1 + (i * 2)] = '\0';
+			}
+
+			if (!incl_headers) {
 				outfile = fopen(filename, "a"); //files closed by *dump_with_args
 				outfile_rusage = fopen(filename_rusage, "a");
 				
@@ -990,6 +1089,8 @@ thread_main(void *args)
 	argp = args;
 	coport_op op_mode = argp->thr_mode;
 
+	sha_ctx = calloc(1, sizeof(SHA256_CTX));
+	SHA256_Init(sha_ctx);
 	sleep(2);
 
 	if (op_mode == OP_CORECV) {
@@ -1009,12 +1110,19 @@ thread_main(void *args)
             pid_t pid;
 			int status;
 			
-			kill(-coprocd_pid, SIGKILL);
-			pid = waitpid(coprocd_pid, &status, (WEXITED));
+			if (enable_qemu_tracing) {
+				// generate coredumps so instruction traces are readable
+				kill(-coprocd_pid, SIGABRT);
+				pid = waitpid(coprocd_pid, &status, (WEXITED));
+				kill(0, SIGABRT);
+			} else {
+				kill(-coprocd_pid, SIGKILL);
+				pid = waitpid(coprocd_pid, &status, (WEXITED));
+			}
 		}
     }
 
-	return (args);
+	return (NULL);
 }
 
 static bool
@@ -1043,10 +1151,16 @@ run_in_thread(void)
 	struct sched_param sched_params;
 	struct thr_arg args, args2;
 	pthread_mutexattr_t mtxattr;
+	pthread_condattr_t cndattr;
 	int error;
 
 	pthread_mutexattr_init(&mtxattr);
+	pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_ERRORCHECK);
 	pthread_mutex_init(&results_mtx, &mtxattr);
+
+	pthread_condattr_init(&cndattr);
+	pthread_cond_init(&result_cnd, &cndattr);
+	
 	pthread_attr_init(&thr_attr);
 	pthread_attr_init(&thr_attr2);
 
@@ -1076,7 +1190,6 @@ run_in_thread(void)
 	args2.thr_mode = OP_COSEND;
 	pthread_create(&thr2, &thr_attr2, thread_main, &args2);
 
-	pthread_join(thr2, NULL);
 	pthread_join(thr, NULL);
 }
 
@@ -1085,7 +1198,7 @@ int main(int argc, char *const argv[])
 	int opt, error;
 	char *strptr;
 
-	while((opt = getopt(argc, argv, "sb:i:ah")) != -1) {
+	while((opt = getopt(argc, argv, "sb:i:ahSPBdQlc")) != -1) {
 		switch (opt) {
 		case 'h':
 			format = HUMAN_READABLE;
@@ -1106,12 +1219,41 @@ int main(int argc, char *const argv[])
 			if (*optarg == '\0' || *strptr != '\0' || iterations <= 0)
 				err(EX_USAGE, "invalid number of iterations");
 			break;
+		case 'l':
+			enable_copipe_sleep();
+			break;
+		case 'P':
+			copipe_enabled = true;
+			break;
+		case 'S':
+			cocarrier_enabled = true;
+			break;
+		case 'B':
+			cochannel_enabled = true;
+			break;
+		case 'c':
+			sha_workload_enabled = true;
+			dummy_workload_enabled = true;
+			break;
+		case 'd':
+			sha_workload_enabled = false;
+			dummy_workload_enabled = true;
+			break;
+		case 'Q':
+			enable_qemu_tracing = true;
+			break;
 		case '?':
 		default: 
 			err(EX_USAGE, "invalid flag '%c'", (char)optopt);
 			break;
 		}
 	}
+	if (!(copipe_enabled || cocarrier_enabled || cochannel_enabled)) {
+		copipe_enabled = true;
+		cocarrier_enabled = true;
+		cochannel_enabled = true;
+	}
+
 #ifndef BMARK_PROC
 	recver_pid = getpid();
 

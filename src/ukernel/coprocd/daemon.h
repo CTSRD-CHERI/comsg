@@ -136,7 +136,7 @@ struct ukernel_daemon {
     _Atomic pid_t pid;
     daemon_failure_mode fail_act;
     daemon_flags flags;
-    daemon_status status;
+    _Atomic daemon_status status;
 };
 
 struct ukernel_module {

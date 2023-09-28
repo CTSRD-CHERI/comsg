@@ -36,7 +36,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-coport_status_t acquire_coport_status(const coport_t *port, coport_status_t expected, coport_status_t desired);
+coport_status_t acquire_coport_status(const coport_t *port, coport_status_t expected, coport_status_t desired, size_t len);
 void release_coport_status(const coport_t *port, coport_status_t desired);
 ssize_t copipe_send(const coport_t *port, const void *buf, size_t len);
 ssize_t cochannel_send(const coport_t *port, const void *buf, size_t len);

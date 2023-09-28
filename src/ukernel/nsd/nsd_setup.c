@@ -45,6 +45,7 @@
 #include <comsg/namespace.h>
 #include <comsg/namespace_object.h>
 
+#include <cheri/cherireg.h>
 #include <err.h>
 #include <sysexits.h>
 #include <sys/auxv.h>
@@ -53,7 +54,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 
 static coservice_t *fast_endpoints = NULL;
 

@@ -51,10 +51,7 @@ set_sigmask(int signo)
     int error;
     sigset_t newmask;
 
-    error = pthread_sigmask(SIG_SETMASK, NULL, &oldmask);
-
     error = sigemptyset(&newmask);
-    error = sigorset(&newmask, &oldmask, &newmask);
     error = sigaddset(&newmask, signo);
 
     error = pthread_sigmask(SIG_SETMASK, &newmask, &oldmask);
@@ -72,7 +69,7 @@ add_sigmask(int signo)
     } else {
         error = sigemptyset(&newmask);
         error = sigaddset(&newmask, signo);
-        error = pthread_sigmask(SIG_BLOCK, &newmask, NULL);
+        error = pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
     }
 }
 
@@ -83,6 +80,8 @@ clear_sigmask(void)
 
     assert(set_oldmask);
     error = pthread_sigmask(SIG_SETMASK, &oldmask, NULL);
+    set_oldmask = false;
+    sigemptyset(&oldmask);
 }
 
 char *

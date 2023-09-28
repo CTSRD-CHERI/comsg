@@ -37,6 +37,7 @@
 #include "runloop.h"
 
 #include <signal.h>
+#include <stdatomic.h>
 #include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/types.h>
@@ -77,7 +78,7 @@ daemon_died(int sig, siginfo_t *info, ucontext_t *uap)
     d = find_daemon(child);
     m = module_from_daemon(d);
 
-    d->status = DIED;
+    atomic_store(&d->status, DIED);
     if (m->type == CORE && d->fail_act == HCF)
         halt_and_catch_fire(d);
     else if (d->fail_act == KILL)

@@ -73,7 +73,7 @@ init_daemon(struct ukernel_module *m, struct ukernel_daemon *d)
     int error;
     pid_t pid;
 
-    d->status = STARTING;
+    atomic_store(&d->status, STARTING);
 
     error = spawn_daemon_initializer(d);
     if (error != 0)
@@ -104,7 +104,7 @@ kill_and_reap_daemon(struct ukernel_daemon *d)
     pid = waitpid(d->pid, &status, (WNOHANG | WEXITED));
     if (pid == d->pid) {
         d->pid = 0;
-        d->status = KILLED;
+        atomic_store(&d->status, KILLED);
     } else if (pid == 0) {
         _exit(EX_SOFTWARE); /* something else reaped first */
     } else if (pid == -1) 
@@ -139,7 +139,7 @@ restart_daemon(struct ukernel_daemon *d)
         kill_and_reap_daemon(d);
     if (error != 0)
         return (error);
-    d->status = STARTING;
+    atomic_store(&d->status, STARTING);
     new_pid = spawn_daemon_proc(m, d);
     if (new_pid == -1)
         return (-1);

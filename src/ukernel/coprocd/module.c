@@ -78,8 +78,11 @@ init_module(struct ukernel_module *module)
         if (error == -1)
             return (-1);
         if ((d->flags & SYNCHRONOUS) != 0) {
-            while (d->status != CONTINUING && d->status != RUNNING) {
-                if (d->status != STARTING) {
+            for (;;) {
+                daemon_status status = atomic_load(&d->status);
+                if (status == CONTINUING || status == RUNNING)
+                    break;
+                else if (status != STARTING) {
                     warn("%s status is not STARTING, CONTINUING, or RUNNING", d->name);
                     return (-1);
                 }
@@ -114,15 +117,15 @@ kill_module(struct ukernel_module *m, struct ukernel_daemon *reason)
         return (m->ndaemons - 1);
     } else {
         if (d != reason) {
+            atomic_store(&d->status, KILLED);
             kill(d->pid, SIGKILL);
-            d->status = KILLED;
         }
 
         for (i = 1; i < m->ndaemons; i++) {
             d = &modules[i].daemons[i];
             if (d != reason) {
+                atomic_store(&d->status, KILLED);
                 kill(d->pid, SIGKILL);
-                d->status = KILLED;
             }
         }
 
@@ -157,7 +160,7 @@ kill_and_reap_module(struct ukernel_module *m, struct ukernel_daemon *d)
             /* set the correct status value, however */
             kd->pid = 0;
             if (kd != d)
-                kd->status = DIED;
+                atomic_store(&kd->status, DIED);
             continue; 
         } else if (killed == -1) {
             if (errno != EINVAL) //already reaped

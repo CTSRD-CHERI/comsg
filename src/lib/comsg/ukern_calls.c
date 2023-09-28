@@ -83,12 +83,20 @@ init_ukern_calls(void)
 	root_ns = NULL;
 }
 
+static bool
+is_core_call(cocall_num_t func)
+{
+	if (func == COCALL_CODISCOVER || func == COCALL_COSELECT || func == COCALL_CODISCOVER2)
+		return (true);
+	return (false);
+}
+
 coservice_t *
 get_ukernel_service(cocall_num_t func)
 {
 	nsobject_t *service_obj;
 	coservice_t *s, *tmp;
-	void *scb;
+	void *scb = NULL;
 
 	if (((s = atomic_load(&ukernel_services[func])) == NULL)) {
 		service_obj = coselect(ukern_func_names[func], COSERVICE, root_ns);
@@ -98,7 +106,8 @@ get_ukernel_service(cocall_num_t func)
 		}
 		atomic_compare_exchange_strong(&ukernel_services[func], &s, service_obj->coservice);
 		tmp = codiscover(service_obj, &scb);
-		set_ukern_target(func, scb);
+		if (tmp != NULL && scb != NULL)
+			set_ukern_target(func, scb);
 	} else {
 		if (get_cocall_target(ukern_call_set, COCALL_CODISCOVER2) == NULL)  {
 			errno = EDOOFUS;
@@ -130,6 +139,7 @@ should_init_thread(void)
 	res |= (atomic_load(&ukernel_services[COCALL_CODISCOVER]) == NULL);
 	res |= (atomic_load(&ukernel_services[COCALL_COSELECT]) == NULL);
 	res |= (atomic_load(&ukernel_services[COCALL_CODISCOVER2]) == NULL);
+	res &= (get_global_target(COCALL_CODISCOVER) != NULL && get_global_target(COCALL_COSELECT) != NULL);
 	return (res);
 }
 
@@ -219,15 +229,21 @@ call_ukern_target(cocall_num_t func, comsg_args_t *args)
 }
 
 static int
-call_ukern_service(cocall_num_t func, comsg_args_t *args, void *scb)
+call_ukern_service(cocall_num_t func, comsg_args_t *args)
 {
 	int error = 0;
+	void *scb = NULL;
 	for(;;) {
 		error = call_ukern_target(func, args);
 		if (error != 0) { /* try the alternative endpoints if we failed because it's busy, else fail */
 			if (errno == EBUSY) {
-				scb = refresh_target_scb(func);
-				continue;
+				if (scb == NULL) {
+					scb = refresh_target_scb(func);
+					continue;
+				} else if (scb == refresh_target_scb(func)) {
+					errno = EBUSY;
+					return (-1);
+				}
 			} else
 				return (error);
 		}
@@ -245,13 +261,14 @@ ukern_call(cocall_num_t func, comsg_args_t *args)
 	
 	if ((func_scb = get_cocall_target(ukern_call_set, (int)func)) == NULL) {
 		if ((get_global_target(COCALL_CODISCOVER) == NULL) || (get_global_target(COCALL_COSELECT) == NULL)) {
-			errno = ESRCH;
+			errno = ENOTCONN;
+			abort();
 			err(EX_SOFTWARE, "%s: coproc_init either failed or has not been called; attempted call was %s", __func__, ukern_func_names[func]);
 		} else if (should_init_thread())
 			init_new_thread_calls();
 		get_ukernel_service(func);
 	}
-	return (call_ukern_service(func, args, func_scb));
+	return (call_ukern_service(func, args));
 }
 
 void
@@ -267,7 +284,7 @@ coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns)
 	int error;
 
 	memset(&cocall_args, '\0', sizeof(cocall_args));
-	if (strlen(name) > NS_NAME_LEN) {
+	if (strnlen(name, NS_NAME_LEN) == NS_NAME_LEN) {
 		errno = ENAMETOOLONG;
 		err(EX_SOFTWARE, "%s: name exceeds maximum supported length of %lu", __func__, NS_NAME_LEN);
 	}
@@ -345,9 +362,11 @@ codiscover(nsobject_t *nsobj, void **scb)
 	cocall_args.scb_cap = NULL;
 	
 	error = ukern_call(COCALL_CODISCOVER, &cocall_args);
-	if (error == -1)
+	if (error == -1) {
+		if (errno == EAGAIN)
+			return (NULL);
 		err(EX_SOFTWARE, "%s: error performing cocall to codiscover", __func__);
-	else if (cocall_args.status == -1) {
+	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		err(EX_SOFTWARE, "%s: error during cocall to codiscover", __func__);
 		return (NULL);
@@ -470,9 +489,12 @@ coproc_init(namespace_t *root_ns_cap, void *coinsert_scb, void *coselect_scb, vo
 		err(EX_SOFTWARE, "%s: coproc_init failed but did not report an error", __func__);
 	}
 	root_ns = cocall_args.ns_cap;
-	set_ukern_target(COCALL_COINSERT, cocall_args.coinsert);
-	set_ukern_target(COCALL_CODISCOVER, cocall_args.codiscover);
-	set_ukern_target(COCALL_COSELECT, cocall_args.coselect);
+	if (cocall_args.coinsert != NULL)
+		set_ukern_target(COCALL_COINSERT, cocall_args.coinsert);
+	if (cocall_args.codiscover != NULL)
+		set_ukern_target(COCALL_CODISCOVER, cocall_args.codiscover);
+	if (cocall_args.coselect != NULL)
+		set_ukern_target(COCALL_COSELECT, cocall_args.coselect);
 	
 	return (cocall_args.ns_cap);
 }
@@ -880,4 +902,14 @@ coport_msg_free(coport_t *port, void *ptr)
     }
 	
 	return (cocall_args.status);
+}
+
+void begin_cocall(void)
+{
+	return;
+}
+
+void end_cocall(void)
+{
+	return;
 }

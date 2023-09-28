@@ -130,7 +130,6 @@ copoll_notify(coport_t *cocarrier, coport_eventmask_t event)
     	status = COPORT_DONE;
     	atomic_compare_exchange_strong_explicit(&cocarrier->info->status, &status, COPORT_OPEN, memory_order_release, memory_order_relaxed);
     }
-	
 }
 
 

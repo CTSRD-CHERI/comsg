@@ -43,10 +43,13 @@
 #include <stdlib.h>
 #include <sched.h>
 #include <pthread.h>
+#include <signal.h>
+
 #include <string.h>
 #include <sysexits.h>
 #include <sys/fcntl.h>
 #include <sys/errno.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -98,9 +101,12 @@ do_procdeath_test(void)
 	coevent_t *death = NULL;
 	comsg_attachment_set_t oob;
 	int error;
+	struct timespec timeout, a, b;
 
 	void **scbs, *scb;
 	void **capv;
+
+	printf("coproctest: starting procdeath test...\n");
 
 	fmap = spawn_slow_worker(NULL, ccb_example, NULL);
 	scbs = get_worker_scbs(fmap);
@@ -114,6 +120,8 @@ do_procdeath_test(void)
 	char *buf = calloc(1, sizeof(coevent_t *));
 
 	cocallback_func_t *ccb_func = ccb_register(scb, FLAG_SLOCALL);
+	if (ccb_func == NULL)
+		err(EX_SOFTWARE, "%s: failed to register callback", __func__);
 
 	pthread_mutex_lock(&procdeath);
 	
@@ -132,12 +140,25 @@ do_procdeath_test(void)
 	death = oob.attachments[0].item.coevent;
 	ccb_args.len = sizeof(comsg_args_t);
 	ccb_args.cocall_data = (void *)&args;
-	ccb_install(ccb_func, &ccb_args, death);
+	error = ccb_install(ccb_func, &ccb_args, death);
+	if (error < 0)
+		err(EX_SOFTWARE, "%s: failed to install callback for coeventtest death", __func__);
 	error = cosend(copipe, buf, sizeof(coevent_t *));
     if (error < 0)
 		err(EX_SOFTWARE, "%s: failed to cosend from coeventtest via copipe", __func__);
-	pthread_cond_wait(&proc_died, &procdeath);
-	printf("coproctest: coeventd test passed\n");
+	clock_gettime(CLOCK_REALTIME, &a);
+	b.tv_nsec = 0;
+	b.tv_sec = 30;
+	timespecadd(&a, &b, &timeout);
+	
+	error = pthread_cond_timedwait(&proc_died, &procdeath, &timeout);
+	if (error == ETIMEDOUT)
+		printf("coproctest: %s: coeventtest timed out... FAILED\n", __func__);
+	else if (error != 0)
+		err(EX_SOFTWARE, "coproctest: %s: could not wait for procdeath condition", __func__);
+	else
+		printf("coproctest: woken up by coeventd. \t\t\tsuccess!\n");
+		
 	pthread_mutex_unlock(&procdeath);
 }
 
@@ -165,7 +186,7 @@ do_cocarrier(void *argp)
 	error = copoll(&pct, 1, -1);
 	if (error == -1) {
 		printf("\t\t\tfailed\n");
-		err(errno, "do_cocarrier: copoll failed");
+		err(EX_SOFTWARE, "do_cocarrier: copoll failed");
 	} else
 		printf("coproctest: polling coport... \t\t\tsuccess!\n");
 	pthread_mutex_lock(&start);
@@ -178,9 +199,9 @@ do_cocarrier(void *argp)
 		if (oob.attachments[0].item.coport == args->port)
 			printf("\t\tsuccess!\ncoproctest: (received \"%s\" and coport handle)\n", (*result_str));
 		else
-			err(errno, "coproctest: do_tests: corecv failed");
+			err(EX_SOFTWARE, "coproctest: do_tests: corecv failed");
 	} else
-		err(errno, "coproctest: do_tests: corecv failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: corecv failed");
 	pthread_mutex_unlock(&start);
 	return (NULL);
 }
@@ -223,7 +244,7 @@ coproc_init_lbl:
 			goto coproc_init_lbl;
 		}
 		printf("\n");
-		err(errno, "do_tests: coproc_init failed");
+		err(EX_SOFTWARE, "do_tests: coproc_init failed");
 	}
 	
 	printf("coproctest: creating namespace...");
@@ -236,7 +257,7 @@ cocreate_lbl:
 			ns_name[10]++;
 			goto cocreate_lbl;
 		}
-		err(errno, "coproctest: do_tests: cocreate failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: cocreate failed");
 	}
 	
 	printf("coproctest: creating named COCHANNEL...");
@@ -244,7 +265,7 @@ cocreate_lbl:
 	if (port_obj != NULL)
 		printf("\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: open_named_coport failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: open_named_coport failed");
 	port = port_obj->coport;
 	
 	printf("coproctest: sending message...");
@@ -252,7 +273,7 @@ cocreate_lbl:
 	if (sent > 0)
 		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\")\n", test_str);
 	else
-		err(errno, "coproctest: do_tests: cosend failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: cosend failed");
 	
 	printf("coproctest: receiving message...");
 	recv = malloc(strlen(test_str)+1);
@@ -260,7 +281,7 @@ cocreate_lbl:
 	if (recvd > 0)
 		printf("\t\tsuccess!\ncoproctest: (received \"%s\")\n", recv);
 	else
-		err(errno, "coproctest: do_tests: corecv failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: corecv failed");
 	free(recv);
 	
 	printf("coproctest: deleting ns object...");
@@ -268,7 +289,7 @@ cocreate_lbl:
 	if (error == 0)
 		printf("\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: delete failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: delete failed");
 	port_obj = NULL;
 
 	printf("coproctest: closing coport...");
@@ -276,7 +297,7 @@ cocreate_lbl:
 	if (error == 0)
 		printf("\t\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: coclose failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: coclose failed");
 	port = NULL;
 
 	printf("coproctest: creating reservation...");
@@ -284,21 +305,21 @@ cocreate_lbl:
 	if (port_obj != NULL)
 		printf("\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: coinsert failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: coinsert failed");
 
 	printf("coproctest: creating unnamed COPIPE...");
 	port = open_coport(COPIPE);
 	if (port != NULL)
 		printf("\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: open_coport failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: open_coport failed");
 	
 	printf("coproctest: updating RESERVATION->COPORT");
 	port_obj = coupdate(port_obj, COPORT, port);
 	if (port_obj != NULL)
 		printf("\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: coupdate failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: coupdate failed");
 	
 	printf("coproctest: sending message...");
 	recv = malloc(strlen(test_str)+1);
@@ -312,14 +333,14 @@ cocreate_lbl:
 	if (sent > 0)
 		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\")\n", test_str);
 	else
-		err(errno, "coproctest: do_tests: cosend failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: cosend failed");
 	
 	printf("coproctest: receiving message...");
 	pthread_join(recvr, NULL);
 	if (recvd > 0)
 		printf("\t\tsuccess!\ncoproctest: (received \"%s\")\n", recv);
 	else
-		err(errno, "coproctest: do_tests: corecv failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: corecv failed");
 	free(recv);
 	recv = NULL;
 
@@ -328,35 +349,35 @@ cocreate_lbl:
 	if (error == 0)
 		printf("\t\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: coclose failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: coclose failed");
 
 	printf("coproctest: deleting coport namespace object...");
 	error = codelete(port_obj, proc_ns);
 	if (error == 0)
 		printf("\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: delete failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: delete failed");
 
 	printf("coproctest: creating unnamed COCARRIER...");
 	port = open_coport(COCARRIER);
 	if (port != NULL)
 		printf("\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: open_coport failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: open_coport failed");
 
 	printf("coproctest: naming coport...");
 	port_obj = coinsert("test_coport", COPORT, port, proc_ns);
 	if (port_obj != NULL)
 		printf("\t\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: coinsert failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: coinsert failed");
 
 	make_pollcoport(&pct, port, COPOLL_OUT);
 	printf("coproctest: polling coport (is send possible?)...\n");
 	error = copoll(&pct, 1, 0);
 	if (error == -1) {
 		printf("\t\t\tfailed\n");
-		err(errno, "do_cocarrier: copoll failed");
+		err(EX_SOFTWARE, "do_cocarrier: copoll failed");
 	}
 	else
 		printf("coproctest: polling coport... \t\t\tsuccess!\n");
@@ -378,7 +399,7 @@ cocreate_lbl:
 	if (sent > 0)
 		printf("\t\t\tsuccess!\ncoproctest: (sent \"%s\" and handle to coport)\n", test_str);
 	else
-		err(errno, "coproctest: do_tests: cosend_oob failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: cosend_oob failed");
 	
 	pthread_join(recvr, NULL);
 	
@@ -387,14 +408,14 @@ cocreate_lbl:
 	if (error == 0)
 		printf("\t\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: codelete failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: codelete failed");
 
 	printf("coproctest: closing coport...");
 	error = coclose(port);
 	if (error == 0)
 		printf("\t\t\tsuccess!\n");
 	else
-		err(errno, "coproctest: do_tests: coclose failed");
+		err(EX_SOFTWARE, "coproctest: do_tests: coclose failed");
 }
 
 static pid_t coprocd_pid;
@@ -428,6 +449,8 @@ int main(int argc, char *const argv[])
 
     do_tests();
     do_procdeath_test();
+
+	
 
 	return (0);
 }

@@ -116,9 +116,12 @@ init_core(void)
         if (daemon_pid == -1) 
             err(errno, "failed to start microkernel core daemon %s", d->name);
         if ((d->flags & SYNCHRONOUS) != 0) {
-            while (d->status != CONTINUING && d->status != RUNNING) {
-                if (d->status != STARTING) {
-                    warn("%s status is not STARTING, CONTINUING, or RUNNING", d->name);
+            for (;;) {
+                daemon_status status = atomic_load(&d->status);
+                if (status == CONTINUING || status == RUNNING)
+                    break;
+                else if (status != STARTING) {
+                    warn("%s status (%d) is not STARTING, CONTINUING, or RUNNING", d->name, status);
                 }
                 check_core(core_module, i);
                 sched_yield();
@@ -159,7 +162,7 @@ init_microkernel(void)
 
     /* Create microkernel as a new session */
     madvise(NULL, -1, MADV_PROTECT);
-    ukernel_sid = setsid();
+    ukernel_sid = setpgid(0, 0);
     /* Signal mask is inherited, we expect SIGCHLD, and we don't want to be interrupted */
     set_sigchld_handler(daemon_died);
     set_sigmask(SIGCHLD);

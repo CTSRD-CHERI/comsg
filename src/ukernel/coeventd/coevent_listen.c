@@ -49,6 +49,7 @@ static coevent_t *
 make_coevent_handle(coevent_t *coevent)
 {
 	//placeholder
+	coevent = cheri_setboundsexact(coevent, sizeof(coevent_t));
 	return (coevent);
 }
 
@@ -74,7 +75,14 @@ add_event_listener(comsg_args_t *cocall_args, void *token)
 	case PROCESS_DEATH:
 		/* event allocator must be the subject (i.e. the monitored process) */
 		target_pid = cogetpid2();
+		if (target_pid < 0) {
+			COCALL_ERR(cocall_args, EOPNOTSUPP);
+		}  else if (target_pid != cocall_args->subject.ces_pid) {
+			COCALL_ERR(cocall_args, EINTEGRITY);
+		}
 		coevent = allocate_procdeath_event(target_pid);
+		if (coevent == NULL)
+			COCALL_ERR(cocall_args, EINVAL);
 		break;
 	default:
 		COCALL_ERR(cocall_args, EINVAL);

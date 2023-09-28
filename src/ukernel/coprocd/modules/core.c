@@ -40,6 +40,7 @@
 #include <sys/errno.h>
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <sysexits.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -121,16 +122,20 @@ core_fini(void)
 void
 nsd_setup(comsg_args_t *cocall_args, void *token)
 {
+	int error;
 	UNUSED(token);
 	
-	pthread_mutex_lock(&ukernel_init_lock);
+	if ((error = pthread_mutex_lock(&ukernel_init_lock))) {
+		errno = error;
+		err(EX_SOFTWARE, "%s:could not acquire ukernel_init mutex", __func__);
+	}
 	/* clear old codiscover; whether valid or not it refers to the old universe */
-	nsd->status = CONTINUING;
 	codiscover_scb = NULL;
 	/* I give you: a root namespace capability, a scb capability for create nsobj (coinsert) and lookup nsobj (coselect) */
 	coinsert_scb = cocall_args->coinsert;
 	coselect_scb = cocall_args->coselect;
 	atomic_store_explicit(&root_namespace, cocall_args->ns_cap, memory_order_release);
+	atomic_store(&nsd->status, CONTINUING);
 
 	pthread_cond_signal(&coserviced_wakeup);
 	pthread_cond_wait(&nsd_wakeup, &ukernel_init_lock);
@@ -142,12 +147,20 @@ nsd_setup(comsg_args_t *cocall_args, void *token)
 void
 coserviced_setup(comsg_args_t *cocall_args, void *token)
 {
+	namespace_t *ns;
+	int error;
 	UNUSED(token);
 	
-	pthread_mutex_lock(&ukernel_init_lock);
-	if ((cocall_args->ns_cap = atomic_load_explicit(&root_namespace, memory_order_acquire)) == NULL) {
-		pthread_cond_wait(&coserviced_wakeup, &ukernel_init_lock);
+	if ((error = pthread_mutex_lock(&ukernel_init_lock))) {
+		errno = error;
+		err(EX_SOFTWARE, "%s:could not acquire ukernel_init mutex", __func__);
 	}
+	ns = atomic_load_explicit(&root_namespace, memory_order_acquire);
+	if (ns == NULL) {
+		pthread_cond_wait(&coserviced_wakeup, &ukernel_init_lock);
+		ns = atomic_load_explicit(&root_namespace, memory_order_acquire);
+	}
+	cocall_args->ns_cap = ns;
 	/* 
 	 * I give you: scb capability for codiscover 
 	 */
@@ -169,8 +182,8 @@ nsd_setup_complete(comsg_args_t *cocall_args, void *token)
 
 	atomic_store_explicit(&coproc_inited, true, memory_order_release);
 	
-	nsd->status = RUNNING;
-	coserviced->status = RUNNING;
+	atomic_store(&nsd->status, RUNNING);
+	atomic_store(&coserviced->status, RUNNING);
 
 	COCALL_RETURN(cocall_args, 0);
 }
@@ -179,10 +192,10 @@ void
 coeventd_setup_complete(comsg_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
-	if (coeventd->status == RUNNING)
+	if (atomic_load(&coeventd->status) == RUNNING)
 		COCALL_ERR(cocall_args, EAGAIN);
 
-	coeventd->status = RUNNING;
+	atomic_store(&coeventd->status, RUNNING);
 
 	COCALL_RETURN(cocall_args, 0);
 }
@@ -196,7 +209,7 @@ ipcd_setup_complete(comsg_args_t *cocall_args, void *token)
 
 	atomic_store_explicit(&ukern_inited, true, memory_order_release);
 
-	ipcd->status = RUNNING;
+	atomic_store(&ipcd->status, RUNNING);
 
 	COCALL_RETURN(cocall_args, 0);
 }

@@ -99,12 +99,14 @@ get_next_cocallback(coevent_t *event)
 
 	/* this function must only be called when we hold the in_progress lock */
 	in_progress = atomic_load_explicit(&event->in_progress, memory_order_acquire);
-	assert(in_progress != 0);
+	if (in_progress <= 0)
+		return (NULL);
 
 	ccb = STAILQ_FIRST(&event->callbacks);
-	if (ccb != NULL)
+	if (ccb != NULL) {
 		STAILQ_REMOVE_HEAD(&event->callbacks, next);
-	event->ncallbacks--;
+		event->ncallbacks--;
+	}
 	return (ccb);
 }
 

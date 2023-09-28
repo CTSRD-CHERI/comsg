@@ -44,7 +44,7 @@
 #include <comsg/comsg_args.h>
 #include <comsg/ukern_calls.h>
 
-
+#include <cheri/cherireg.h>
 #include <err.h>
 #include <sysexits.h>
 #include <sys/auxv.h>
@@ -148,5 +148,5 @@ coserviced_startup(void)
 
 	codiscover_scb = get_coservice_scb(unseal_endpoint(fast_endpoint));
 	coproc_init(NULL, NULL, NULL, codiscover_scb);
-	//coproc_init_done(); /* not needed; folded into coproc_init (see coprocd/modules/core.d) */
+	//coproc_init_done(); /* not needed; folded into coproc_init (see coprocd/modules/core.c) */
 }

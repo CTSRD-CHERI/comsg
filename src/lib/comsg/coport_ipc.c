@@ -50,6 +50,7 @@
 #include <sys/cdefs.h>
 #include <sys/errno.h>
 #include <sys/sysctl.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 nsobject_t *

@@ -60,13 +60,13 @@
     COPIPE    - direct copy ipc.whereby recipients publish a capability for the
                 sender to copy data into
 */
-typedef enum {COSEND, CORECV} coport_op_t;
+typedef enum {COPORT_OP_COSEND = 0, COPORT_OP_CORECV = 1, COPORT_OP_POLL = 2} coport_op_t;
 typedef enum {INVALID_COPORT = 0, COPIPE = 1, COCARRIER = 2, COCHANNEL = 3} coport_type_t;
 typedef enum {COPORT_CLOSED = 0, COPORT_OPEN = 1, COPORT_BUSY = 2, COPORT_READY = 4, COPORT_DONE = 8, COPORT_CLOSING = 16, COPORT_POLLING = 32} coport_status_t;
 typedef enum {NOEVENT = 0, COPOLL_CLOSED = 1, COPOLL_IN = 2, COPOLL_OUT = 4, COPOLL_RERR = 8, COPOLL_WERR = 16} coport_eventmask_t;
 typedef enum {RECV = 1, SEND = 2, CREAT = 4, EXCL = 8, ONEWAY = 16} coport_flags_t; //currently unimplemented
 
-#define COCARRIER_MSG_PERMS ( CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP )
+
 #define COPOLL_INIT_EVENTS ( COPOLL_OUT )
 
 #define COPORT_INFO_PERMS ( CHERI_PERM_STORE | CHERI_PERM_LOAD )
@@ -87,10 +87,13 @@ typedef enum {RECV = 1, SEND = 2, CREAT = 4, EXCL = 8, ONEWAY = 16} coport_flags
 #define COPIPE_RECVBUF_PERMS ( CHERI_PERM_STORE | CHERI_PERM_GLOBAL )
 #define COCARRIER_BUF_PERMS ( CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | COPORT_LOAD_CAP_BUFFER_PERMS | CHERI_PERM_GLOBAL )
 #define COCHANNEL_BUF_PERMS ( CHERI_PERM_STORE | CHERI_PERM_LOAD | CHERI_PERM_GLOBAL )
-#define DEFAULT_BUFFER_PERMS ( CHERI_PERM_LOAD_CAP | CHERI_PERM_LOAD | CHERI_PERM_GLOBAL )
+
+#define COPORT_INBUF_PERMS (CHERI_PERM_LOAD | CHERI_PERM_GLOBAL)
+#define COPORT_OUTBUF_PERMS (CHERI_PERM_STORE | CHERI_PERM_GLOBAL)
+
 
 //TODO-PBB: better definition of these
-#define COCARRIER_MAX_MSG_LEN (1024 * 1024)
+#define COCARRIER_MAX_MSG_LEN (1024 * 1024 * 2)
 #define COPORT_BUF_LEN (4096)
 
 #define COCARRIER_SIZE (COPORT_BUF_LEN / CHERICAP_SIZE)

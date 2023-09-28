@@ -51,6 +51,7 @@ coport_type_t coport_gettype(const coport_t *);
 void make_pollcoport(pollcoport_t *, coport_t *, coport_eventmask_t);
 void set_coport_handle_type(coport_t *, coport_type_t);
 
+void enable_copipe_sleep(void);
 __END_DECLS
 
 #endif

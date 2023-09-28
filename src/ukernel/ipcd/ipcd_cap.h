@@ -36,6 +36,7 @@
 
 int valid_coport(coport_t*);
 int valid_cocarrier(coport_t*);
+coport_type_t coport_gettype(coport_t *ptr);
 
 coport_t *unseal_coport(coport_t*);
 coport_t *seal_coport(coport_t*);

@@ -122,17 +122,43 @@ process_coport_handle(coport_t *port, coport_type_t type)
     return (port);
 } 
 
+/*
+ * Calculates a wait time based on a rough estimate of the memcpy bandwidth
+ */
+static struct timespec
+calculate_wait_time(size_t message_len)
+{
+    struct timespec result;
+
+    if (est_mem_bw == 0.0) {
+        result.tv_sec = 0;
+        result.tv_nsec = 0;
+        return result;
+    }
+    double length = (double)(message_len);
+    double time = length / est_mem_bw;
+    time = time / 50;
+    if (time > 0.5)
+        time = 0.5;
+    
+    result.tv_sec = time;
+    result.tv_nsec = (time - (long)(time)) * nanoseconds;
+    //printf("Estimated memory bandwidth: %.2FB/s; Wait time calculated:%.2Fs\n", est_mem_bw, time);
+    
+    return (result);
+}
+
 coport_status_t 
-acquire_coport_status(const coport_t *port, coport_status_t expected, coport_status_t desired)
+acquire_coport_status(const coport_t *port, coport_status_t expected, coport_status_t desired, size_t len)
 {
     coport_status_t status_val;
     _Atomic(coport_status_t) *status_ptr;
     int i;
-
+    
     i = 0;
     status_ptr = &port->info->status;
     status_val = expected;
-    for(;;) {
+    for(;;i++) {
         if (atomic_compare_exchange_strong_explicit(status_ptr, &status_val, desired, memory_order_acq_rel, memory_order_relaxed)) {
             return (status_val);
         } else {
@@ -145,9 +171,17 @@ acquire_coport_status(const coport_t *port, coport_status_t expected, coport_sta
                 status_val = expected;
                 break;
             }
-            if (!multicore || (i % 3) == 0) 
-                sched_yield(); 
-            i++;
+            // If single-core, we need to yield the CPU
+            // If no progress is happening, we should yield
+            // If we've been yielding for a long time, we should try a short sleep
+            if (!multicore || (i % 10) == 0 && (i / 10) != 0) {
+                if (len > 0 && ((i % 1000) == 0) && est_mem_bw != 0.0) {
+                    struct timespec wait = calculate_wait_time(len);
+                    clock_nanosleep(CLOCK_MONOTONIC_PRECISE, 0, &wait, NULL);
+                } else {
+                    sched_yield();
+                }
+            }
         }
     }
 }
@@ -157,6 +191,9 @@ release_coport_status(const coport_t *port, coport_status_t desired)
 {
     atomic_store_explicit(&port->info->status, desired, memory_order_release);
 }
+
+#define acquire_copipe_status(p, e, d, l) acquire_coport_status(p, e, d, l)
+#define release_copipe_status(p, d) release_coport_status(p, d)
 
 static bool
 check_coport_status(const coport_t *port, coport_status_t desired)
@@ -170,12 +207,12 @@ copipe_send(const coport_t *port, const void *buf, size_t len)
     void *out_buffer;
     coport_status_t status;
 
-    status = acquire_coport_status(port, COPORT_READY, COPORT_BUSY);
-    if ((status & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+    status = acquire_coport_status(port, COPORT_READY, COPORT_BUSY, 0);
+    if ((status == COPORT_CLOSING || status == COPORT_CLOSED)) {
         errno = EPIPE;
         return (-1);
     }
-    
+    buf = cheri_andperm(buf, COPORT_INBUF_PERMS);
     out_buffer = port->buffer->buf;
     if(cheri_gettag(out_buffer) == 0) {
         release_coport_status(port, COPORT_DONE);
@@ -201,6 +238,7 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
     ssize_t copied_bytes;
     char *port_buffer, *msg_buffer;
     coport_eventmask_t event;
+    coport_status_t status;
 
     port_size = port->info->length;
     new_len = len + port_size;
@@ -210,7 +248,8 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
         return (-1);
     }
 
-    if((acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY) & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY, len);
+    if ((status == COPORT_CLOSING || status == COPORT_CLOSED)) {
         errno = EPIPE;
         return (-1);
     }
@@ -225,7 +264,7 @@ cochannel_send(const coport_t *port, const void *buf, size_t len)
         return (-1);
     }
     port_buffer = port->buffer->buf;
-    msg_buffer = (char *)buf;
+    msg_buffer = (char *)cheri_andperm(buf, COPORT_INBUF_PERMS);
     
     new_end = (old_end + len) % COPORT_BUF_LEN;
     if (old_end + len > COPORT_BUF_LEN) {
@@ -265,8 +304,8 @@ cochannel_recv(const coport_t *port, void *buf, size_t len)
         return (-1);
     }
     new_len = port_size - len;
-    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
-    if((status & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY, len);
+    if ((status == COPORT_CLOSING || status == COPORT_CLOSED)) {
         /* port is closed */
         errno = EPIPE;
         return (-1);
@@ -279,7 +318,7 @@ cochannel_recv(const coport_t *port, void *buf, size_t len)
         errno = EAGAIN;
         return (-1);
     }
-    out_buffer = buf;
+    out_buffer = cheri_andperm(buf, COPORT_OUTBUF_PERMS);
     port_buffer = port->buffer->buf;
     port_buf_len = __builtin_cheri_length_get(port_buffer);
     old_start = port->info->start;
@@ -319,8 +358,8 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
 
     buf = cheri_andperm(buf, COPIPE_RECVBUF_PERMS);
 
-    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY);
-    if ((status & (COPORT_CLOSING | COPORT_CLOSED)) != 0) {
+    status = acquire_coport_status(port, COPORT_OPEN, COPORT_BUSY, len);
+    if ((status == COPORT_CLOSING || status == COPORT_CLOSED)) {
         errno = EPIPE;
         return (-1);
     }
@@ -328,7 +367,11 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
     port->buffer->buf = buf;
 
     release_coport_status(port, COPORT_READY);
-    acquire_coport_status(port, COPORT_DONE, COPORT_BUSY);
+    status = acquire_coport_status(port, COPORT_DONE, COPORT_BUSY, len);
+    if ((status == COPORT_CLOSING || status == COPORT_CLOSED)) {
+        errno = EPIPE;
+        return (-1);
+    }
 
     received_len = (ssize_t)port->info->length;
     port->buffer->buf = NULL;
@@ -339,6 +382,42 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
     return (received_len);
 }
 
+static void
+clock_diff(struct timespec *result, struct timespec *end, struct timespec *start)
+{
+	result->tv_sec = end->tv_sec - start->tv_sec;
+	result->tv_nsec = end->tv_nsec - start->tv_nsec;
+	if (result->tv_nsec < 0) {
+		result->tv_sec--;
+		result->tv_nsec += 1000000000L;
+	}
+}
+
+static void
+estimate_memory_bandwidth(void)
+{
+    char a[16 * 1024 * 1024];
+    char b[16 * 1024 * 1024];
+
+    struct timespec start, end, duration;
+    size_t length;
+    double time;
+
+    length = __builtin_cheri_length_get(a);
+    clock_gettime(CLOCK_MONOTONIC_PRECISE, &start);
+    memcpy(a, b, length);
+    clock_gettime(CLOCK_MONOTONIC_PRECISE, &end);
+
+    clock_diff(&duration, &end, &start);
+    time = (double)(duration.tv_sec) + ((double)(duration.tv_nsec) / nanoseconds);
+    est_mem_bw = (double)(length) / time;
+}
+
+void
+enable_copipe_sleep(void)
+{
+    estimate_memory_bandwidth();
+}
 
 __attribute__ ((constructor)) static void
 coport_ipc_utils_init(void)

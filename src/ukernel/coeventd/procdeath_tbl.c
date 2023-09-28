@@ -71,7 +71,7 @@ allocate_procdeath_event(pid_t pid)
 	int in_progress, error;
 
 	/* pid should be validated before calling this */
-	proc = &proc_table[pid];
+	proc = cheri_setboundsexact(&proc_table[pid], sizeof(coevent_t));
 
 	in_progress = 0;
 	if (!atomic_compare_exchange_strong_explicit(&proc->in_progress, &in_progress, 1, memory_order_acq_rel, memory_order_acquire)) {

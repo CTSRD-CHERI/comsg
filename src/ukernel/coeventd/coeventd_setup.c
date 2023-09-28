@@ -38,6 +38,7 @@
 #include <comsg/ukern_calls.h>
 #include <comsg/namespace_object.h>
 
+#include <cheri/cheric.h>
 #include <err.h>
 #include <sysexits.h>
 #include <sys/auxv.h>

@@ -58,9 +58,11 @@ void discover_coservice2(codiscover_args_t *cocall_args, void *token)
 	UNUSED(token);
 
 	coservice_t *service;
+	struct _coservice_endpoint *ep;
 
 	service = cocall_args->coservice;
-	cocall_args->scb_cap = get_coservice_scb(get_service_endpoint(service));
+	ep = get_service_endpoint(service);
+	cocall_args->scb_cap = get_coservice_scb(ep);
 	
 	COCALL_RETURN(cocall_args, 0);
 }
