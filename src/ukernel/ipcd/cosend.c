@@ -119,7 +119,7 @@ handle_attachments(comsg_attachment_t *attachments, size_t len)
 	return (attachment_buf);
 }
 
-void coport_send(coopen_args_t *cocall_args, void *token)
+void cocarrier_send(coopen_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	coport_status_t status;
@@ -191,4 +191,20 @@ void coport_send(coopen_args_t *cocall_args, void *token)
 
     copoll_notify(cocarrier, COPOLL_IN);
     COCALL_RETURN(cocall_args, msg_len);
+}
+
+void coport_send(coopen_args_t *cocall_args, void *token)
+{
+	switch (coport_gettype(cocall_args->cocarrier)) {
+	case COCARRIER:
+		cocarrier_send(cocall_args, token);
+		break;
+	case COPIPE:
+		COCALL_ERR(cocall_args, ENOSYS);
+		break;
+	default:
+		COCALL_ERR(cocall_args, ENOSYS);
+		break;
+	}
+	//return/error values set by type-specific handler functions or by fallback case
 }

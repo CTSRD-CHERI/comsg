@@ -51,8 +51,8 @@ validate_corecv_args(corecv_args_t *cocall_args)
 		return (1);
 }
 
-void 
-coport_recv(corecv_args_t *cocall_args, void *token) 
+static void 
+cocarrier_recv(corecv_args_t *cocall_args, void *token) 
 {
 	UNUSED(token);
 	coport_t *cocarrier;
@@ -118,3 +118,18 @@ coport_recv(corecv_args_t *cocall_args, void *token)
 	COCALL_RETURN(cocall_args, cheri_getlen(cocall_args->message));
 }
 
+void coport_recv(coopen_args_t *cocall_args, void *token)
+{
+	switch (coport_gettype(cocall_args->cocarrier)) {
+	case COCARRIER:
+		cocarrier_recv(cocall_args, token);
+		break;
+	case COPIPE:
+		COCALL_ERR(cocall_args, ENOSYS);
+		break;
+	default:
+		COCALL_ERR(cocall_args, ENOSYS);
+		break;
+	}
+	//return/error values set by type-specific handler functions or by fallback case
+}
