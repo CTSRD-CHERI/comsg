@@ -31,18 +31,41 @@
 #include "coopen.h"
 #include "coport_table.h"
 
+#include "ipcd.h"
 #include "ipcd_cap.h"
 
 #include <assert.h>
-#include <ccmalloc.h>
 #include <comsg/comsg_args.h>
 #include <comsg/coport.h>
 #include <comsg/utils.h>
-
+#include <stdlib.h>
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
+
+extern void begin_cocall(void);
+extern void end_cocall(void);
+
+#ifdef COPIPE_PTHREAD
+
+static pthread_mutexattr_t copipe_mtx_attr;
+static pthread_condattr_t copipe_cnd_attr;
+
+__attribute__((constructor)) static void
+init_copipe_sync_attributes(void)
+{
+	pthread_mutexattr_init(&copipe_mtx_attr);
+	pthread_mutexattr_setpshared(&copipe_mtx_attr, PTHREAD_PROCESS_SHARED);
+	pthread_mutexattr_setprotocol(&copipe_mtx_attr, PTHREAD_PRIO_INHERIT);
+	pthread_mutexattr_setrobust(&copipe_mtx_attr, PTHREAD_MUTEX_ROBUST);
+	pthread_mutexattr_settype(&copipe_mtx_attr, PTHREAD_MUTEX_ERRORCHECK);
+
+	pthread_condattr_init(&copipe_cnd_attr);
+	pthread_condattr_setpshared(&copipe_cnd_attr, PTHREAD_PROCESS_SHARED);
+	pthread_condattr_setclock(&copipe_cnd_attr, CLOCK_MONOTONIC);
+}
+#endif
 
 int validate_coopen_args(coopen_args_t *cocall_args)
 {
@@ -74,6 +97,11 @@ init_coport(coport_t *port, coport_type_t type)
 			port->info->event = NOEVENT;
 			port->buffer->buf = NULL;
 			port->buffer = cheri_andperm(port->buffer, COPIPE_BUFFER_PERMS);
+#ifdef COPIPE_PTHREAD
+			pthread_mutex_init(&port->cd->pipe_lock, &copipe_mtx_attr);
+			pthread_cond_init(&port->cd->pipe_wakeup, &copipe_cnd_attr);
+			port->cd->waiting = false;
+#endif
 			break;
 		case COCARRIER:
 			LIST_INIT(&port->cd->listeners);
@@ -90,6 +118,14 @@ init_coport(coport_t *port, coport_type_t type)
 			//should not be reached
 			break;
 	}
+	//pre-allocate cocarrier structs
+	if (port->type == COCARRIER) {
+		void **cocarrier_msg_buf = (void **)port->buffer->buf;
+		for (size_t i = 0; i < COCARRIER_SIZE; i++) {
+			cocarrier_msg_buf[i] = calloc(1, sizeof(struct cocarrier_message));
+		}
+	}
+
 	atomic_thread_fence(memory_order_release);
 	/* To synchronise with acquires in send/recv operations */
 }
@@ -99,11 +135,16 @@ void coport_open(coopen_args_t *cocall_args, void *token)
 	UNUSED(token);
 	coport_t *port_handle;
 
-	if(!can_allocate_coport(cocall_args->coport_type))
+	begin_cocall();
+	if(!can_allocate_coport(cocall_args->coport_type)) {
+		end_cocall();
 		COCALL_ERR(cocall_args, ENOMEM);
+	}
 	port_handle = allocate_coport(cocall_args->coport_type);
-	if (port_handle == NULL)
+	if (port_handle == NULL) {
+		end_cocall();
 		COCALL_ERR(cocall_args, ENOMEM);
+	}
 
 	init_coport(port_handle, cocall_args->coport_type);
 
@@ -111,5 +152,6 @@ void coport_open(coopen_args_t *cocall_args, void *token)
 	port_handle = seal_coport(port_handle);
 	cocall_args->port = port_handle;
 
+	end_cocall();
 	COCALL_RETURN(cocall_args, 0);
 }

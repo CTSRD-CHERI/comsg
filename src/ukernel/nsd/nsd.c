@@ -53,8 +53,6 @@
 #include "nsd_crud.h"
 #include "nsd_setup.h"
 
-
-#include <ccmalloc.h>
 #include <comsg/ukern_calls.h>
 #include <cocall/endpoint.h>
 
@@ -106,7 +104,6 @@ int main(int argc, char *const argv[])
 			break;
 		}
 	}
-	ccmalloc_init(buckets, nbuckets);
 	//we can dance if we want to
 	root_ns = new_namespace("coproc", ROOT, NULL);
 	init_services();

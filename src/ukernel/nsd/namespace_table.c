@@ -32,7 +32,6 @@
 #include "nsd_limits.h"
 #include "nsd_cap.h"
 
-#include <ccmalloc.h>
 #include <comsg/namespace.h>
 #include <comsg/namespace_object.h>
 #include <comsg/utils.h>
@@ -48,6 +47,9 @@
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <unistd.h>
+
+extern void begin_cocall();
+extern void end_cocall();
 
 static size_t max_namespaces = 0;
 static size_t max_nsobjects = 0;
@@ -114,7 +116,9 @@ new_namespace_entry(void)
 	ptr = cheri_setboundsexact(ptr, sizeof(namespace_t));
 	memset(ptr, 0, sizeof(namespace_t));
 
-	ptr->members = cocall_calloc(1, sizeof(struct _ns_members));
+	begin_cocall();
+	ptr->members = calloc(1, sizeof(struct _ns_members));
+	end_cocall();
 
 	atomic_fetch_add(&namespace_table.namespace_count, 1);
 
@@ -155,8 +159,10 @@ allocate_nsobject(namespace_t *parent)
 	struct _ns_member *obj_cap;
 	assert(NS_PERMITS_WRITE(parent));
 
-	obj_cap = cocall_malloc(sizeof(struct _ns_member));
+	begin_cocall();
+	obj_cap = malloc(sizeof(struct _ns_member));
 	obj_cap->nsobj = new_nsobject_entry();
+	end_cocall();
 	parent = unseal_ns(parent);
 	LIST_INSERT_HEAD(&parent->members->objects, obj_cap, entries);
 	parent->members->nobjects++;
@@ -176,8 +182,10 @@ allocate_namespace(namespace_t *parent, nstype_t type)
 	} else {
 		assert(NS_PERMITS_WRITE(parent));
 	}
-	obj_cap = cocall_malloc(sizeof(struct _ns_member));
+	begin_cocall();
+	obj_cap = malloc(sizeof(struct _ns_member));
 	obj_cap->ns = new_namespace_entry();
+	end_cocall();
 	parent = unseal_ns(parent);
 	LIST_INSERT_HEAD(&parent->members->namespaces, obj_cap, entries);
 	parent->members->nspaces++;

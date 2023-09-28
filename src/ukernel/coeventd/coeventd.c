@@ -35,7 +35,6 @@
 #include <comsg/coservice_provision.h>
 #include <comsg/ukern_calls.h>
 
-#include <ccmalloc.h>
 #include <err.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -78,7 +77,6 @@ int main(int argc, char *const argv[])
 			break;
 		}
 	}
-	ccmalloc_init(buckets, nbuckets);
 	coeventd_startup();
 
 	/* when new event types are added, this will likely need to change */

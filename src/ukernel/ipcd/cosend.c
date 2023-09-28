@@ -33,7 +33,6 @@
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
-#include <ccmalloc.h>
 #include <comsg/comsg_args.h>
 #include <comsg/coport.h>
 #include <comsg/utils.h>
@@ -43,10 +42,17 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/queue.h>
+#include <sys/mman.h>
+#include <err.h>
+
+extern void begin_cocall(void);
+extern void end_cocall(void);
 
 int validate_cosend_args(coopen_args_t *cocall_args)
 {
@@ -84,7 +90,7 @@ handle_attachments(comsg_attachment_t *attachments, size_t len)
 		return (NULL);
 
 	//copy into ukernel-owned buffer 
-	attachment_buf = cocall_calloc(len, sizeof(comsg_attachment_t));
+	attachment_buf = calloc(len, sizeof(comsg_attachment_t));
 	memcpy(attachment_buf, attachments, len * sizeof(comsg_attachment_t));
 
 	//perform some basic checks and remove any items that fail
@@ -124,21 +130,33 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
 	UNUSED(token);
 	coport_status_t status;
 	size_t port_len, index, new_len, msg_len;
+	size_t nattachments;
 	coport_eventmask_t event;
 	coport_t *cocarrier;
 	struct cocarrier_message **cocarrier_buf;
+	comsg_attachment_t *attachments;
 	struct cocarrier_message *msg;
+	void *msg_in, *msg_out, *msg_alloc;
+	int error;
+	bool locked;
 
-	msg_len = MIN(cocall_args->length, cheri_getlen(cocall_args->message));
-	msg = cocall_malloc(sizeof(struct cocarrier_message));
-	msg->buf = cocall_flexible_malloc(msg_len);
+	begin_cocall();
 
-	memcpy(msg->buf, cocall_args->message, msg_len);
-	msg->attachments = handle_attachments(cocall_args->oob_data.attachments, cocall_args->oob_data.len);
-	msg->nattachments = cocall_args->oob_data.len;
-	msg->freed = false;
-	msg->recvd = false;
+	msg_in = cheri_andperm(cocall_args->message, COPORT_INBUF_PERMS);
+	msg_len = MIN(cocall_args->length, cheri_getlen(msg_in));
+	msg_alloc = malloc(msg_len);
+	msg_out = cheri_andperm(msg_alloc, COPORT_OUTBUF_PERMS); //ensure no tags get through here
+	memcpy(msg_out, msg_in, msg_len);
 
+	nattachments = cocall_args->oob_data.len;
+	attachments = handle_attachments(cocall_args->oob_data.attachments, nattachments);
+	/*if ((cheri_getlen(msg->buf) >= PAGE_SIZE) && ((cheri_getlen(msg->buf) % PAGE_SIZE) == 0)) {
+		locked = true;
+		error = mlock(msg->buf, cheri_getlen(msg->buf));
+		if (error != 0)
+			err(EX_SOFTWARE, "%s:mlock failed! args were %p, %lu", __func__, msg->buf, cheri_getlen(msg->buf));
+	}*/
+	locked = false;
 	cocarrier = unseal_coport(cocall_args->cocarrier);
 	
 	/* Set the status to busy so we don't interleave.*/
@@ -148,10 +166,15 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
 		switch (status) {
 		case COPORT_CLOSED:
 		case COPORT_CLOSING:
-			cocall_free(msg->buf);
-			if (msg->attachments != NULL)
-				cocall_free(msg->attachments);
-			cocall_free(msg);
+			/*if (locked) {
+				error = munlock(msg->buf, cheri_getlen(msg->buf));
+				if (error != 0)
+					err(EX_SOFTWARE, "%s:munlock failed! args were %p, %lu", __func__, msg->buf, cheri_getlen(msg->buf));
+			}*/
+			free(msg_out);
+			if (attachments != NULL)
+				free(attachments);
+			end_cocall();
 			COCALL_ERR(cocall_args, EPIPE);
 			break; /* NOTREACHED */
 		default:
@@ -165,13 +188,18 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
 	port_len = cocarrier->info->length;
 
 	if ((port_len >= COCARRIER_SIZE) || ((event & COPOLL_OUT) == 0)) {
-		cocall_free(msg->buf);
-		if (msg->attachments != NULL)
-			cocall_free(msg->attachments);
-		cocall_free(msg);
+		/*if (locked) {
+			error = munlock(msg->buf, cheri_getlen(msg->buf));
+			if (error != 0)
+				err(EX_SOFTWARE, "%s:munlock failed! args were %p, %lu", __func__, msg->buf, cheri_getlen(msg->buf));
+		}*/
+		free(msg_out);
+		if (attachments != NULL)
+			free(attachments);
 		event = (event | COPOLL_WERR);
         atomic_store_explicit(&cocarrier->info->event, event, memory_order_release);
         atomic_store_explicit(&cocarrier->info->status, COPORT_OPEN, memory_order_release);
+		end_cocall();
         COCALL_ERR(cocall_args, EAGAIN);
     }
 
@@ -180,16 +208,29 @@ void cocarrier_send(coopen_args_t *cocall_args, void *token)
     cocarrier->info->end = (index + 1) % COCARRIER_SIZE;
     cocarrier->info->length = new_len;
 
-    cocarrier_buf[index] = msg;
+	msg = cocarrier_buf[index];
+	msg->buf = msg_alloc;
+	msg->attachments = attachments;
+	msg->nattachments = nattachments;
+	msg->freed = false;
+	msg->recvd = false;
 
     if(new_len == COCARRIER_SIZE)
     	event = (COPOLL_IN | event) & ~(COPOLL_WERR | COPOLL_OUT);
     else
     	event = (COPOLL_IN | event) & ~COPOLL_WERR;
     cocarrier->info->event = event;
+	atomic_thread_fence(memory_order_seq_cst);
     atomic_store_explicit(&cocarrier->info->status, COPORT_DONE, memory_order_release);
 
     copoll_notify(cocarrier, COPOLL_IN);
+
+	/*if (locked) {
+		error = munlock(msg->buf, cheri_getlen(msg->buf));
+		if (error != 0)
+			err(EX_SOFTWARE, "%s:munlock failed! args were %p, %lu", __func__, msg->buf, cheri_getlen(msg->buf));
+	}*/
+	end_cocall();
     COCALL_RETURN(cocall_args, msg_len);
 }
 

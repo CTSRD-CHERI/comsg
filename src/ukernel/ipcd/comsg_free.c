@@ -35,12 +35,14 @@
 
 #include <stdatomic.h>
 #include <stdbool.h>
-#include <ccmalloc.h>
 #include <comsg/comsg_args.h>
 #include <comsg/coport.h>
 #include <comsg/utils.h>
-
+#include <stdlib.h>
 #include <sys/errno.h>
+
+extern void begin_cocall(void);
+extern void end_cocall(void);
 
 int 
 validate_comsg_free_args(cosend_args_t *cocall_args)
@@ -58,24 +60,35 @@ free_comsg(cosend_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	coport_t *coport;
-	void *msg, *buf;
+	void *msg_buf;
 	struct cocarrier_message **cocarrier_buf;
+	bool freed;
 
+	begin_cocall();
 	/* TODO-PBB: check permissions */
 	coport = unseal_coport(cocall_args->cocarrier);
-	msg = cocall_args->message;
+	msg_buf = cocall_args->message;
 	cocarrier_buf = coport->buffer->buf;
 	for (size_t i = 0; i < COCARRIER_SIZE; i++) {
-		if (!atomic_load(&cocarrier_buf[i]->recvd))
+		struct cocarrier_message *msg = cocarrier_buf[i];
+		if (!cheri_gettag(msg))
 			continue;
-		else if (atomic_load(&cocarrier_buf[i]->freed))
+		else if (!atomic_load(&msg->recvd))
 			continue;
-		buf = cocarrier_buf[i]->buf;
-		if ((buf == msg) && (__builtin_cheri_length_get(buf) == __builtin_cheri_length_get(msg))) {
-			cocall_free(msg);
-			atomic_store(&cocarrier_buf[i]->freed, true);
-			COCALL_RETURN(cocall_args, 0);
+		else if ((freed = atomic_load(&msg->freed)))
+			continue;
+		void *buf = msg->buf;
+		if ((buf == msg_buf) && (__builtin_cheri_length_get(buf) == __builtin_cheri_length_get(msg_buf))) {
+			// freed = false
+			if(atomic_compare_exchange_strong(&msg->freed, &freed, true)) {
+				free(buf);
+				msg->buf = NULL; /* no longer needed */
+				end_cocall();
+				COCALL_RETURN(cocall_args, 0);
+			} else
+				break;
 		}
 	}
+	end_cocall();
 	COCALL_ERR(cocall_args, EINVAL);
 }

@@ -32,7 +32,6 @@
 #include "coservice_table.h"
 #include "coservice_cap.h"
 
-#include <ccmalloc.h>
 #include <cheri/cherireg.h>
 #include <comsg/comsg_args.h>
 #include <comsg/namespace.h>
@@ -40,8 +39,11 @@
 
 #include <cheri/cheric.h>
 #include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
+extern void begin_cocall();
+extern void end_cocall();
 
 int validate_coprovide_args(coprovide_args_t *cocall_args)
 {
@@ -61,15 +63,18 @@ int validate_coprovide_args(coprovide_args_t *cocall_args)
 	else if(cheri_getlen(cocall_args->worker_scbs) < (CHERICAP_SIZE * cocall_args->nworkers))
 		return (0);
 	else {
-		scbs = cocall_calloc(cocall_args->nworkers, sizeof(void *));
+		begin_cocall();
+		scbs = calloc(cocall_args->nworkers, sizeof(void *));
 		memcpy(scbs, cocall_args->worker_scbs, cheri_getlen(scbs));
 		for(i = 0; i < cocall_args->nworkers; i++) {
 			if(!valid_scb(cocall_args->worker_scbs[i])) {
-				cocall_free(scbs);
+				free(scbs);
+				end_cocall();
 				return (0);
 			}
 		}
 		cocall_args->worker_scbs = scbs;
+		end_cocall();
 	}
 
 	return (1);
@@ -79,6 +84,8 @@ void provide_coservice(coprovide_args_t *cocall_args, void *token)
 {
 	UNUSED(token);
 	int i;
+
+	begin_cocall();
 	coservice_t *coservice_ptr = allocate_coservice();
 	coservice_ptr->impl = allocate_endpoint();
 	coservice_ptr->flags = cocall_args->service_flags;
@@ -86,15 +93,12 @@ void provide_coservice(coprovide_args_t *cocall_args, void *token)
 	
 	coservice_ptr->impl->next_worker = 0;
 	coservice_ptr->impl->nworkers = cocall_args->nworkers;
-	coservice_ptr->impl->worker_scbs = cocall_calloc(cocall_args->nworkers, sizeof(void *));
-	for (i = 0; i < coservice_ptr->impl->nworkers; i++) {
-		coservice_ptr->impl->worker_scbs[i] = cocall_args->worker_scbs[i];
-	}
+	coservice_ptr->impl->worker_scbs = cocall_args->worker_scbs; //allocated and copied in validation func
 
 	cocall_args->service = create_coservice_handle(coservice_ptr);
-	cocall_free(cocall_args->worker_scbs);
 	cocall_args->worker_scbs = NULL;
 
+	end_cocall();
 	COCALL_RETURN(cocall_args, 0);
 }
 

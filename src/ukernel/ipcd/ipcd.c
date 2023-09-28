@@ -32,7 +32,6 @@
 #include "ipcd_startup.h"
 #include <cocall/endpoint.h>
 
-#include <ccmalloc.h>
 #include <cocall/cocalls.h>
 #include <comsg/ukern_calls.h>
 
@@ -92,7 +91,7 @@ int main(int argc, char *const argv[])
 			break;
 		}
 	}
-	ccmalloc_init(buckets, nbuckets);
+	
 	ipcd_startup();
 
 	join_endpoint_thread();

@@ -32,7 +32,6 @@
 #include "coservice_table.h"
 #include "coservice_cap.h"
 
-#include <ccmalloc.h>
 #include <cheri/cherireg.h>
 #include <comsg/comsg_args.h>
 #include <comsg/namespace.h>

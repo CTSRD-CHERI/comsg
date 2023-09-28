@@ -32,13 +32,16 @@
 #include "procdeath_tbl.h"
 
 #include <assert.h>
-#include <ccmalloc.h>
 #include <comsg/coevent.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <sys/queue.h>
 #include <sys/sched.h>
+
+extern void begin_cocall();
+extern void end_cocall();
 
 cocallback_t *
 add_cocallback(coevent_t *event, cocallback_func_t *func, struct cocallback_args *args)
@@ -50,9 +53,13 @@ add_cocallback(coevent_t *event, cocallback_func_t *func, struct cocallback_args
 	in_progress = atomic_load_explicit(&event->in_progress, memory_order_acquire);
 	assert(in_progress != 0);
 
-	ccb = cocall_malloc(sizeof(cocallback_t));
+	begin_cocall();
+
+	ccb = malloc(sizeof(cocallback_t));
 	ccb->func = func;
 	memcpy(&ccb->args, args, sizeof(struct cocallback_args));
+
+	end_cocall();
 
 	STAILQ_INSERT_TAIL(&event->callbacks, ccb, next);
 	atomic_fetch_add_explicit(&func->consumers, 1, memory_order_acq_rel);
@@ -104,8 +111,10 @@ get_next_cocallback(coevent_t *event)
 void
 free_cocallback(cocallback_t *ccb)
 {
+	begin_cocall();
 	atomic_fetch_sub_explicit(&ccb->func->consumers, 1, memory_order_acq_rel);
-	cocall_free(ccb);
+	free(ccb);
+	end_cocall();
 }
 
 bool

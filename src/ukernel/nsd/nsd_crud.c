@@ -34,7 +34,6 @@
 #include "nsd_lookup.h"
 #include "namespace_table.h"
 
-#include <ccmalloc.h>
 #include <comsg/ukern_calls.h>
 #include <comsg/namespace.h>
 #include <comsg/namespace_object.h>
@@ -45,11 +44,15 @@
 #include <err.h>
 #include <sys/errno.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <unistd.h>
+
+extern void begin_cocall();
+extern void end_cocall();
 
 static __inline void 
 validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
@@ -188,7 +191,9 @@ int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 			result->obj = NULL;
 			result->type = INVALID_NSOBJ;
 			nsobject_deleted();
-			cocall_free(member);
+			begin_cocall();
+			free(member);
+			end_cocall();
 			return (1);
 		}
 	}

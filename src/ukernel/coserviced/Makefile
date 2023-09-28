@@ -9,7 +9,7 @@ SRCS :=	codiscover.c \
 	coserviced.c \
 	coserviced_setup.c
 
-DEP_LIBS := pthread comsg ccmalloc cocall
+DEP_LIBS := pthread comsg cocall
 
 
 include $(MK_DIR)/comsg.prog.mk

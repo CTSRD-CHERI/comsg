@@ -55,40 +55,33 @@ static struct _coport_table {
 	coport_tbl_entry_t *coports;
 } cocarrier_table, copipe_table, cochannel_table;
 
-
 /* TODO-PBB: convert to sysctl or similar configurable value */
 static const size_t max_coports = 256;
 static size_t coport_table_len = max_coports * sizeof(coport_tbl_entry_t);
-static int coport_table_prot = (PROT_READ | PROT_WRITE);
-static int coport_table_flags = (MAP_ANON | MAP_SHARED | MAP_STACK | MAP_ALIGNED_CHERI);
 
-__attribute__((constructor)) static
-void setup_table(void) 
+__attribute__((constructor)) static void 
+setup_table(void) 
 {
 	madvise(NULL, -1, MADV_PROTECT);
-	size_t top_of_table;
 
 	cocarrier_table.coports = calloc(max_coports, sizeof(coport_tbl_entry_t));
-	top_of_table = (cheri_getlen(cocarrier_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
-	cocarrier_table.next_coport = top_of_table;
-	cocarrier_table.first_coport = top_of_table;
+	cocarrier_table.next_coport = 0;
+	cocarrier_table.first_coport = 0;
 	cocarrier_table.ncoports = 0;
 
 	copipe_table.coports = calloc(max_coports, sizeof(coport_tbl_entry_t));
-	top_of_table = (cheri_getlen(copipe_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
-	copipe_table.next_coport = top_of_table;
-	copipe_table.first_coport = top_of_table;
+	copipe_table.next_coport = 0;
+	copipe_table.first_coport = 0;
 	copipe_table.ncoports = 0;
 
 	cochannel_table.coports = calloc(max_coports, sizeof(coport_tbl_entry_t));
-	top_of_table = (cheri_getlen(cochannel_table.coports) / sizeof(coport_tbl_entry_t)) - 1;
-	cochannel_table.next_coport = top_of_table;
-	cochannel_table.first_coport = top_of_table;
+	cochannel_table.next_coport = 0;
+	cochannel_table.first_coport = 0;
 	cochannel_table.ncoports = 0;
 }
 
-static
-struct _coport_table *get_coport_table(coport_type_t type)
+static struct _coport_table *
+get_coport_table(coport_type_t type)
 {
 	struct _coport_table *table;
 	switch (type)
@@ -109,15 +102,16 @@ struct _coport_table *get_coport_table(coport_type_t type)
 	return (table);
 }
 
-coport_t *allocate_coport(coport_type_t type)
+coport_t *
+allocate_coport(coport_type_t type)
 {
 	struct _coport_table *coport_table;
 	coport_t *ptr;
 	size_t index;
 
 	coport_table = get_coport_table(type);
-	index = atomic_fetch_sub(&coport_table->next_coport, 1);
-	
+	index = atomic_fetch_add(&coport_table->next_coport, 1);
+
 	ptr = &coport_table->coports[index].port;
 	ptr = cheri_setboundsexact(ptr, sizeof(coport_t));
 	memset(ptr, 0, sizeof(coport_t));
@@ -127,17 +121,19 @@ coport_t *allocate_coport(coport_type_t type)
 	return (ptr);
 }
 
-int in_coport_table(coport_t *ptr, coport_type_t type)
+int 
+in_coport_table(coport_t *ptr, coport_type_t type)
 {
 	struct _coport_table *coport_table = get_coport_table(type);
 	vaddr_t addr = cheri_getaddress(ptr);
 	return (cheri_is_address_inbounds(coport_table->coports, addr));
 }
 
-int can_allocate_coport(coport_type_t type)
+int
+can_allocate_coport(coport_type_t type)
 {
 	struct _coport_table *coport_table = get_coport_table(type);
-	if(coport_table->next_coport == 0)
+	if(coport_table->ncoports == max_coports)
 		return (0);
 	else
 		return (1);

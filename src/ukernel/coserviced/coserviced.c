@@ -33,7 +33,6 @@
 #include "coserviced_setup.h"
 #include "coservice_table.h"
 
-#include <ccmalloc.h>
 #include <comsg/comsg_args.h>
 #include <comsg/coservice.h>
 #include <cocall/endpoint.h>
@@ -84,7 +83,6 @@ int main(int argc, char *const argv[])
 			break;
 		}
 	}
-	ccmalloc_init(buckets, nbuckets);
 	coserviced_startup();
 	
 	join_endpoint_thread();

@@ -33,8 +33,8 @@
 #include "ipcd_cap.h"
 #include "copoll_utils.h"
 
-#include <ccmalloc.h>
 #include <comsg/comsg_args.h>
+#include <comsg/coport.h>
 #include <comsg/utils.h>
 
 #include <assert.h>
@@ -46,6 +46,9 @@
 #include <string.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
+
+extern void begin_cocall(void);
+extern void end_cocall(void);
 
 int 
 validate_copoll_args(copoll_args_t *cocall_args)
@@ -83,7 +86,6 @@ populate_revents(pollcoport_t *user, pollcoport_t *ukern, uint ncoports)
 		user[i].revents = ukern[i].revents;
 }
 
-
 /* 
  * Cocarriers call into the microkernel. Others do not. There are several reasons, among which:
  * 1. We control cocarrier use more tightly to enable event delivery
@@ -106,23 +108,23 @@ init_listeners(pollcoport_t *coports, uint ncoports, pthread_cond_t *cond)
 	return (listen_entries);
 }
 
-
 static int 
 wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 {
 	coport_t *coport;
 	coport_listener_t **listen_entries;
-	pthread_cond_t wake;
+	pthread_cond_t *wake;
 	pthread_condattr_t wake_attr;
 	coport_status_t status;
 	int matched;
 	uint i;
 
+	wake = calloc(1, sizeof(pthread_cond_t));
 	pthread_condattr_init(&wake_attr);
 	pthread_condattr_setclock(&wake_attr, CLOCK_MONOTONIC);
-	pthread_cond_init(&wake, &wake_attr);
+	pthread_cond_init(wake, &wake_attr);
 
-	listen_entries = init_listeners(coports, ncoports, &wake);
+	listen_entries = init_listeners(coports, ncoports, wake);
 
 	acquire_copoll_mutex();
 	for (i = 0; i < ncoports; i++) {
@@ -136,7 +138,7 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 		atomic_store_explicit(&coport->info->status, COPORT_OPEN, memory_order_release);
 	}
 
-	copoll_wait(&wake, timeout);
+	copoll_wait(wake, timeout);
 
 	for (i = 0; i < ncoports; i++) {
 		if (atomic_load_explicit(&listen_entries[i]->removed, memory_order_acquire)) {
@@ -152,7 +154,8 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 		atomic_store_explicit(&coport->info->status, COPORT_OPEN, memory_order_release);
 		listen_entries[i]->removed = true;
 	}
-	pthread_cond_destroy(&wake);
+	pthread_cond_destroy(wake);
+	free(wake);
 	pthread_condattr_destroy(&wake_attr);
 	release_copoll_mutex();
 
@@ -169,7 +172,6 @@ wait_for_events(pollcoport_t *coports, uint ncoports, long timeout)
 
 	return (matched);
 }
-
 
 void 
 cocarrier_poll_slow(comsg_args_t *cocall_args, void *token)
@@ -207,20 +209,23 @@ cocarrier_poll(copoll_args_t *cocall_args, void *token)
 	int matched;
 	size_t target_len;
 
+	begin_cocall();
+
 	ncoports = cocall_args->ncoports;
 	target_len = ncoports * sizeof(pollcoport_t);
 
-	pollcoport_t *targets = cocall_malloc(target_len);
+	pollcoport_t *targets = malloc(target_len);
 	memcpy(targets, cocall_args->coports, target_len); //copyin
 
 	matched = inspect_events(targets, ncoports);
 	if (cocall_args->timeout != 0 && matched == 0) {
-		cocall_free(targets);
+		free(targets);
 		COCALL_ERR(cocall_args, EWOULDBLOCK);
 	}
 
 	populate_revents(cocall_args->coports, targets, ncoports);
-	cocall_free(targets);
+	free(targets);
 
+	end_cocall();
 	COCALL_RETURN(cocall_args, matched);
 }
