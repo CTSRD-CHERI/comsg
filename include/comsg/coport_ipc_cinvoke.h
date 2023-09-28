@@ -38,6 +38,8 @@
 
 typedef ssize_t (*coport_func_ptr)(coport_t *, void *, size_t);
 
+typedef bool (*coport_ready_func_ptr)(coport_t *);
+
 extern const coport_func_ptr *cosend_codecap;
 extern const coport_func_ptr *corecv_codecap;
 
@@ -47,27 +49,26 @@ extern const coport_func_ptr *corecv_codecap_copipe;
 extern const coport_func_ptr *cosend_codecap_cochannel;
 extern const coport_func_ptr *corecv_codecap_cochannel;
 
+extern const coport_ready_func_ptr *copipe_ready_codecap;
+
 extern const void **return_stack_sealcap;
 
 __BEGIN_DECLS
 
-extern ssize_t coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
+extern ssize_t coport_cinvoke(void *codecap, coport_t *coport, void *buf, const void *ret_sealcap, size_t len, coport_op_t op);
+extern ssize_t coport_cinvoke_trampoline(coport_t *port, void *buf, size_t len, coport_op_t op);
+extern ssize_t coport_cinvoke_trampoline_landing(coport_t *port, void *buf, size_t len, coport_op_t op);
 
 extern ssize_t cochannel_cosend_cinvoke(void *codecap, const coport_t *coport, const void *buf, const void *ret_sealcap, size_t len);
 extern ssize_t cochannel_corecv_cinvoke(void *codecap, const coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
 extern ssize_t copipe_cosend_cinvoke(void *codecap, const coport_t *coport, const void *buf, const void *ret_sealcap, size_t len);
 extern ssize_t copipe_corecv_cinvoke(void *codecap, const coport_t *coport, void *buf, const void *ret_sealcap, size_t len);
+extern bool copipe_ready_cinvoke(void *codecap, coport_t *coport, const void *ret_sealcap);
 
-static inline __always_inline ssize_t 
-cosend_cinvoke(const coport_t *port, const void *buffer, size_t length)
+static inline __always_inline bool
+copipe_ready(const coport_t *coport)
 {
-	return (coport_cinvoke(*cosend_codecap, port, buffer, (*return_stack_sealcap), length));
-} 
-
-static inline __always_inline ssize_t 
-corecv_cinvoke(const coport_t *port, void *buffer, size_t length)
-{
-	return (coport_cinvoke(*corecv_codecap, port, buffer, (*return_stack_sealcap), length));
+    return (copipe_ready_cinvoke(*copipe_ready_codecap, coport, (*return_stack_sealcap)));
 }
 
 static inline __always_inline ssize_t 

@@ -249,3 +249,101 @@ copipe_corecv_cinvoke_return:
 	cret
 
 END(copipe_corecv_cinvoke)
+
+/*
+ * bool 
+ * copipe_ready_cinvoke(void *codecap, coport_t *coport, const void *ret_sealcap)
+ */
+ENTRY(copipe_ready_cinvoke) 
+	cgetoffset t3, csp
+	cincoffsetimm	csp, csp, -CAP_FRAME_SIZE
+	csc	cs0,	(0 * CHERICAP_SIZE)(csp)
+	csc	cs1,	(1 * CHERICAP_SIZE)(csp)
+	csc	cs2,	(2 * CHERICAP_SIZE)(csp)
+	csc	cs3,	(3 * CHERICAP_SIZE)(csp)
+	csc	cs4,	(4 * CHERICAP_SIZE)(csp)
+	csc	cs5,	(5 * CHERICAP_SIZE)(csp)
+	csc	cs6,	(6 * CHERICAP_SIZE)(csp)
+	csc	cs7,	(7 * CHERICAP_SIZE)(csp)
+	csc	cs8,	(8 * CHERICAP_SIZE)(csp)
+	csc	cs9,	(9 * CHERICAP_SIZE)(csp)
+	csc	cs10,	(10 * CHERICAP_SIZE)(csp)
+	csc	cs11,	(11 * CHERICAP_SIZE)(csp)
+	csc	cra,	(12 * CHERICAP_SIZE)(csp)
+	csc	ctp,	(13 * CHERICAP_SIZE)(csp)
+
+	cspecialr ct1, ddc
+	csc	ct1,	(14 * CHERICAP_SIZE)(csp)
+
+
+#if defined(__riscv_float_abi_double)
+	cincoffsetimm	csp, csp, -FP_FRAME_SIZE
+	/* Save fp regs */
+	cfsd	fs0,	(0 * FP_SIZE)(csp)
+	cfsd	fs1,	(1 * FP_SIZE)(csp)
+	cfsd	fs2,	(2 * FP_SIZE)(csp)
+	cfsd	fs3,	(3 * FP_SIZE)(csp)
+	cfsd	fs4,	(4 * FP_SIZE)(csp)
+	cfsd	fs5,	(5 * FP_SIZE)(csp)
+	cfsd	fs6,	(6 * FP_SIZE)(csp)
+	cfsd	fs7,	(7 * FP_SIZE)(csp)
+	cfsd	fs8,	(8 * FP_SIZE)(csp)
+	cfsd	fs9, 	(9 * FP_SIZE)(csp)
+	cfsd	fs10,	(10 * FP_SIZE)(csp)
+	cfsd	fs11, 	(11 * FP_SIZE)(csp)
+#endif
+	cmove ct1, ca0
+	cmove ca0, ca1
+	/* Load argument registers */
+
+	/* Prepare ccall-return registers */
+	cllc cra, copipe_ready_cinvoke_return
+	cseal cra, cra, ca2 /* return codecap */
+	cseal cs5, csp, ca2 /* idc to restore on return */
+	cmove ca2, cnull /* clear sealcap reg */
+
+	cmove ct5, cnull
+	cmove cs6, cra
+
+	cinvoke ct1, ca0
+
+copipe_ready_cinvoke_return:
+	cmove csp, c31
+#if defined(__riscv_float_abi_double)
+	/* Restore fp regs */
+	cfld	fs0,	(0 * FP_SIZE)(csp)
+	cfld	fs1,	(1 * FP_SIZE)(csp)
+	cfld	fs2,	(2 * FP_SIZE)(csp)
+	cfld	fs3,	(3 * FP_SIZE)(csp)
+	cfld	fs4,	(4 * FP_SIZE)(csp)
+	cfld	fs5,	(5 * FP_SIZE)(csp)
+	cfld	fs6,	(6 * FP_SIZE)(csp)
+	cfld	fs7,	(7 * FP_SIZE)(csp)
+	cfld	fs8,	(8 * FP_SIZE)(csp)
+	cfld	fs9, 	(9 * FP_SIZE)(csp)
+	cfld	fs10,	(10 * FP_SIZE)(csp)
+	cfld	fs11, 	(11 * FP_SIZE)(csp)
+	cincoffsetimm	csp, csp, FP_FRAME_SIZE
+#endif
+	/* Restore the general purpose registers and ra */
+	clc	cs0, 	(0 * CHERICAP_SIZE)(csp)
+	clc	cs1, 	(1 * CHERICAP_SIZE)(csp)
+	clc	cs2, 	(2 * CHERICAP_SIZE)(csp)
+	clc	cs3, 	(3 * CHERICAP_SIZE)(csp)
+	clc	cs4, 	(4 * CHERICAP_SIZE)(csp)
+	clc	cs5, 	(5 * CHERICAP_SIZE)(csp)
+	clc	cs6, 	(6 * CHERICAP_SIZE)(csp)
+	clc	cs7, 	(7 * CHERICAP_SIZE)(csp)
+	clc	cs8, 	(8 * CHERICAP_SIZE)(csp)
+	clc	cs9, 	(9 * CHERICAP_SIZE)(csp)
+	clc	cs10, 	(10 * CHERICAP_SIZE)(csp)
+	clc	cs11, 	(11 * CHERICAP_SIZE)(csp)
+	clc	cra, 	(12 * CHERICAP_SIZE)(csp)
+	clc	ctp, 	(13 * CHERICAP_SIZE)(csp)
+	clc	ct1, 	(14 * CHERICAP_SIZE)(csp)
+	cspecialw ddc, ct1
+
+	cincoffsetimm	csp, csp, CAP_FRAME_SIZE
+	cret
+
+END(copipe_ready_cinvoke)
