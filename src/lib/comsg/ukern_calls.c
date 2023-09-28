@@ -167,6 +167,12 @@ init_new_thread_calls(void)
 	get_ukernel_service(COCALL_COSELECT);
 }
 
+void
+comsg_thread_force_init(void)
+{
+	init_new_thread_calls();
+}
+
 static inline bool
 is_slocall(cocall_num_t func)
 {
