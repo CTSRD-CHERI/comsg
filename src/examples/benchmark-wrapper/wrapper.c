@@ -43,17 +43,21 @@ extern char **environ;
 
 static pid_t cochatter_pid, ipc_pid, memcpy_pid;
 static int cochatter_status, ipc_status, memcpy_status;
-static char *cochatter_args[4];
-static char *ipc_args[4];
-static char *memcpy_args[5];
+static char *cochatter_args[6];
+static char *ipc_args[5];
+static char *memcpy_args[6];
 
 static char *buf_size_str;
 static ssize_t iterations = 24;
-
+static bool enable_sha256_workload = false;
+static bool enable_dummy_workload = false;
 static bool explicit = false;
 static bool do_ipc = false;
 static bool do_memcpy = false;
 static bool do_coproc = false;
+static const size_t maxlen = 1048576UL * 2;
+static size_t max_buf_size = maxlen;
+static size_t initial_size = 1;
 
 
 #define BENCHMARK_TIMEOUT (600)
@@ -136,7 +140,7 @@ do_benchmark_size(size_t i)
 	}
 	free(memcpy_args[2]);
 
-	printf("Done %lu bytes.\n",i);
+	printf("Done %lu bytes.\n", i);
 }
 
 
@@ -145,10 +149,16 @@ int main(int argc, char * const argv[])
 	int opt, error;
 	char *strptr;
 	char *iter_str;
+	char *workload_str;
 	size_t i;
 
-	while((opt = getopt(argc, argv, "mcsi:")) != -1) {
+	while((opt = getopt(argc, argv, "mcsi:b:t:dC")) != -1) {
 		switch (opt) {
+		case 'C':
+			enable_sha256_workload = true;
+		case 'd':
+			enable_dummy_workload = true;
+			break;
 		case 'm':
 			explicit = true;
 			do_memcpy = true;
@@ -162,9 +172,19 @@ int main(int argc, char * const argv[])
 			do_ipc = true;
 			break;
 		case 'i':
-			iterations =  strtol(optarg, &strptr, 10);
+			iterations =  strtoul(optarg, &strptr, 10);
 			if (*optarg == '\0' || *strptr != '\0' || iterations <= 0)
 				err(EX_USAGE, "invalid number of iterations");
+			break;
+		case 'b':
+			initial_size = strtoul(optarg, &strptr, 10);
+			if (*optarg == '\0' || *strptr != '\0' || initial_size < 1 || initial_size > maxlen)
+				err(EX_USAGE, "invalid buffer length");
+			break;
+		case 't':
+			max_buf_size = strtoul(optarg, &strptr, 10);
+			if (*optarg == '\0' || *strptr != '\0' || max_buf_size < 1 || max_buf_size < initial_size || max_buf_size > maxlen)
+				err(EX_USAGE, "invalid buffer length");
 			break;
 		case '?':
 		default: 
@@ -173,31 +193,40 @@ int main(int argc, char * const argv[])
 		}
 	}
 
-	setenv("LD_BIND_NOW", "yesplease", 1);
-
 	iter_str = calloc(32, sizeof(char));
 	sprintf(iter_str, "-i %ld", iterations);
+	workload_str = enable_sha256_workload ? strdup("-c") : (enable_dummy_workload ? strdup("-d") : NULL);
 
 	cochatter_args[0] = strdup("/usr/bin/comsg-benchmark");
 	cochatter_args[1] = strdup(iter_str);
-	cochatter_args[3] = NULL;
+	cochatter_args[3] = workload_str == NULL ? NULL : strdup(workload_str);
+	cochatter_args[4] = NULL;
 
 	ipc_args[0] = strdup("/usr/bin/ipc-bmark");
 	ipc_args[1] = strdup(iter_str);
-	ipc_args[3] = NULL;
+	ipc_args[3] = workload_str == NULL ? NULL : strdup(workload_str);
+	ipc_args[4] = NULL;
 
 	memcpy_args[0] = strdup("/usr/bin/memcpy-bmark");
 	memcpy_args[1] = strdup(iter_str);
 	memcpy_args[3] = strdup("-q");
-	memcpy_args[4] = NULL;
+	memcpy_args[4] = workload_str == NULL ? NULL : strdup(workload_str);
+	memcpy_args[5] = NULL;
 	
 	buf_size_str = calloc(32, sizeof(char));
-	for (i = 1; i < 1024; i*=2)
-		do_benchmark_size(i);	
 
-	for(i = 1024; i <= 1048576UL; i+=1024)
-		do_benchmark_size(i);	
+	if (initial_size < 1024) {
+		for (i = initial_size; i < 1024; i*=2)
+			do_benchmark_size(i);	
+
+		for(i = 1024; i <= max_buf_size; i+=1024)
+			do_benchmark_size(i);
+	} else {
+		initial_size &= ~1023;
+		for(i = initial_size; i <= max_buf_size; i+=1024)
+			do_benchmark_size(i);
+	}
 	
-	if(argv || argc)
-		return (0);
+	
+	return (0);
 }

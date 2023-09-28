@@ -38,13 +38,36 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <openssl/sha.h>
+#include <sys/queue.h>
 
-static char * message_str;
-static size_t message_len = 0;
-static size_t runs = 0;
+static char * message_str = NULL;
+static char * message_pad = NULL;
+static size_t message_len = 512;
+static size_t runs = 1;
+static bool enable_dummy_workload = false;
+static bool enable_sha256_workload = true;
+static SHA256_CTX *sha_ctx;
 
 
 int main(int argc, char * const argv[]);
+
+struct msg_checksum {
+	bool is_sha;
+	union {
+		size_t sum;
+		unsigned char sha_sum[SHA256_DIGEST_LENGTH + 1];
+	};
+};
+struct benchmark_result {
+	statcounters_bank_t statcounter_diff;
+	struct rusage rusage_diff;
+	struct timespec timespec_diff;
+	SLIST_ENTRY(benchmark_result) entries;
+	struct msg_checksum sum;
+};
+
+static SLIST_HEAD(, benchmark_result) results_list = SLIST_HEAD_INITIALIZER(benchmark_result);
 
 #undef timespecsub
 #define	timespecsub(vvp, uvp)						\
@@ -58,8 +81,10 @@ int main(int argc, char * const argv[]);
 	} while (0)
 
 static void
-timevalfix(struct timeval *t1)
+timevalsub(struct timeval *t1, const struct timeval *t2)
 {
+	t1->tv_sec -= t2->tv_sec;
+	t1->tv_usec -= t2->tv_usec;
 
 	if (t1->tv_usec < 0) {
 		t1->tv_sec--;
@@ -72,22 +97,12 @@ timevalfix(struct timeval *t1)
 }
 
 static 
-void
-timevalsub(struct timeval *t1, const struct timeval *t2)
-{
-
-	t1->tv_sec -= t2->tv_sec;
-	t1->tv_usec -= t2->tv_usec;
-	timevalfix(t1);
-}
-
-static 
 void rusage_diff(struct rusage *dest,struct rusage *end,struct rusage *start)
 {
 	dest->ru_utime=end->ru_utime;
-	timevalsub(&dest->ru_utime,&start->ru_utime);	/* user time used */
+	timevalsub(&dest->ru_utime, &start->ru_utime);	/* user time used */
 	dest->ru_stime=end->ru_stime;
-	timevalsub(&dest->ru_stime,&start->ru_stime);	/* system time used */
+	timevalsub(&dest->ru_stime, &start->ru_stime);	/* system time used */
 
 	dest->ru_maxrss=end->ru_maxrss-start->ru_maxrss;		/* max resident set size */
 	dest->ru_ixrss=end->ru_ixrss-start->ru_ixrss;		/* integral shared memory size */
@@ -254,10 +269,49 @@ void prepare_message(void)
 	int fd, status;
 
 	message_str = calloc(message_len, sizeof(char));
+    message_str = cheri_andperm(message_str, CHERI_PERM_STORE | CHERI_PERM_LOAD);
 	fd = open("/dev/random", O_RDONLY);
 	status = read(fd, message_str, message_len);
 	if (status < 0)
 		err(EX_SOFTWARE, "%s: error reading random data for message",__func__ );
+}
+
+static inline struct msg_checksum
+do_dummy_workload(char *buf, size_t length)
+{
+	struct msg_checksum result;
+
+	if ((result.is_sha = enable_sha256_workload)) {
+		SHA256_Update(sha_ctx, buf, length);
+		SHA256_Final(result.sha_sum, sha_ctx);
+		result.sha_sum[SHA256_DIGEST_LENGTH] = '\0';
+	} else {
+		size_t total = 0;
+		size_t i = 0;
+		for(;length - i > sizeof(size_t); i += sizeof(size_t)) {
+			size_t *long_buf = (size_t *)&buf[i];
+			total += *long_buf;
+		}
+		for(;length > i; i++) {
+			total += (size_t)buf[i];
+		}
+		
+		
+		result.sum = total;
+	}
+	return result;
+}
+
+static inline struct msg_checksum
+dummy_workload(char *buf, ssize_t length)
+{
+    if (!enable_dummy_workload || length <= 0) {
+		struct msg_checksum result;
+		result.is_sha = false;
+		result.sum = 0;
+        return (result);
+	} else
+		return (do_dummy_workload(buf, (size_t)length));
 }
 
 static int quiet = 0;
@@ -265,10 +319,10 @@ int main(int argc, char * const argv[])
 {
 	int opt;
 	char * strptr;
-	char * buffer;
 	char *stat_path, *rusage_path;
 	FILE *statfp, *rusagefp;
-	while((opt=getopt(argc,argv,"t:i:b:q"))!=-1)
+
+	while((opt=getopt(argc,argv,"t:i:b:qdc"))!=-1)
 	{
 		switch(opt)
 		{
@@ -282,6 +336,14 @@ int main(int argc, char * const argv[])
 				if (*optarg == '\0' || *strptr != '\0' || runs <= 0)
 					err(1,"invalid runs");
 				break;
+            case 'c':
+                enable_sha256_workload = true;
+                enable_dummy_workload = true;
+                break;
+            case 'd':
+                enable_sha256_workload = false;
+			    enable_dummy_workload = true;
+			    break;
             case 'q':
                 quiet = 1;
                 break;
@@ -289,67 +351,109 @@ int main(int argc, char * const argv[])
 				break;
 		}
 	}	
-	if(runs==0)
-		runs=1;
-	if(message_len==0)
-		message_len=512;
 				
 	prepare_message();
+    sha_ctx = calloc(1, sizeof(SHA256_CTX));
+	SHA256_Init(sha_ctx);
 
-	stat_path = calloc(255, sizeof(char));
-	rusage_path = calloc(255, sizeof(char));
+    bool started = false;
 
-	sprintf(stat_path, "/tmp/memcpy_b%lu.csv", message_len);
-	sprintf(rusage_path, "/tmp/memcpy_b%lu_rusage.dat", message_len);
-	
+	char *buffer = calloc(message_len, sizeof(char));
+    buffer = cheri_andperm(buffer, CHERI_PERM_STORE | CHERI_PERM_LOAD);
 
-	float ipc_time;
-	struct timespec start_timestamp,end_timestamp;
-	struct rusage start_rusage, end_rusage;
-	statcounters_bank_t end_bank,start_bank;
-	char *bw_str;
-	
-	buffer = calloc(message_len, sizeof(char));
-	for(size_t i = 0; i<runs; i++)
+	for(size_t i = 0; i < runs * 2; i++)
 	{
+        struct timespec start_timestamp, end_timestamp;
+        struct rusage start_rusage, end_rusage;
+        statcounters_bank_t end_bank,start_bank;
+        struct benchmark_result *result;
+        struct msg_checksum a;
+
 		statcounters_zero(&start_bank);
 		statcounters_zero(&end_bank);
 
+        memset(buffer, '\0', message_len);
+
 		getrusage(RUSAGE_THREAD, &start_rusage);
-		clock_gettime(CLOCK_REALTIME, &start_timestamp);
+		clock_gettime(CLOCK_REALTIME_PRECISE, &start_timestamp);
 		statcounters_sample(&start_bank);
 
 		memcpy(buffer, message_str, message_len);
+        a = dummy_workload(buffer, message_len);
 
 		statcounters_sample(&end_bank);
-		clock_gettime(CLOCK_REALTIME, &end_timestamp);
+		clock_gettime(CLOCK_REALTIME_PRECISE, &end_timestamp);
 		getrusage(RUSAGE_THREAD, &end_rusage);
 
-		timespecsub(&end_timestamp,&start_timestamp);
-		statcounters_diff(&end_bank,&end_bank,&start_bank);
+        if (i < runs)
+            continue;
+        if (!enable_dummy_workload)
+            a = do_dummy_workload(buffer, message_len);
+
+		timespecsub(&end_timestamp, &start_timestamp);
+		statcounters_diff(&end_bank ,&end_bank, &start_bank);
 		rusage_diff(&end_rusage,&end_rusage,&start_rusage);
-		ipc_time = (float)end_timestamp.tv_sec + (float)end_timestamp.tv_nsec / 1000000000;
+		
+        result = calloc(1, sizeof(struct benchmark_result));
+        result->sum = a;
+        result->timespec_diff = end_timestamp;
+        result->rusage_diff = end_rusage;
+        result->statcounter_diff = end_bank;
+        SLIST_INSERT_HEAD(&results_list, result, entries);
+    }
+
+    struct benchmark_result *run;
+
+    stat_path = calloc(255, sizeof(char));
+	rusage_path = calloc(255, sizeof(char));
+    sprintf(stat_path, "/tmp/memcpy_b%lu.csv", message_len);
+	sprintf(rusage_path, "/tmp/memcpy_b%lu_rusage.csv", message_len);
+
+	SLIST_FOREACH(run, &results_list, entries) {
+        float ipc_time;
+        char *bw_str;
+
+        ipc_time = (float)run->timespec_diff.tv_sec + (float)run->timespec_diff.tv_nsec / 1000000000;
 		bw_str = calloc(40, sizeof(char));
 		sprintf(bw_str, "%.2FKB/s", ((message_len / ipc_time) / 1024.0));
 
+        char *phase = calloc(sizeof(char), (2 * SHA256_DIGEST_LENGTH) + 2);
+		phase[0] = '-';
+		if (run->sum.is_sha) {
+			for (size_t i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+				sprintf(phase + 1 + (i * 2), "%02x", run->sum.sha_sum[i]);
+			}
+		} else {
+			sprintf(phase + 1, "%lx", run->sum.sum);
+		}
+
+        bool incl_headers;
+        if (!started) {
+            int s = open(stat_path, O_WRONLY | O_CREAT | O_EXCL);
+            incl_headers = (s != -1);
+            if (incl_headers)
+                close(s);
+        } else 
+            incl_headers = false;
+        started = true;
 		//*_dump_with_args closes the files so must open each time
 		statfp = fopen(stat_path, "a+");
 		rusagefp = fopen(rusage_path, "a+");
-		if(i == 0){
-			statcounters_dump_with_args(&end_bank, "MEMCPY", "", bw_str, statfp, CSV_HEADER);
-			rusage_dump_with_args(&end_rusage, "MEMCPY", "", bw_str, rusagefp, CSV_HEADER);
+		if (incl_headers) {
+			statcounters_dump_with_args(&run->statcounter_diff, "MEMCPY", phase, bw_str, statfp, CSV_HEADER);
+			rusage_dump_with_args(&run->rusage_diff, "MEMCPY", phase, bw_str, rusagefp, CSV_HEADER);
 		} else {
-			statcounters_dump_with_args(&end_bank, "MEMCPY", "", bw_str, statfp, CSV_NOHEADER);		
-			rusage_dump_with_args(&end_rusage, "MEMCPY", "", bw_str, rusagefp, CSV_NOHEADER);
+			statcounters_dump_with_args(&run->statcounter_diff, "MEMCPY", phase, bw_str, statfp, CSV_NOHEADER);		
+			rusage_dump_with_args(&run->rusage_diff, "MEMCPY", phase, bw_str, rusagefp, CSV_NOHEADER);
 		}
-		printf("Memcpy: %s\n",bw_str);
+		printf("Memcpy: %s\n", bw_str);
         if(!quiet)
         {
-		  statcounters_dump(&end_bank);
-		  rusage_dump_with_args(&end_rusage,"MEMCPY","",bw_str,NULL,HUMAN_READABLE);
+		  statcounters_dump(&run->statcounter_diff);
+		  rusage_dump_with_args(&run->rusage_diff,"MEMCPY", phase, bw_str, NULL, HUMAN_READABLE);
         }
+        
 	}
-	free(buffer);
 
 	return (0);
 }

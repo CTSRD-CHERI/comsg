@@ -65,20 +65,33 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/sysctl.h>
+#include <openssl/sha.h>
 
 typedef enum {OP_INVALID = 0, OP_COSEND = 1, OP_CORECV = 2} coport_op;
 
+struct msg_checksum {
+	bool is_sha;
+	union {
+		size_t sum;
+		unsigned char sha_sum[SHA256_DIGEST_LENGTH + 1];
+	};
+	char *buf;
+};
 struct benchmark_result {
 	coport_type_t coport_type;
 	coport_op op;
 	ssize_t buf_len;
+	struct msg_checksum sum;
 	statcounters_bank_t statcounter_diff;
 	struct rusage rusage_diff;
 	struct timespec timespec_diff;
 	SLIST_ENTRY(benchmark_result) entries;
 };
 
+
+
 pthread_mutex_t results_mtx;
+pthread_cond_t result_cnd;
 SLIST_HEAD(, benchmark_result) results_list;
 
 struct thr_arg {
@@ -479,6 +492,7 @@ do_recv_setup(void)
 
     //initialize results list
     SLIST_INIT(&results_list);
+	pthread_mutex_lock(&results_mtx);
 }
 
 static void
@@ -538,9 +552,10 @@ do_send_setup(void)
 	void *coproc_init_scb;
 
 	buffer = calloc(1, message_len);
-	required = __builtin_cheri_length_get(buffer);
+	message_text = calloc(iterations, message_len);
+	required = __builtin_cheri_length_get(message_text);
 	fd = open("/dev/random", O_RDONLY);
-	status = read(fd, buffer, required);
+	status = read(fd, message_text, required);
 
 #ifdef BMARK_PROC
 	error = colookup(U_COPROC_INIT, &coproc_init_scb);
@@ -576,6 +591,45 @@ do_warmup_send(void)
 	assert(error > 0);
 }
 
+
+static inline struct msg_checksum
+do_dummy_workload(char *buf, size_t length)
+{
+	struct msg_checksum result;
+
+	if ((result.is_sha = sha_workload_enabled)) {
+		SHA256_Update(sha_ctx, buf, length);
+		SHA256_Final(result.sha_sum, sha_ctx);
+		result.sha_sum[SHA256_DIGEST_LENGTH] = '\0';
+	} else {
+		size_t total = 0;
+		size_t i = 0;
+		for(;length - i > sizeof(size_t); i += sizeof(size_t)) {
+			size_t *long_buf = (size_t *)&buf[i];
+			total += *long_buf;
+		}
+		for(;length > i; i++) {
+			total += (size_t)buf[i];
+		}
+		result.sum = total;
+	}
+	result.buf = NULL;
+	return result;
+}
+
+static inline struct msg_checksum
+dummy_workload(char *buf, ssize_t length)
+{
+    if (!dummy_workload_enabled || length <= 0) {
+		struct msg_checksum result;
+		result.is_sha = false;
+		result.sum = 0;
+		result.buf = NULL;
+        return (result);
+	} else
+		return (do_dummy_workload(buf, (size_t)length));
+}
+
 static struct benchmark_result * 
 do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 {
@@ -586,6 +640,15 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 	int status;
 	int intval;
 	coport_type_t coport_type;
+	struct msg_checksum b;
+
+	
+	memcpy(buf, message_text, buffer_length);
+	message_text = __builtin_cheri_offset_increment(message_text, buffer_length);
+	if (cheri_getaddress(message_text) + buffer_length > cheri_gettop(message_text)) {
+		message_text = cheri_setoffset(message_text, (cheri_getoffset(message_text) + buffer_length) % cheri_getlen(message_text));
+	}
+	buf = cheri_setbounds(buffer, buffer_length);
 
 	coport_type = coport_gettype(port);
 	if (coport_type == COCHANNEL)
@@ -597,35 +660,34 @@ do_benchmark_send(void *buffer, size_t buffer_length, coport_t *port)
 		statcounters_zero(&end_bank);
 		//get initial values for counters, for later comparison
 		getrusage(RUSAGE_SELF, &start_rusage);
-		clock_gettime(CLOCK_REALTIME_PRECISE, &start_ts);
-		/*
-		if (coport_type == COCHANNEL) {
+		clock_gettime(CLOCK_MONOTONIC_PRECISE, &start_ts);
+		if (coport_type == COCARRIER && enable_qemu_tracing) {
 			intval = 1;
 			//QEMU_SET_TRACE_BUFFERED_MODE;
 			sysarch(QEMU_SET_QTRACE_USER, &intval);
 			CHERI_START_USER_TRACE;
 		}
-		*/
 		statcounters_sample(&start_bank);
 	}
 	//perform operation
-	status = cosend(port, buffer, buffer_length);
+	b = dummy_workload((char *)buf, buffer_length);
+	status = cosend(port, buf, buffer_length);
 	
 	if (!aggregate_mode) {
 		//get new values for counters
 		//end_bank.instructions = statcounters_sample_by_id(instruction_count_id);
 		statcounters_sample(&end_bank);
-		/*
-		if (coport_type == COCHANNEL) {
+		
+		if (coport_type == COCARRIER && enable_qemu_tracing) {
 			//QEMU_FLUSH_TRACE_BUFFER;
 			CHERI_STOP_TRACE;
 			CHERI_STOP_USER_TRACE;
 			intval = 0;
 			sysarch(QEMU_SET_QTRACE_USER, &intval);
 		}
-		*/
-		clock_gettime(CLOCK_REALTIME_PRECISE, &end_ts);
+		clock_gettime(CLOCK_MONOTONIC_PRECISE, &end_ts);
 		getrusage(RUSAGE_SELF, &end_rusage);
+		
 	}
 
 	if (status < 0) {

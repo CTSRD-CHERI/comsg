@@ -32,6 +32,7 @@
 #include <assert.h>
 #include <err.h>
 #include <cheri/cheri.h>
+#include <cheri/cheric.h>
 #include <machine/sysarch.h>
 #define CPU_QEMU_RISCV
 #include <machine/cpufunc.h>
@@ -58,11 +59,23 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
-
+#include <openssl/sha.h>
+#include <sys/mman.h>
+#include <poll.h>
+#include <sys/sysctl.h>
 
 typedef enum {OP_INVALID = 0, OP_SEND = 1, OP_RECV = 2} ipc_op;
 typedef enum {IPC_INVALID, IPC_SOCKET, IPC_PIPE} ipc_type;
 
+
+struct msg_checksum {
+	bool is_sha;
+	union {
+		size_t sum;
+		unsigned char sha_sum[SHA256_DIGEST_LENGTH + 1];
+	};
+	char *buf;
+};
 struct benchmark_result {
 	ipc_type ipc_type;
 	ipc_op op;
@@ -71,35 +84,48 @@ struct benchmark_result {
 	struct rusage rusage_diff;
 	struct timespec timespec_diff;
 	SLIST_ENTRY(benchmark_result) entries;
+	struct msg_checksum sum;
 };
 
-pthread_mutex_t results_mtx;
-SLIST_HEAD(, benchmark_result) results_list;
-
+static pthread_t rcvr_thr, sndr_thr;
+static pthread_mutex_t results_mtx;
+static pthread_cond_t results_cnd;
+static SLIST_HEAD(, benchmark_result) results_list = SLIST_HEAD_INITIALIZER(benchmark_result);
+static bool pipe_enabled = false;
+static bool socket_enabled = false;
 struct thr_arg {
 	ipc_op thr_mode;
 };
 
 extern char **environ;
+extern char *optarg;
 
 static pid_t sender_pid = -1;
 static pid_t recver_pid = -1;
 static long sender_lwpid = -1;
 static long recver_lwpid = -1;
+static bool enable_sha256_workload = true;
+static bool enable_dummy_workload = false;
 
 static int aggregate_mode = 0;
 static _Thread_local ipc_op mode = OP_RECV;
 
-static int recv_pipe, send_pipe;
-static int recv_sock, send_sock;
+static int recv_pipe = -1;
+static int send_pipe = -1;
+static int recv_sock = -1;
+static int send_sock = -1;
 
 static _Thread_local char *buffer = NULL;
-static const ssize_t maxlen = 1024 * 1024; //128MiB because not sure how much ram we have, and must account  multiple copies
+static const ssize_t maxlen = 1024 * 1024 * 2; //128MiB because not sure how much ram we have, and must account  multiple copies
 static ssize_t message_len = maxlen;
 static ssize_t iterations = 1;
 
 static uint64_t instruction_count_id = 0;
 static statcounters_fmt_flag_t format = CSV_HEADER; 
+static _Thread_local SHA256_CTX *sha_ctx;
+static size_t sock_op_len_send = 2048;
+static size_t sock_op_len_recv = 2048;
+
 
 #ifdef BMARK_PROC
 #undef BMARK_PROC
@@ -272,13 +298,13 @@ int rusage_dump_with_args (
             fprintf(fp, "%lu,",b->ru_idrss);
             fprintf(fp, "%lu,",b->ru_isrss);
             fprintf(fp, "%lu,",b->ru_minflt);
-            fprintf(fp, "%lu",b->ru_majflt);
+            fprintf(fp, "%lu,",b->ru_majflt);
             fprintf(fp, "%lu,",b->ru_nswap);
             fprintf(fp, "%lu,",b->ru_inblock);
             fprintf(fp, "%lu,",b->ru_oublock);
             fprintf(fp, "%lu,",b->ru_msgsnd);
             fprintf(fp, "%lu,",b->ru_msgrcv);
-            fprintf(fp, "%lu",b->ru_nsignals);
+            fprintf(fp, "%lu,",b->ru_nsignals);
             fprintf(fp, "%lu,",b->ru_nvcsw);
             fprintf(fp, "%lu",b->ru_nivcsw);
             fprintf(fp, "\n");
@@ -333,12 +359,28 @@ unset_priority(void)
 	struct sched_param sched_params;
 	struct rtprio rt_params;
 	int error;
-
+	
 	rt_params.type = RTP_PRIO_NORMAL;
 	rt_params.prio = RTP_PRIO_MIN;
 	error = rtprio_thread(RTP_SET, 0, &rt_params);
 	assert(error == 0);
 }
+
+
+static void
+wait_for_fd(int fd, bool read)
+{
+	int status;
+	struct pollfd fds[1];
+
+	fds[0].fd = fd;
+	if (read)
+		fds[0].events = POLLIN;
+	else
+		fds[0].events = POLLOUT;
+	status = ppoll(fds, 1, NULL, NULL);
+}
+
 
 static void
 do_recv_setup(void)
@@ -350,26 +392,28 @@ do_recv_setup(void)
 
     //allocate message buffer
     buffer = calloc(1, message_len);
-
+	buffer = cheri_andperm(buffer, CHERI_PERM_STORE | CHERI_PERM_LOAD | CHERI_PERM_GLOBAL);
+	buffer = cheri_setbounds(buffer, message_len);
+	mlock(buffer, __builtin_cheri_length_get(buffer));
     //initialize results list
     SLIST_INIT(&results_list);
 
     //init ipc channels
-	error = pipe(pipes);
+	error = pipe2(pipes, O_CLOEXEC);
 	if (error)
 		err(errno, "%s: failed to open pipes", __func__);
 	recv_pipe = pipes[0];
 	send_pipe = pipes[1];
 
-	error = socketpair(PF_LOCAL, SOCK_STREAM, 0, socks);
+	error = socketpair(PF_LOCAL, SOCK_SEQPACKET | SOCK_NONBLOCK, 0, socks);
 	if (error)
 		err(errno, "%s: failed to open sockets", __func__);
 
-	sockoptval = message_len;
+	sockoptval = (message_len + 32) * 4;
 	if (setsockopt(socks[0], SOL_SOCKET, SO_RCVBUF,
 	    &sockoptval, sizeof(sockoptval)) < 0)
 		err(EX_OSERR, "%s: setsockopt SO_RCVBUF failed", __func__);
-	sockoptval = message_len;
+	sockoptval = (message_len + 32) * 4;
 	if (setsockopt(socks[1], SOL_SOCKET, SO_SNDBUF,
 	    &sockoptval, sizeof(sockoptval)) < 0)
 		err(EX_OSERR, "%s: setsockopt SO_SNDBUF failed", __func__);
@@ -383,7 +427,6 @@ do_recv_setup(void)
 
 	recv_sock = socks[0];
 	send_sock = socks[1];
-
 }
 
 static void
@@ -394,30 +437,54 @@ do_warmup_recv(void)
 	int retries, max_retries;
 	long lwpid;
 
-
 	//warmup run to synchronise sender/recver and warm up caches, touch memory, etc
 	bytes_read = 0;
-	while (bytes_read < message_len) {
-		const size_t write_op_len = message_len - bytes_read;
-		error = read(recv_pipe, buffer, write_op_len);
+	while (bytes_read < __builtin_cheri_length_get(buffer)) {
+		const size_t offset = bytes_read % __builtin_cheri_length_get(buffer);
+		const size_t read_op_len = __builtin_cheri_length_get(buffer) - bytes_read;
+		error = read(recv_pipe, buffer + offset, read_op_len);
 		if (error < 0)
 			err(EX_SOFTWARE, "%s: error occurred in pipe read", __func__);
 		bytes_read += error;
 	}
+	wait_for_fd(recv_sock, true);
 	bytes_read = 0;
-	while (bytes_read < message_len) {
-		const size_t write_op_len = message_len - bytes_read;
-		error = read(recv_sock, buffer, write_op_len);
-		if (error < 0)
-			err(EX_SOFTWARE, "%s: error occurred in socket read", __func__);
+	while (bytes_read < __builtin_cheri_length_get(buffer)) {
+		const size_t offset = bytes_read % __builtin_cheri_length_get(buffer);
+		const size_t read_op_len = 
+			__builtin_cheri_length_get(buffer) - bytes_read < sock_op_len_recv ? 
+			__builtin_cheri_length_get(buffer) - bytes_read 
+			: sock_op_len_recv;
+		error = recv(recv_sock, buffer + offset, read_op_len, MSG_DONTWAIT);
+		if (error < 0) {
+			if (errno != EAGAIN)
+				err(EX_SOFTWARE, "%s: error occurred in socket read", __func__);
+			else
+				continue;
+		}
 		bytes_read += error;
 	}
 
-	memset(buffer, '\0', message_len);
+	pthread_cond_wait(&results_cnd, &results_mtx); //mutex held from do_benchmark
+	memset(buffer, '\0', __builtin_cheri_length_get(buffer));
 	error = read(recv_pipe, &lwpid, sizeof(lwpid));
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: error getting lwpid of sender via pipe", __func__);
-	assert(lwpid == sender_lwpid);
+	if (lwpid != sender_lwpid) {
+		errno = EDOOFUS;
+		err(EX_SOFTWARE, "%s: recv and send threads out of sync on pipe writes", __func__);
+	}
+}
+
+static void
+get_message_text(char *buf, size_t len)
+{
+	int fd;
+	ssize_t status;
+
+	fd = open("/dev/random", O_RDONLY);
+	status = read(fd, buf, len);
+	close(fd);
 }
 
 static void
@@ -429,10 +496,12 @@ do_send_setup(void)
 	void *coproc_init_scb;
 
 	buffer = calloc(1, message_len);
+	buffer = cheri_andperm(buffer, CHERI_PERM_STORE | CHERI_PERM_LOAD | CHERI_PERM_GLOBAL);
+	buffer = cheri_setbounds(buffer, message_len);
+
 	required = __builtin_cheri_length_get(buffer);
-	fd = open("/dev/random", O_RDONLY);
-	status = read(fd, buffer, required);
-	close(fd);
+	get_message_text(buffer, required);
+	mlock(buffer, required);
 
 	while (send_sock == -1)
 		sleep(1);
@@ -446,35 +515,84 @@ do_warmup_send(void)
 	long bytes_written;
 
 	bytes_written = 0;
-	while (bytes_written < message_len) {
-		const size_t write_op_len = message_len - bytes_written;
-		error = write(send_pipe, buffer, write_op_len);
+	while (bytes_written < __builtin_cheri_length_get(buffer)) {
+		const size_t offset = bytes_written % __builtin_cheri_length_get(buffer);
+		const size_t write_op_len = __builtin_cheri_length_get(buffer) - bytes_written;
+		error = write(send_pipe, buffer + offset, write_op_len);
 		if (error < 0)
 			err(EX_SOFTWARE, "%s: error occurred in pipe write", __func__);
 		bytes_written += error;
 	}
 	
 	bytes_written = 0;
-	while (bytes_written < message_len) {
-		const size_t write_op_len = message_len - bytes_written;
-		error = write(send_sock, buffer, write_op_len);
-		if (error < 0)
-		err(EX_SOFTWARE, "%s: error occurred in socket write", __func__);
+	while (bytes_written < __builtin_cheri_length_get(buffer)) {
+		const size_t offset = bytes_written % __builtin_cheri_length_get(buffer);
+		const size_t write_op_len = 
+			(__builtin_cheri_length_get(buffer) - bytes_written) < sock_op_len_send 
+			? (__builtin_cheri_length_get(buffer) - bytes_written) 
+			: sock_op_len_send;
+		error = send(send_sock, buffer + offset, write_op_len, MSG_DONTWAIT);
+		if (error < 0) {
+			if (errno != EAGAIN)
+				err(EX_SOFTWARE, "%s: error occurred in socket write", __func__);
+			else
+				continue;
+		}
 		bytes_written += error;
 	}
 
+	pthread_mutex_lock(&results_mtx);
 	thr_self(&lwpid);
 	error = write(send_pipe, &lwpid, sizeof(lwpid));
 	if (error < 0)
 		err(EX_SOFTWARE, "%s: error writing lwpid of sender to pipe", __func__);
 	assert(error == sizeof(lwpid));
+	pthread_cond_signal(&results_cnd);
+	pthread_mutex_unlock(&results_mtx);
 }
 
-static struct benchmark_result *result;
-static pthread_cond_t results_cnd;
+static inline struct msg_checksum
+do_dummy_workload(char *buf, size_t length)
+{
+	struct msg_checksum result;
+
+	if ((result.is_sha = enable_sha256_workload)) {
+		SHA256_Update(sha_ctx, buf, length);
+		SHA256_Final(result.sha_sum, sha_ctx);
+		result.sha_sum[SHA256_DIGEST_LENGTH] = '\0';
+	} else {
+		size_t total = 0;
+		size_t i = 0;
+		for(;length - i > sizeof(size_t); i += sizeof(size_t)) {
+			size_t *long_buf = (size_t *)&buf[i];
+			total += *long_buf;
+		}
+		for(;length > i; i++) {
+			total += (size_t)buf[i];
+		}
+		
+		
+		result.sum = total;
+	}
+	return result;
+}
+
+static inline struct msg_checksum
+dummy_workload(char *buf, ssize_t length)
+{
+    if (!enable_dummy_workload || length <= 0) {
+		struct msg_checksum result;
+		result.is_sha = false;
+		result.sum = 0;
+        return (result);
+	} else
+		return (do_dummy_workload(buf, (size_t)length));
+}
+
+static struct benchmark_result *shared_result = NULL;
 
 static int
-do_benchmark_send(void *buffer, size_t buffer_length, ipc_type type)
+do_benchmark_send(void *msg, size_t buffer_length, ipc_type type)
 {
 	statcounters_bank_t start_bank, end_bank;
 	struct rusage start_rusage, end_rusage;
@@ -483,51 +601,90 @@ do_benchmark_send(void *buffer, size_t buffer_length, ipc_type type)
 	int intval;
 	int fd;
 	long bytes_written;
+	struct msg_checksum b;
+	struct benchmark_result *result;
+	int error;
 
-	if (type == IPC_PIPE)
+	get_message_text(msg, buffer_length);
+	if (type == IPC_PIPE) {
 		fd = send_pipe;
-	else if (type == IPC_SOCKET)
+		wait_for_fd(fd, false);
+	} else if (type == IPC_SOCKET)
 		fd = send_sock;
 	else
 		err(EX_SOFTWARE, "%s: invalid ipc type %d", __func__, type);
 
-
-	
 	if (!aggregate_mode) {
-		pthread_mutex_lock(&results_mtx);
+		error = pthread_mutex_lock(&results_mtx);
+		if (error != 0 && error != EDEADLK)
+			err(EX_SOFTWARE, "%s: failed to lock results mutex", __func__);
 		result = calloc(1, sizeof(struct benchmark_result));
-
 		result->ipc_type = type;
 		//statcounters
 		statcounters_zero(&start_bank);
+		statcounters_zero(&end_bank);
 		//get initial values for counters, for later comparison
 		getrusage(RUSAGE_SELF, &start_rusage);
 		clock_gettime(CLOCK_REALTIME_PRECISE, &start_ts);
-
 		statcounters_sample(&start_bank);
 	}
 
+	b = dummy_workload(msg, buffer_length);
 	//perform operation
 	status = 0;
 	bytes_written = 0;
 	while (bytes_written < buffer_length) {
-		const size_t write_op_len = buffer_length - bytes_written;
-		status = write(fd, buffer, write_op_len);
-		if (status < 0)
-			err(EX_SOFTWARE, "%s: error occurred in pipe write", __func__);
+		const size_t offset = bytes_written % buffer_length;
+		const size_t write_op_len = 
+			(buffer_length - bytes_written) < sock_op_len_send || type == IPC_PIPE 
+			? (buffer_length - bytes_written) 
+			: sock_op_len_send;
+		if (type == IPC_PIPE)
+			status = write(fd, msg + offset, write_op_len);
+		else if (type == IPC_SOCKET)
+			status = send(fd, msg + offset, write_op_len, MSG_DONTWAIT);
+		if (status < 0) {
+			if (errno != EAGAIN)
+				err(EX_SOFTWARE, "%s: error occurred in ipc write", __func__);
+			else {
+				return (status);
+			}
+		}
 		bytes_written += status;
 	}
 
 	if (status < 0) {
-			err(EX_SOFTWARE, "%s: error occurred in send for ipc type %d", __func__, type);
+		err(EX_SOFTWARE, "%s: error occurred in send for ipc type %d", __func__, type);
 	} 
 
-	if (aggregate_mode)
+	if (!aggregate_mode && type == IPC_SOCKET) {
+		statcounters_sample(&result->statcounter_diff);
+		clock_gettime(CLOCK_REALTIME_PRECISE, &result->timespec_diff);
+		getrusage(RUSAGE_SELF, &result->rusage_diff);
+	} else if (aggregate_mode)
 		return (0);
-	//calculate differences in counters
-	result->statcounter_diff = start_bank;
-	result->timespec_diff = start_ts;
-	result->rusage_diff = start_rusage;
+
+	if (!enable_dummy_workload && type != IPC_PIPE) {
+		result->sum = do_dummy_workload(msg, bytes_written);
+	} else {
+		result->sum = b;
+	}
+
+	if (type == IPC_SOCKET) {
+		statcounters_diff(&result->statcounter_diff, &result->statcounter_diff, &start_bank);
+		rusage_diff(&result->rusage_diff, &result->rusage_diff, &start_rusage);
+		clock_diff(&result->timespec_diff, &result->timespec_diff, &start_ts);
+		result->op = OP_SEND;
+		result->buf_len = bytes_written;
+		SLIST_INSERT_HEAD(&results_list, result, entries);
+	} else if (type == IPC_PIPE) {
+		//calculate differences in counters
+		result->statcounter_diff = start_bank;
+		result->timespec_diff = start_ts;
+		result->rusage_diff = start_rusage;
+		shared_result = result;
+	}
+
 	pthread_cond_wait(&results_cnd, &results_mtx);
 	pthread_mutex_unlock(&results_mtx);
 
@@ -536,35 +693,57 @@ do_benchmark_send(void *buffer, size_t buffer_length, ipc_type type)
 }
 
 static int 
-do_benchmark_recv(void *buffer, size_t buffer_length, ipc_type type)
+do_benchmark_recv(void *msg, size_t msg_size, ipc_type type)
 {
 	statcounters_bank_t end_bank;
 	struct rusage end_rusage;
 	struct timespec end_ts;
-	size_t status;
+	ssize_t status;
 	int fd;
 	long bytes_read;
+	struct msg_checksum a;
+	struct benchmark_result *result;
 
-	if (type == IPC_PIPE)
+	if (type == IPC_PIPE) {
 		fd = recv_pipe;
-	else if (type == IPC_SOCKET)
-		fd = recv_sock;
-	else
+	} else if (type == IPC_SOCKET) {
+		fd = recv_sock; 
+		wait_for_fd(fd, true);
+	} else
 		err(EX_SOFTWARE, "%s: invalid ipc type %d", __func__, type);
-
 	//statcounters
 	statcounters_zero(&end_bank);
+	if (!aggregate_mode && type == IPC_SOCKET) {
+		result = calloc(1, sizeof(struct benchmark_result));
+		getrusage(RUSAGE_SELF, &result->rusage_diff);
+		clock_gettime(CLOCK_REALTIME_PRECISE, &result->timespec_diff);
+		statcounters_sample(&result->statcounter_diff);
+	}
 
 	status = 0;
 	bytes_read = 0;
 	//perform operation
-	while (bytes_read < buffer_length){
-		const size_t read_op_len = buffer_length - bytes_read;
-		status = read(fd, buffer, read_op_len);
-		if (status < 0)
-			err(EX_SOFTWARE, "%s: error reading from socket/pipe", __func__);
+	while (bytes_read < msg_size){
+		const size_t offset = bytes_read % __builtin_cheri_length_get(buffer);
+		const size_t read_op_len = 
+			(msg_size - bytes_read) < sock_op_len_recv || type == IPC_PIPE 
+			? msg_size - bytes_read 
+			: sock_op_len_recv;
+		if (type == IPC_PIPE)
+			status = read(fd, msg + offset, read_op_len);
+		else if (type == IPC_SOCKET)
+			status = recv(fd, msg + offset, read_op_len, MSG_DONTWAIT);
+		if (status < 0) {
+			if (errno != EAGAIN)
+				err(EX_SOFTWARE, "%s: error reading from socket/pipe", __func__);
+			else {
+				if (bytes_read == 0)
+					return (status);
+			}
+		}
 		bytes_read += status;
 	}
+	a = dummy_workload((char *)msg, bytes_read);
 
 	//get metrics
 	if (!aggregate_mode) {
@@ -577,6 +756,18 @@ do_benchmark_recv(void *buffer, size_t buffer_length, ipc_type type)
 		return (0);
 	//calculate delta in metrics and populate fields
 	pthread_mutex_lock(&results_mtx);
+	if (type == IPC_PIPE) {
+		result = shared_result;
+		shared_result = NULL;
+	} else {
+		result->ipc_type = IPC_SOCKET;
+		result->op = OP_RECV;
+	}
+	if (!enable_dummy_workload && type != IPC_PIPE) {
+		result->sum = do_dummy_workload(msg, bytes_read);
+	} else {
+		result->sum = a;
+	}
 	clock_diff(&result->timespec_diff, &end_ts, &result->timespec_diff);
 	rusage_diff(&result->rusage_diff, &end_rusage, &result->rusage_diff);
 	statcounters_diff(&result->statcounter_diff, &end_bank, &result->statcounter_diff);
@@ -584,6 +775,7 @@ do_benchmark_recv(void *buffer, size_t buffer_length, ipc_type type)
 	
 	//insert result
 	SLIST_INSERT_HEAD(&results_list, result, entries);
+	
 	//wakeup writer thread
 	pthread_cond_signal(&results_cnd);
 	pthread_mutex_unlock(&results_mtx);
@@ -607,7 +799,6 @@ do_benchmark_run(ipc_op op, ipc_type type)
 		} else
 			break;
 	} 
-	
 }
 
 static inline void
@@ -645,9 +836,45 @@ aggregate_sample_end(struct benchmark_result *result, ipc_op op_mode, ipc_type t
 }
 
 static void
+clear_affinity(void)
+{
+	int error;
+	cpuset_t cpu_setA = CPUSET_T_INITIALIZER(CPUSET_FSET);
+	cpuset_t cpu_setB = CPUSET_T_INITIALIZER(CPUSET_FSET);
+
+	long tid;
+	thr_self(&tid);
+
+	error = cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, -1, sizeof(cpuset_t), &cpu_setA);
+	if (error != 0)
+		err(EX_SOFTWARE, "%s: unable to get cpu affinity", __func__);
+	if (CPU_COUNT(&cpu_setA) == 1)
+		return;
+	CPU_COPY(&cpu_setB, &cpu_setA);
+	//clear all except 1
+	while (CPU_COUNT(&cpu_setA) > 1) {
+		CPU_CLR(CPU_FFS(&cpu_setA)-1, &cpu_setA);
+	}
+	//clear all except 1, but not the same 1 as the other
+	CPU_CLR(CPU_FFS(&cpu_setA)-1, &cpu_setB);
+	while (CPU_COUNT(&cpu_setB) > 1) {
+		CPU_CLR(CPU_FFS(&cpu_setB)-1, &cpu_setB);
+	}
+	if (tid == recver_lwpid) {
+		error = pthread_setaffinity_np(rcvr_thr, sizeof(cpuset_t), &cpu_setB);
+		if (error != 0)
+			err(EX_SOFTWARE, "%s: unable to reset cpu affinity", __func__);
+	} else {
+		error = pthread_setaffinity_np(sndr_thr, sizeof(cpuset_t), &cpu_setA);
+		if (error != 0)
+			err(EX_SOFTWARE, "%s: unable to reset cpu affinity", __func__);
+	}
+}
+
+static void
 do_benchmark(ipc_op op_mode)
 {
-	struct benchmark_result *result;
+	struct benchmark_result *aggregate_result;
 	struct timespec ts;
 	ssize_t i;
 
@@ -662,35 +889,42 @@ do_benchmark(ipc_op op_mode)
 	} else
 		sleep(1);
 
-	if (aggregate_mode){
-		result = calloc(1, sizeof(struct benchmark_result));
-		aggregate_sample_start(result, op_mode, IPC_PIPE);
+	if (pipe_enabled) {
+		if (aggregate_mode){
+			aggregate_result = calloc(1, sizeof(struct benchmark_result));
+			aggregate_sample_start(aggregate_result, op_mode, IPC_PIPE);
+		}
+	
+		for (i = 0; i < iterations; i++) {
+			do_benchmark_run(op_mode, IPC_PIPE);
+		}
+	
+		if (aggregate_mode)
+			aggregate_sample_end(aggregate_result, op_mode, IPC_PIPE);
 	}
-	for (i = 0; i < iterations; i++) {
-		do_benchmark_run(op_mode, IPC_PIPE);
-	}
-	if (aggregate_mode)
-		aggregate_sample_end(result, op_mode, IPC_PIPE);
 	unset_priority();
-
-	if (aggregate_mode){
-		result = calloc(1, sizeof(struct benchmark_result));
-		aggregate_sample_start(result, op_mode, IPC_SOCKET);
+	//clear_affinity();
+	if (socket_enabled) {
+		if (aggregate_mode){
+			aggregate_result = calloc(1, sizeof(struct benchmark_result));
+			aggregate_sample_start(aggregate_result, op_mode, IPC_SOCKET);
+		}
+		for (i = 0; i < iterations; i++) 
+			do_benchmark_run(op_mode, IPC_SOCKET);
+		if (aggregate_mode)
+			aggregate_sample_end(aggregate_result, op_mode, IPC_SOCKET);
 	}
-	for (i = 0; i < iterations; i++) 
-		do_benchmark_run(op_mode, IPC_SOCKET);
-	if (aggregate_mode)
-		aggregate_sample_end(result, op_mode, IPC_SOCKET);
 		
 }
 	
-
 static void
 process_results(void)
 {
 	FILE *outfile;
 	char *filename;
+	char *rusage_filename;
 	char *progname;
+	char *phase;
 	char *bandwidth;
 	struct benchmark_result *run;
 	float printable_bw;
@@ -706,35 +940,76 @@ process_results(void)
 		switch (run->ipc_type) {
 		case IPC_PIPE:
 			progname = strdup("PIPE");
+			phase = strdup("PIPE");
 			idx_b = 0;
 			break;
 		case IPC_SOCKET:
-			progname = strdup("SOCKET");
+			if (run->op == OP_SEND)
+				progname = strdup("SEND");
+			else
+				progname = strdup("RECV");
+			phase = strdup("SOCKET");
 			idx_b = 1;
 			break;
 		default:
 			progname = strdup("UNKNOWN/UNSPECIFIED IPC TYPE");
+			phase = strdup("ERROR");
 			break;
 		}
 		printable_bw = ((float)run->buf_len / 1024.0) / (((float) run->timespec_diff.tv_sec + (float)run->timespec_diff.tv_nsec) / 1000000000);
-		printf("%s: %.2FKB/s\n", progname, printable_bw);
+		printf("%s:%s: %.2FKB/s\n", phase, progname, printable_bw);
+		
+		
 		if (format != HUMAN_READABLE) {
 			filename = calloc(sizeof(char), 255);
+			rusage_filename = calloc(sizeof(char), 255);
 			bandwidth = calloc(sizeof(char), 255);
-			sprintf(filename, "/tmp/%s_b%lu.csv", progname, message_len);
+
+			sprintf(filename, "/tmp/%s_b%lu.csv", phase, message_len);
+			sprintf(rusage_filename, "/tmp/%s_b%lu_rusage.csv", phase, message_len);
 			sprintf(bandwidth, "%.2FKB/s", printable_bw);
-			outfile = fopen(filename, "a+");
-			if (started[idx_a][idx_b])
-				statcounters_dump_with_args(&run->statcounter_diff, progname, NULL, bandwidth, outfile, CSV_NOHEADER);
+
+			//if (phase != NULL)
+				//free(phase); //todo: fix snmalloc buf with freeing strdup'd stuff
+			phase = calloc(sizeof(char), (2 * SHA256_DIGEST_LENGTH) + 2);
+			phase[0] = '-';
+			if (run->sum.is_sha) {
+				for (size_t i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+					sprintf(phase + 1 + (i * 2), "%02x", run->sum.sha_sum[i]);
+				}
+			} else {
+				sprintf(phase + 1, "%lx", run->sum.sum);
+			}
+
+			bool incl_headers;
+			if (!started[idx_a][idx_b]) {
+				int s = open(filename, O_RDONLY | O_CREAT | O_EXCL);
+				incl_headers = (s != -1);
+				if (incl_headers)
+					close(s);
+			} else
+				incl_headers = false;
+
+			outfile = fopen(filename, "a+"); //closed by dump with args
+			if (!incl_headers)
+				statcounters_dump_with_args(&run->statcounter_diff, progname, phase, bandwidth, outfile, CSV_NOHEADER);
 			else
-				statcounters_dump_with_args(&run->statcounter_diff, progname, NULL, bandwidth, outfile, CSV_HEADER);
+				statcounters_dump_with_args(&run->statcounter_diff, progname, phase, bandwidth, outfile, CSV_HEADER);
+				
+			
+			outfile = fopen(rusage_filename, "a+"); //closed by dump with args
+			if (!incl_headers)
+				rusage_dump_with_args(&run->rusage_diff, progname, phase, bandwidth, outfile, CSV_NOHEADER);
+			else
+				rusage_dump_with_args(&run->rusage_diff, progname, phase, bandwidth, outfile, CSV_HEADER);
 			started[idx_a][idx_b] = true;
 		} else {
-			statcounters_dump_with_args(&run->statcounter_diff, progname, NULL, NULL, NULL, format);
-			rusage_dump_with_args(&run->rusage_diff, progname, NULL, NULL, NULL, format);
+			statcounters_dump_with_args(&run->statcounter_diff, progname, phase, NULL, NULL, format);
+			rusage_dump_with_args(&run->rusage_diff, progname, phase, NULL, NULL, format);
 		}
 
 	}
+	printf("%lu byte IPC benchmark done.\n", message_len);
 }
 
 static void *
@@ -744,21 +1019,30 @@ thread_main(void *args)
 	argp = args;
 	ipc_op op_mode = argp->thr_mode;
 
-	sleep(2);
-
+	sha_ctx = calloc(1, sizeof(SHA256_CTX));
+	SHA256_Init(sha_ctx);
 	if (op_mode == OP_RECV) {
 		pthread_mutex_lock(&results_mtx);
 		thr_self(&recver_lwpid);
 		do_recv_setup();
 	} else {
+		while(&recver_lwpid < 0)
+			sleep(1);
 		thr_self(&sender_lwpid);
 		do_send_setup();
 	}
 
     do_benchmark(op_mode);
+	free(buffer);
 
     if (op_mode == OP_RECV) {
     	pthread_mutex_lock(&results_mtx);
+		
+		close(send_pipe);
+		close(recv_pipe);
+		close(send_sock);
+		close(recv_sock);
+		
     	process_results();
     	pthread_mutex_unlock(&results_mtx);
     }
@@ -772,7 +1056,7 @@ static void
 run_in_thread(void)
 {
 	pthread_attr_t thr_attr, thr_attr2;
-	pthread_t thr, thr2;
+	
 	struct sched_param sched_params;
 	struct thr_arg args, args2;
 	pthread_mutexattr_t mtxattr;
@@ -780,9 +1064,12 @@ run_in_thread(void)
 	int error;
 
 	pthread_mutexattr_init(&mtxattr);
-	pthread_condattr_init(&cndattr);
+	pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_ERRORCHECK);
 	pthread_mutex_init(&results_mtx, &mtxattr);
+
+	pthread_condattr_init(&cndattr);
 	pthread_cond_init(&results_cnd, &cndattr);
+
 	pthread_attr_init(&thr_attr);
 	pthread_attr_init(&thr_attr2);
 
@@ -790,9 +1077,8 @@ run_in_thread(void)
 	while (CPU_COUNT(&pinned_cpu_set) != 1) {
 		CPU_CLR(CPU_FFS(&pinned_cpu_set)-1, &pinned_cpu_set);
 	}
-
-	pthread_attr_setaffinity_np(&thr_attr, sizeof(cpuset_t), &pinned_cpu_set);
-	pthread_attr_setaffinity_np(&thr_attr2, sizeof(cpuset_t), &pinned_cpu_set);
+	pthread_attr_setaffinity_np(&thr_attr, sizeof(pinned_cpu_set), &pinned_cpu_set);
+	pthread_attr_setaffinity_np(&thr_attr2, sizeof(pinned_cpu_set), &pinned_cpu_set);
 
 	sched_params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 	pthread_attr_setschedpolicy(&thr_attr, SCHED_FIFO);
@@ -804,12 +1090,27 @@ run_in_thread(void)
 	pthread_attr_setinheritsched(&thr_attr2, PTHREAD_EXPLICIT_SCHED);
 
 	args.thr_mode = OP_RECV;
-	pthread_create(&thr, &thr_attr, thread_main, &args);
+	pthread_create(&rcvr_thr, &thr_attr, thread_main, &args);
 	args2.thr_mode = OP_SEND;
-	pthread_create(&thr2, &thr_attr2, thread_main, &args2);
+	pthread_create(&sndr_thr, &thr_attr2, thread_main, &args2);
 
-	pthread_join(thr2, NULL);
-	pthread_join(thr, NULL);
+	pthread_join(sndr_thr, NULL);
+	pthread_join(rcvr_thr, NULL);
+}
+
+static void
+get_limits(void)
+{
+    size_t len;
+    size_t max_sock_op_size_send, max_sock_op_size_recv;
+	
+	len = sizeof(max_sock_op_size_send); 
+	sysctlbyname("net.local.seqpacket.maxseqpacket", &max_sock_op_size_send, &len, NULL, 0);
+	len = sizeof(max_sock_op_size_recv); 
+	sysctlbyname("net.local.seqpacket.recvspace", &max_sock_op_size_recv, &len, NULL, 0);
+	
+	sock_op_len_send = max_sock_op_size_send;
+	sock_op_len_recv = max_sock_op_size_recv;
 }
 
 int main(int argc, char *const argv[])
@@ -817,7 +1118,7 @@ int main(int argc, char *const argv[])
 	int opt, error;
 	char *strptr;
 
-	while((opt = getopt(argc, argv, "sb:i:ah")) != -1) {
+	while((opt = getopt(argc, argv, "sb:i:ahdcPS")) != -1) {
 		switch (opt) {
 		case 'h':
 			format = HUMAN_READABLE;
@@ -838,12 +1139,31 @@ int main(int argc, char *const argv[])
 			if (*optarg == '\0' || *strptr != '\0' || iterations <= 0)
 				err(EX_USAGE, "invalid number of iterations");
 			break;
+		case 'c':
+			enable_sha256_workload = true;
+			enable_dummy_workload = true;
+			break;
+		case 'd':
+			enable_sha256_workload = false;
+			enable_dummy_workload = true;
+			break;
+		case 'P':
+			pipe_enabled = true;
+			break;
+		case 'S':
+			socket_enabled = true;
+			break;
 		case '?':
 		default: 
 			err(EX_USAGE, "invalid flag '%c'", (char)optopt);
 			break;
 		}
 	}
+	if (!pipe_enabled && !socket_enabled) {
+		pipe_enabled = true;
+		socket_enabled = true;
+	}
+	get_limits();
 	run_in_thread();
 
 	return (0);
