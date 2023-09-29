@@ -52,6 +52,16 @@ void make_pollcoport(pollcoport_t *, coport_t *, coport_eventmask_t);
 void set_coport_handle_type(coport_t *, coport_type_t);
 
 void enable_copipe_sleep(void);
+
+#if defined(ENABLE_INTERNAL_COMSG_BENCHMARK) && defined(__riscv)
+#include <statcounters.h>
+void get_internal_statcounters_copipe_corecvA(statcounters_bank_t *);
+void get_internal_statcounters_copipe_corecvB(statcounters_bank_t *);
+void get_internal_clock_copipe_corecvA(struct timespec *);
+void get_internal_clock_copipe_corecvB(struct timespec *);
+
+#endif
+
 __END_DECLS
 
 #endif

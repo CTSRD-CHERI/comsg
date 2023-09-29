@@ -62,6 +62,18 @@ static struct object_type *allocated_otypes[] = {&copipe_otype, &cochannel_otype
 #define IPCD_OTYPE_RANGE_START (32)
 #define IPCD_OTYPE_RANGE_END (63)
 
+const size_t nanoseconds = 1000000000UL;
+
+#if defined(ENABLE_INTERNAL_COMSG_BENCHMARK) && defined(__riscv)
+#include <statcounters.h>
+
+static _Thread_local statcounters_bank_t pre_sample;
+static _Thread_local statcounters_bank_t post_sample;
+
+static _Thread_local struct timespec pre_sample_clk;
+static _Thread_local struct timespec post_sample_clk;
+#endif
+
 coport_type_t 
 coport_gettype(const coport_t *port)
 {
@@ -124,7 +136,7 @@ process_coport_handle(coport_t *port, coport_type_t type)
         break; /* NOTREACHED */
     }
     return (port);
-} 
+}
 
 /*
  * Calculates a wait time based on a rough estimate of the memcpy bandwidth
@@ -371,11 +383,20 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
     port->buffer->buf = buf;
 
     release_coport_status(port, COPORT_READY);
+    // we expect to block here
+#if defined(ENABLE_INTERNAL_COMSG_BENCHMARK) && defined(__riscv)
+    statcounters_sample(&pre_sample);
+    clock_gettime(CLOCK_MONOTONIC_PRECISE, &pre_sample_clk);
+#endif
     status = acquire_coport_status(port, COPORT_DONE, COPORT_BUSY, len);
     if ((status == COPORT_CLOSING || status == COPORT_CLOSED)) {
         errno = EPIPE;
         return (-1);
     }
+#if defined(ENABLE_INTERNAL_COMSG_BENCHMARK) && defined(__riscv)
+    clock_gettime(CLOCK_MONOTONIC_PRECISE, &post_sample_clk);
+    statcounters_sample(&post_sample);
+#endif
 
     received_len = (ssize_t)port->info->length;
     port->buffer->buf = NULL;
@@ -385,6 +406,31 @@ copipe_recv(const coport_t *port, void *buf, size_t len)
 
     return (received_len);
 }
+
+#if defined(ENABLE_INTERNAL_COMSG_BENCHMARK) && defined(__riscv)
+void 
+get_internal_statcounters_copipe_corecvA(statcounters_bank_t *out)
+{
+    memcpy(out, &pre_sample, sizeof(statcounters_bank_t));
+}
+
+void 
+get_internal_statcounters_copipe_corecvB(statcounters_bank_t *out)
+{
+    memcpy(out, &post_sample, sizeof(statcounters_bank_t));
+}
+void 
+get_internal_clock_copipe_corecvA(struct timespec *out)
+{
+    memcpy(out, &pre_sample_clk, sizeof(struct timespec));
+}
+
+void 
+get_internal_clock_copipe_corecvB(struct timespec *out)
+{
+    memcpy(out, &post_sample_clk, sizeof(struct timespec));
+}
+#endif
 
 static void
 clock_diff(struct timespec *result, struct timespec *end, struct timespec *start)
