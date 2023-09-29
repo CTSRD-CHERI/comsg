@@ -116,14 +116,14 @@ coaccept_wrapper(bool slow)
         int result;
         if (!slow) {
             result = coaccept_tls(&cookie, args, cheri_getlen(args));
-            if (result == 0)
+            if (result >= 0)
                 coaccept_handler(cookie, (cocall_args_t *)args);
         } else {
             result = sloaccept_tls(&cookie, args, cheri_getlen(args));
-            if (result == 0)
+            if (result >= 0)
                 sloaccept_handler(cookie, (cocall_args_t *)args);
         }
-        if (result != 0) 
+        if (result < 0) 
             err(EX_UNAVAILABLE, "%s: coaccept failed", __func__);
     }
 }
@@ -164,9 +164,12 @@ start_endpoint_thread(endpoint_args_t *thread_args)
 
     error = pthread_cond_wait(&registration_cond, &registration_mutex);
     if (thread_args->scb_cap == NULL || error == EOWNERDEAD) {
-        assert(pthread_peekjoin_np(thread_args->worker, NULL) == 0);
+        if (pthread_peekjoin_np(thread_args->worker, NULL) != 0) {
+            abort();
+        }
         pthread_mutex_unlock(&registration_mutex);
         pthread_mutex_unlock(&worker_creation_mutex);
+        printf("failed to start endpoint thread\n");
         return (false);
     }
     pthread_mutex_unlock(&registration_mutex);

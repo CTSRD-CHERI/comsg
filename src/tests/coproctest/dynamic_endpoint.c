@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <pthread.h>
 #include <pthread_np.h>
@@ -158,6 +159,7 @@ void *coaccept_worker(void *worker_argp)
 	void *cookie;
     worker_args_t *worker_args;
 	cocall_args_t cocall_args, *cocall_args_ptr;
+    int error;
     
     cocall_args_ptr = &cocall_args;
     cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(cocall_args_t));
@@ -168,7 +170,8 @@ void *coaccept_worker(void *worker_argp)
 	worker_args = worker_argp;
 	coaccept_init(worker_args->name, &worker_args->scb_cap);
 	for(;;) {
-		if(coaccept_tls(&cookie, cocall_args_ptr, sizeof(cocall_args_t)) == 0) {
+        error = coaccept_tls(&cookie, cocall_args_ptr, sizeof(cocall_args_t));
+		if(error >= 0) {
             if(cheri_gettag(worker_args->validation_function) != 0) {
                 if((*worker_args->validation_function)(cocall_args_ptr) == 0) {
                     cocall_args_ptr->status = -1;
@@ -178,7 +181,7 @@ void *coaccept_worker(void *worker_argp)
             }
             (*worker_args->worker_function)(cocall_args_ptr, cookie);
         } else
-			err(errno, "coaccept_worker: worker failed to coaccept");
+			err(EX_UNAVAILABLE, "coaccept_worker: worker failed to coaccept");
 	}
     return (worker_args);
 }
@@ -188,6 +191,7 @@ void *sloaccept_worker(void *worker_argp)
     void *cookie;
     worker_args_t *worker_args;
     struct _cocall_args cocall_args, *cocall_args_ptr;
+    int error;
     
     cocall_args_ptr = &cocall_args;
     cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(struct _cocall_args));
@@ -198,7 +202,8 @@ void *sloaccept_worker(void *worker_argp)
     worker_args = worker_argp;
     coaccept_init(worker_args->name, &worker_args->scb_cap);
     for(;;) {
-        if(sloaccept_tls(&cookie, cocall_args_ptr, sizeof(struct _cocall_args)) == 0) {
+        error = sloaccept_tls(&cookie, cocall_args_ptr, sizeof(struct _cocall_args));
+        if(error >= 0) {
             if(cheri_gettag(worker_args->validation_function) != 0) 
                 if((*worker_args->validation_function)(cocall_args_ptr) == 0) {
                     cocall_args_ptr->status = -1;
@@ -207,7 +212,7 @@ void *sloaccept_worker(void *worker_argp)
                 }
             (*worker_args->worker_function)(cocall_args_ptr, cookie);
         } else
-            err(errno, "coaccept_worker: worker failed to coaccept");
+            err(EX_UNAVAILABLE, "coaccept_worker: worker failed to coaccept");
     }
     return (worker_args);
 }

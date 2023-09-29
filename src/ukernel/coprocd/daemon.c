@@ -80,7 +80,7 @@ init_daemon(struct ukernel_module *m, struct ukernel_daemon *d)
         return (error);
     pid = spawn_daemon_proc(m, d);
     if (pid == -1)
-        return (error);
+        return (pid);
 
     d->pid = pid;
     return (0);
@@ -229,14 +229,16 @@ spawn_daemon_proc(struct ukernel_module *module, struct ukernel_daemon *daemon)
     char *daemon_args[3];
     void **capv;
     pid_t pid, daemon_pid;
+    size_t capc;
     int status;
     int error;
 
     set_daemon_args(daemon_args, module, daemon);
     capv = build_daemon_capvec(module, daemon);
+    capc = __builtin_cheri_length_get(capv) / sizeof(void *);
     daemon_pid = rfork(RFSPAWN);
     if (daemon_pid == 0) {
-        error = coexecvec(process_manager->pid, daemon_args[0], daemon_args, environ, capv);
+        error = coexecvec(process_manager->pid, daemon_args[0], daemon_args, environ, capv, capc);
         _exit(EX_UNAVAILABLE); /* Should not reach unless error */
     } else if (daemon_pid == -1) {
         warn("%s: rfork failed", __func__);

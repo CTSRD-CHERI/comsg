@@ -86,7 +86,7 @@ check_core(struct ukernel_module *core_module, int inited)
 static void
 init_core(void)
 {
-    pid_t daemon_pid;
+    int error;
     function_map_t *init_map;
     struct ukernel_module *core_module;
     struct ukernel_daemon *d;
@@ -112,9 +112,9 @@ init_core(void)
     for (i = 1; i < core_module->ndaemons; i++) {
         d = &core_module->daemons[i];
         check_core(core_module, i-1);
-        daemon_pid = init_daemon(core_module, d);
-        if (daemon_pid == -1) 
-            err(errno, "failed to start microkernel core daemon %s", d->name);
+        error = init_daemon(core_module, d);
+        if (error < 0) 
+            err(EX_UNAVAILABLE, "failed to start microkernel core daemon %s", d->name);
         if ((d->flags & SYNCHRONOUS) != 0) {
             for (;;) {
                 daemon_status status = atomic_load(&d->status);
@@ -131,8 +131,10 @@ init_core(void)
     /* TODO-PBB: rework worker_map stuff */
     process_manager->setup_state = calloc(1, sizeof(daemon_setup_state));
     init_map = spawn_worker(U_COPROC_INIT, process_manager->setup_info->setup, NULL);
-    if (init_map == NULL)
-        err(EEXIST, "could not start microkernel in this address space. Is an old instance still running?");
+    if (init_map == NULL) {
+        errno = EEXIST;
+        err(EX_UNAVAILABLE, "could not start microkernel in this address space. Is an old instance still running?");
+    }
     process_manager->setup_state->setup_worker = &init_map->workers[0];
     free(init_map);
     core_module->init->complete();

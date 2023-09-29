@@ -128,7 +128,7 @@ do_procdeath_test(void)
 	my_pid = getpid();
 	child_pid = vfork();
 	if (child_pid == 0) {
-		coexecvec(my_pid, child_args[0], child_args, environ, capv);
+		coexecvec(my_pid, child_args[0], child_args, environ, capv, 3);
 		_exit(EX_UNAVAILABLE);
 	}
 	error = corecv(copipe, (void **)&buf, sizeof(coevent_t *));

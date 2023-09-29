@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <pthread.h>
 #include <pthread_np.h>
@@ -110,7 +111,12 @@ start_coaccept_worker(worker_args_t *thread_args)
 
     error = pthread_cond_wait(&registration_cond, &registration_mutex);
     if (thread_args->scb_cap == NULL || error == EOWNERDEAD) {
-        assert(pthread_peekjoin_np(thread_args->worker, NULL) == 0);
+        if (pthread_peekjoin_np(thread_args->worker, NULL) != 0) {
+            if (errno == EBUSY)
+                err(EX_SOFTWARE, "%s: coaccept worker failed to start, but its thread is still running", __func__);
+            else 
+                err(EX_SOFTWARE, "%s: attempt to evaluate the condition of failed coaccept worker also failed", __func__);
+        }
         pthread_mutex_unlock(&registration_mutex);
         pthread_mutex_unlock(&worker_creation_mutex);
         return (false);
@@ -155,12 +161,13 @@ start_sloaccept_worker(worker_args_t *thread_args)
 
 void *coaccept_worker(void *worker_argp)
 {
+    int error;
 	void *cookie;
     worker_args_t *worker_args;
 	cocall_args_t cocall_args, *cocall_args_ptr;
     
     cocall_args_ptr = &cocall_args;
-    cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(cocall_args_t));
+    cocall_args_ptr = cheri_setbounds(cocall_args_ptr, sizeof(struct _cocall_args));
     memset(cocall_args_ptr, '\0', cheri_getlen(cocall_args_ptr));
     assert(cheri_local(cocall_args_ptr));
     assert(cheri_getperm(cocall_args_ptr) & CHERI_PERM_STORE_LOCAL_CAP);
@@ -168,7 +175,8 @@ void *coaccept_worker(void *worker_argp)
 	worker_args = worker_argp;
 	coaccept_init(worker_args->name, &worker_args->scb_cap);
 	for(;;) {
-		if(coaccept_tls(&cookie, cocall_args_ptr, sizeof(cocall_args_t)) == 0) {
+        error = coaccept_tls(&cookie, cocall_args_ptr, sizeof(struct _cocall_args));
+        if (error >= 0) {            
             if(cheri_gettag(worker_args->validation_function) != 0) {
                 if((*worker_args->validation_function)(cocall_args_ptr) == 0) {
                     cocall_args_ptr->status = -1;
@@ -177,14 +185,16 @@ void *coaccept_worker(void *worker_argp)
                 }
             }
             (*worker_args->worker_function)(cocall_args_ptr, cookie);
-        } else
-			err(errno, "coaccept_worker: worker failed to coaccept");
+        } else {
+			err(EX_SOFTWARE, "%s: worker failed to coaccept", __func__);
+        }
 	}
     return (worker_args);
 }
 
 void *sloaccept_worker(void *worker_argp)
 {
+    int error;
     void *cookie;
     worker_args_t *worker_args;
     struct _cocall_args cocall_args, *cocall_args_ptr;
@@ -198,7 +208,8 @@ void *sloaccept_worker(void *worker_argp)
     worker_args = worker_argp;
     coaccept_init(worker_args->name, &worker_args->scb_cap);
     for(;;) {
-        if(sloaccept_tls(&cookie, cocall_args_ptr, sizeof(struct _cocall_args)) == 0) {
+        error = sloaccept_tls(&cookie, cocall_args_ptr, sizeof(struct _cocall_args));
+        if(error >= 0) {
             if(cheri_gettag(worker_args->validation_function) != 0) 
                 if((*worker_args->validation_function)(cocall_args_ptr) == 0) {
                     cocall_args_ptr->status = -1;
@@ -207,7 +218,7 @@ void *sloaccept_worker(void *worker_argp)
                 }
             (*worker_args->worker_function)(cocall_args_ptr, cookie);
         } else
-            err(errno, "coaccept_worker: worker failed to coaccept");
+			err(EX_SOFTWARE, "%s: worker failed to coaccept", __func__);
     }
     return (worker_args);
 }

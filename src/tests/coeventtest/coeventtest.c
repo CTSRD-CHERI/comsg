@@ -47,9 +47,11 @@ process_capvec(void)
 {
     int error;
     void **capv;
+    size_t capc;
 
     error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
-    if (capv[2] != NULL)
+    error = elf_aux_info(AT_CAPC, &capc, sizeof(capc));
+    if (capc < 2)
         err(EX_SOFTWARE, "%s: invalid capvec format", __func__);
 
     cocarrier = capv[0];

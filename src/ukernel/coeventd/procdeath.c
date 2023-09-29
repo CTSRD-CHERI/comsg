@@ -134,7 +134,6 @@ execute_cocallback(struct cocallback *cocallback)
 	} else {
 		error = cocall_tls(func->scb, cocallback->args.cocall_data, cocallback->args.len);
 	}
-
 	return (error);
 }
 

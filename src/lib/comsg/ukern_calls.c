@@ -313,8 +313,8 @@ coinsert(const char *name, nsobject_type_t type, void *subject, namespace_t *ns)
 	cocall_args.nsobj_type = type;
 
 	error = ukern_call(COCALL_COINSERT, &cocall_args);
-	if (error != 0) 
-		err(EX_SOFTWARE, "%s: error performing cocall", __func__);
+	if (error == - 0) 
+		err(EX_UNAVAILABLE, "%s: error performing cocall", __func__);
 	else if (cocall_args.status == -1) {
 		//TODO-PBB: handle errors better? or leave it to consumers?
 		errno = cocall_args.error;
@@ -343,7 +343,7 @@ coselect(const char *name, nsobject_type_t type, namespace_t *ns)
 	
 	error = ukern_call(COCALL_COSELECT, &cocall_args);
 	if (error == -1)
-		err(EX_SOFTWARE, "%s: error performing cocall to coselect", __func__);
+		err(EX_UNAVAILABLE, "%s: error performing cocall to coselect", __func__);
 	else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
@@ -365,7 +365,7 @@ codiscover(nsobject_t *nsobj, void **scb)
 	if (error == -1) {
 		if (errno == EAGAIN)
 			return (NULL);
-		err(EX_SOFTWARE, "%s: error performing cocall to codiscover", __func__);
+		err(EX_UNAVAILABLE, "%s: error performing cocall to codiscover", __func__);
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		err(EX_SOFTWARE, "%s: error during cocall to codiscover", __func__);
@@ -401,8 +401,8 @@ coprovide(void **worker_scbs, int nworkers, coservice_flags_t flags, int op)
 	cocall_args.target_op = op;
 
 	error = ukern_call(COCALL_COPROVIDE, &cocall_args);
-	if(error)
-		err(EX_SOFTWARE, "%s: error in cocall", __func__);
+	if (error == -1)
+		err(EX_UNAVAILABLE, "%s: error in cocall", __func__);
 	free(scbs);
 	if (cocall_args.status == -1) {
 		errno = cocall_args.error;
@@ -425,8 +425,8 @@ coprovide2(struct _coservice_endpoint *ep, coservice_flags_t flags, int op)
 	cocall_args.target_op = op;
 
 	error = ukern_call(COCALL_COPROVIDE2, &cocall_args);
-	if(error) {
-		err(EX_SOFTWARE, "%s: error in cocall", __func__);
+	if (error == -1) {
+		err(EX_UNAVAILABLE, "%s: error in cocall", __func__);
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
@@ -448,8 +448,8 @@ cocreate(const char *name, nstype_t type, namespace_t *parent)
 	strncpy(cocall_args.ns_name, name, NS_NAME_LEN);
 
 	error = ukern_call(COCALL_COCREATE, &cocall_args);
-	if (error != 0)
-		err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1)
+		err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 	else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
@@ -479,8 +479,8 @@ coproc_init(namespace_t *root_ns_cap, void *coinsert_scb, void *coselect_scb, vo
 		error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT, &cocall_args, sizeof(coproc_init_args_t));
 	else 
 		error = call_ukern_target(COCALL_COPROC_INIT, &cocall_args);
-	if (error != 0){
-		err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1) {
+		err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (NULL);
@@ -511,8 +511,8 @@ coproc_init_done(void)
 		err(EX_SOFTWARE, "%s: microkernel only calls should not be made by user programs", __func__);
 	}
 	error = targeted_slocall(ukern_call_set, COCALL_COPROC_INIT_DONE, &cocall_args, sizeof(coproc_init_args_t));
-	if(error){
-		err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1) {
+		err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		err(EX_SOFTWARE, "%s: coproc_init_done failed", __func__);
@@ -539,8 +539,8 @@ cocarrier_send(const coport_t *port, const void *buf, size_t len)
 	cocall_args.oob_data.attachments = NULL;
     
     error = ukern_call(COCALL_COSEND, &cocall_args);
-    if (error != 0)
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1)
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
@@ -560,8 +560,8 @@ coopen(coport_type_t type)
 	cocall_args.coport_type = type;
     
     error = ukern_call(COCALL_COOPEN, &cocall_args);
-    if(error)
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1)
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
@@ -585,8 +585,8 @@ cocarrier_recv(const coport_t *port, void ** const buf, size_t len)
 	cocall_args.oob_data.attachments = NULL;
 
 	error = ukern_call(COCALL_CORECV, &cocall_args);
-    if(error != 0) {
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1) {
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 	}
 
     if (cocall_args.status == -1) {
@@ -616,13 +616,13 @@ copoll(pollcoport_t *coports, int ncoports, int timeout)
 	memcpy(cocall_args.coports, coports, sizeof(pollcoport_t) * ncoports);
 do_copoll:
 	error = ukern_call(COCALL_COPOLL, &cocall_args);
-	if(error != 0)
-		err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1)
+		err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 	if (cocall_args.status == -1) {
 		if (cocall_args.error == EWOULDBLOCK && timeout != 0) {
 			error = ukern_call(COCALL_SLOPOLL, &cocall_args);
-			if(error != 0)
-				err(EX_SOFTWARE, "%s: cocall failed (slopoll)", __func__);
+			if (error == -1)
+				err(EX_UNAVAILABLE, "%s: cocall failed (slopoll)", __func__);
 		} else {
 			errno = cocall_args.error;
 			free(cocall_args.coports);
@@ -644,8 +644,8 @@ coclose(coport_t *coport)
 	memset(&cocall_args, '\0', sizeof(cocall_args));
 	cocall_args.port = coport;
 	error = ukern_call(COCALL_COCLOSE, &cocall_args);
-	if(error != 0)
-		err(EX_SOFTWARE, "%s: cocall failed", __func__);
+	if (error == -1)
+		err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 	if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		return (-1);
@@ -683,8 +683,8 @@ coupdate(nsobject_t *nsobj, nsobject_type_t type, void *subject)
 	cocall_args.nsobj = nsobj;
 
 	error = ukern_call(COCALL_COUPDATE, &cocall_args);
-	if (error != 0) 
-		err(EX_SOFTWARE, "%s: error performing cocall", __func__);
+	if (error == -1) 
+		err(EX_UNAVAILABLE, "%s: error performing cocall", __func__);
 	else if (cocall_args.status == -1) {
 		//TODO-PBB: handle errors better? or leave it to consumers?
 		errno = cocall_args.error;
@@ -705,8 +705,8 @@ codelete(nsobject_t *nsobj, namespace_t *parent)
 	cocall_args.ns_cap = parent;
 
 	error = ukern_call(COCALL_CODELETE, &cocall_args);
-	if (error != 0) 
-		err(EX_SOFTWARE, "%s: error performing cocall", __func__);
+	if (error == -1) 
+		err(EX_UNAVAILABLE, "%s: error performing cocall", __func__);
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 	return (cocall_args.status);
@@ -723,8 +723,8 @@ codrop(namespace_t *ns, namespace_t *parent)
 	cocall_args.child_ns_cap = ns;
 
 	error = ukern_call(COCALL_CODROP, &cocall_args);
-	if (error != 0)
-		err(EX_SOFTWARE, "%s: error performing cocall", __func__);
+	if (error == -1)
+		err(EX_UNAVAILABLE, "%s: error performing cocall", __func__);
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 
@@ -743,8 +743,8 @@ ccb_install(cocallback_func_t *ccb_func, struct cocallback_args *ccb_args, coeve
 	cocall_args.coevent = coevent;
 
 	error = ukern_call(COCALL_CCB_INSTALL, &cocall_args);
-	if (error != 0)
-		err(EX_SOFTWARE, "%s: error performing cocall", __func__);
+	if (error == -1)
+		err(EX_UNAVAILABLE, "%s: error performing cocall", __func__);
 	else if (cocall_args.status == -1)
 		errno = cocall_args.error;
 
@@ -763,8 +763,8 @@ ccb_register(void *scb, cocallback_flags_t flags)
 	cocall_args.flags = flags;
 
 	error = ukern_call(COCALL_CCB_REGISTER, &cocall_args);
-    if(error != 0)
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+    if (error == -1)
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
@@ -786,14 +786,15 @@ colisten(coevent_type_t type, coevent_subject_t subject)
 	cocall_args.event = type;
 
 	error = ukern_call(COCALL_COLISTEN, &cocall_args);
-    if(error != 0)
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+    if (error == -1)
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;
         return (NULL);
     }
-
+	// forceswapback
+	//getpid(); 
 	return (cocall_args.coevent);
 }
 
@@ -824,8 +825,8 @@ cocarrier_send_oob(const coport_t *port, const void *buf, size_t len, comsg_atta
     }
 
     error = ukern_call(COCALL_COSEND, &cocall_args);
-    if(error)
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+    if (error == -1)
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 
     if (cocall_args.status == -1) 
         errno = cocall_args.error;
@@ -843,8 +844,8 @@ cocarrier_recv_oob(const coport_t *port, void ** const buf, size_t len, comsg_at
     cocall_args.length = len;
 
     error = ukern_call(COCALL_CORECV, &cocall_args);
-    if(error != 0)
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+    if (error == -1)
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
     if (cocall_args.status == -1) 
         errno = cocall_args.error;
     else {
@@ -873,7 +874,7 @@ codiscover2(coservice_t *s)
 	
 	error = ukern_call(COCALL_CODISCOVER2, &cocall_args);
 	if (error == -1) {
-		err(EX_SOFTWARE, "%s: error performing cocall to codiscover2", __func__);
+		err(EX_UNAVAILABLE, "%s: error performing cocall to codiscover2", __func__);
 	} else if (cocall_args.status == -1) {
 		errno = cocall_args.error;
 		err(EX_SOFTWARE, "%s: error during cocall to codiscover2", __func__);
@@ -894,8 +895,8 @@ coport_msg_free(coport_t *port, void *ptr)
 	cocall_args.cocarrier = port;
 	
 	error = ukern_call(COCALL_COPORT_MSG_FREE, &cocall_args);
-    if(error != 0)
-        err(EX_SOFTWARE, "%s: cocall failed", __func__);
+    if (error == -1)
+        err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 
     if (cocall_args.status == -1) {
         errno = cocall_args.error;

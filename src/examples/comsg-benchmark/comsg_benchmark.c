@@ -155,9 +155,11 @@ process_capvec(void)
 {
 	int error;
 	void **capv;
+	size_t capc;
 
 	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
-	if (capv[3] != NULL)
+	error =  elf_aux_info(AT_CAPC, &capc, sizeof(capc));
+	if (capc < 3)
 		err(EINVAL, "process_capvec: invalid capvec format");
 	//should validate these better
 	copipe = capv[0];
@@ -478,7 +480,7 @@ do_recv_setup(void)
 	//spawn sender process
 	child_pid = rfork(RFSPAWN);
 	if (child_pid == 0) {
-        error = coexecvec(recver_pid, child_args[0], child_args, environ, capv);
+        error = coexecvec(recver_pid, child_args[0], child_args, environ, capv, 5);
         _exit(EX_UNAVAILABLE); /* Should not reach unless error */
     } else if (child_pid == -1) {
         err(EX_SOFTWARE, "%s: rfork failed", __func__);

@@ -84,11 +84,18 @@ static void
 process_capvec(void)
 {
 	int error;
+ 	size_t capc;
 	struct coeventd_capvec *capvec;
 	void **capv;
+	   
 
 	//todo-pbb: add checks to ensure these are valid
-	error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+    error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
+    error = elf_aux_info(AT_CAPC, &capc, sizeof(capc));
+	if ((capc * (sizeof void *)) < sizeof(struct coeventd_capvec)) {
+		errno = EINVAL;
+		err(EX_SOFTWARE, "%s: capability vector is not large enough", __func__);
+	}
 	capvec = (struct coeventd_capvec *)capv;
 	set_ukern_target(COCALL_COPROC_INIT_DONE, capvec->coproc_init_done);
 	set_ukern_target(COCALL_CODISCOVER, capvec->codiscover);
@@ -106,7 +113,7 @@ coeventd_startup(void)
 
 	process_capvec();
 	if (root_ns == NULL)
-		err(errno, "coeventd_startup: cocall failed");
+		err(EX_UNAVAILABLE, "%s: cocall failed", __func__);
 	coprovide_nsobj = coselect(U_COPROVIDE, COSERVICE, root_ns);
 	if(coprovide_nsobj == NULL) {
 		errno = ENOTCONN;
