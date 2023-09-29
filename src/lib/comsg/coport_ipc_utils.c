@@ -42,13 +42,17 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/errno.h>
 #include <sys/sched.h>
 #include <sys/sysctl.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 static bool multicore = 0;
+static double est_mem_bw = 0.0;
 
 static nsobject_t *cosend_obj = NULL;
 static nsobject_t *corecv_obj = NULL;
