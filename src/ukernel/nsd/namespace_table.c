@@ -77,16 +77,16 @@ void setup_namespace_table(void)
 	/* Allocate namespace table */
 	namespace_table.namespaces = calloc(maxprocs, sizeof(namespace_t));
 	if (namespace_table.namespaces == NULL)
-		err(errno, "setup_namespace_table: calloc for namespace table failed");
+		err(EX_SOFTWARE, "%s: calloc for namespace table failed", __func__);
 	max_namespaces = cheri_getlen(namespace_table.namespaces) / sizeof(namespace_t);
-	namespace_table.next_namespace = 0;
+	namespace_table.next_namespace = 0lu;
 	namespace_table.namespace_count = 0lu;
 	/* Allocate namespace object table */
 	nsobject_table.nsobjects = calloc(maxprocs * 2, sizeof(nsobject_t));
 	if (nsobject_table.nsobjects == NULL)
-		err(errno, "setup_namespace_table: calloc for nsobject table failed");
+		err(EX_SOFTWARE, "%s: calloc for nsobject table failed", __func__);
 	max_nsobjects = cheri_getlen(nsobject_table.nsobjects) / sizeof(nsobject_t);
-	nsobject_table.next_nsobject = 0;
+	nsobject_table.next_nsobject = 0lu;
 	nsobject_table.nsobject_count = 0lu;
 
 	/* Determine limits - not fully used yet.*/
