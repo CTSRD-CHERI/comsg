@@ -87,12 +87,11 @@ process_capvec(void)
  	size_t capc;
 	struct coeventd_capvec *capvec;
 	void **capv;
-	   
 
 	//todo-pbb: add checks to ensure these are valid
     error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
     error = elf_aux_info(AT_CAPC, &capc, sizeof(capc));
-	if ((capc * (sizeof void *)) < sizeof(struct coeventd_capvec)) {
+	if ((capc * (sizeof (void *))) < sizeof(struct coeventd_capvec)) {
 		errno = EINVAL;
 		err(EX_SOFTWARE, "%s: capability vector is not large enough", __func__);
 	}
