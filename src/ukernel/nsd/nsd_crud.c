@@ -44,6 +44,7 @@
 #include <err.h>
 #include <sys/errno.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -54,46 +55,60 @@
 extern void begin_cocall();
 extern void end_cocall();
 
-static __inline void 
+static __inline bool 
 validate_nscreate_params(namespace_t *parent, nstype_t type, const char *name)
 {
-	assert(valid_ns_name(name));
-	assert(VALID_NS_TYPE(type));
+	if (!(valid_ns_name(name)))
+		return (false);
+
+	if (!(VALID_NS_TYPE(type)))
+		return (false);
+
 	if(type != ROOT) {
-		valid_namespace_cap(parent);
-		assert(NS_PERMITS_WRITE(parent));
+		if (!valid_namespace_cap(parent))
+			return (false);
+		if (!(NS_PERMITS_WRITE(parent)))
+			return (false);
 		parent = unseal_ns(parent);
 	}
 
 	switch(type)
 	{
 		case ROOT:
-			assert(parent == NULL);
+			if (parent != NULL)
+				return (false);
+			if (get_root_namespace() != NULL)
+				return (false);
 			break;
 		case APPLICATION:
 		case LIBRARY:
-			assert(parent->type == ROOT);
-			assert(is_root_namespace(parent));
+			if (parent->type != ROOT || !is_root_namespace(parent))
+				return (false);
 			break;
 		case PRIVATE:
 		case PUBLIC:
 			break;
 		default:
-			err(EINVAL, "new_namespace: invalid type supplied");
+			return (false);
 			break;
 	}
+	return (true);
 }
 
-static __inline void 
+static __inline bool 
 validate_nsobjcreate_params(const char *name, nsobject_type_t type, namespace_t *parent)
 {
-	assert(valid_namespace_cap(parent));
-
-	assert(valid_nsobj_name(name));
-	assert(VALID_NSOBJ_TYPE(type));
-	assert(NS_PERMITS_WRITE(parent));
-	
-	assert(lookup_nsobject(name, type, parent) == NULL);
+	if (!(valid_namespace_cap(parent)))
+		return (false);
+	if (!(valid_nsobj_name(name)))
+		return (false);
+	if (!(VALID_NSOBJ_TYPE(type)))
+		return (false);
+	if (!(NS_PERMITS_WRITE(parent)))
+		return (false);
+	if (lookup_nsobject(name, type, parent) != NULL)
+		return (false);
+	return (true);
 }
 
 static __inline void
@@ -116,8 +131,9 @@ new_namespace(const char *name, nstype_t type, namespace_t *parent)
 	namespace_t *ns_ptr;
 	namespace_t *parent_cap;
 
-	/* Absolutely should not ever get to this point with invalid parameters */
-	validate_nscreate_params(parent, type, name);
+	/* Should not ever get to this point with invalid parameters */
+	if (!validate_nscreate_params(parent, type, name))
+		return (NULL);
 
 	ns_ptr = allocate_namespace(parent, type);
 	if (ns_ptr == NULL)
@@ -136,7 +152,6 @@ new_namespace(const char *name, nstype_t type, namespace_t *parent)
 
 		ns_ptr->parent = parent_cap;
 	}
-
 	init_ns_members(ns_ptr);
 	ns_ptr = cheri_andperm(ns_ptr, NS_PERMS_OWN_MASK);
 	ns_ptr = seal_ns(ns_ptr);
@@ -147,7 +162,8 @@ new_namespace(const char *name, nstype_t type, namespace_t *parent)
 nsobject_t *
 new_nsobject(const char *name, nsobject_type_t type, namespace_t *parent)
 {
-	validate_nsobjcreate_params(name, type, parent);
+	if (validate_nsobjcreate_params(name, type, parent))
+		return (NULL);
 	
 	nsobject_t *obj_ptr = allocate_nsobject(parent);
 	if (obj_ptr == NULL)

@@ -176,7 +176,8 @@ allocate_namespace(namespace_t *parent, nstype_t type)
 {
 	struct _ns_member *obj_cap;
 	if (type == ROOT) {
-		assert(parent == NULL);
+		/* INFO-PBB: These are asserts because they are properly checked before this is called */
+		assert(parent == NULL); 
 		assert(root_namespace == NULL);
 		root_namespace = new_namespace_entry();
 		return (root_namespace);
