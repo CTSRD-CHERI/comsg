@@ -82,7 +82,7 @@ add_event_listener(comsg_args_t *cocall_args, void *token)
 		if (error == -1) {
 			COCALL_ERR(cocall_args, EOPNOTSUPP);
 		}
-#endif;
+#endif
 		if (target_pid < 0) {
 			COCALL_ERR(cocall_args, EOPNOTSUPP);
 		}  else if (target_pid != cocall_args->subject.ces_pid) {
