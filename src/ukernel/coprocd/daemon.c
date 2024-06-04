@@ -188,8 +188,10 @@ set_daemon_args(char **argv, struct ukernel_module *m, struct ukernel_daemon *d)
         argv[1] = calloc(12, sizeof(char));
         sprintf(argv[1], "%d", m->daemons[0].pid);  /* module pgrp leader */
         argv[2] = NULL;
-    } else
+    } else {
         argv[1] = NULL;
+        argv[2] = NULL;
+    }
 }
 
 static void **

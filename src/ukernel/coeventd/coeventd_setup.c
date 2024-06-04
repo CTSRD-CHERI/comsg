@@ -84,7 +84,7 @@ static void
 process_capvec(void)
 {
 	int error;
- 	size_t capc;
+ 	int capc;
 	struct coeventd_capvec *capvec;
 	void **capv;
 

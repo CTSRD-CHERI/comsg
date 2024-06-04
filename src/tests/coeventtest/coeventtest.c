@@ -47,7 +47,7 @@ process_capvec(void)
 {
     int error;
     void **capv;
-    size_t capc;
+    int capc;
 
     error = elf_aux_info(AT_CAPV, &capv, sizeof(capv));
     error = elf_aux_info(AT_CAPC, &capc, sizeof(capc));

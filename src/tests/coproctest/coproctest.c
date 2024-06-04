@@ -128,7 +128,7 @@ do_procdeath_test(void)
 	my_pid = getpid();
 	child_pid = vfork();
 	if (child_pid == 0) {
-		coexecvec(my_pid, child_args[0], child_args, environ, capv, 3);
+		coexecvec(my_pid, child_args[0], child_args, environ, capv, 2);
 		_exit(EX_UNAVAILABLE);
 	}
 	error = corecv(copipe, (void **)&buf, sizeof(coevent_t *));
@@ -429,6 +429,7 @@ cleanup_microkernel(void)
 int main(int argc, char *const argv[])
 {
 	int error;
+	int err2;
 	void *coproc_init_scb;
 	pid_t test_pid;
 
@@ -436,9 +437,10 @@ int main(int argc, char *const argv[])
     if (error != 0) {
 	    test_pid = getpid();
 	    coprocd_pid = vfork();
-	    if (coprocd_pid == 0)
-	    	coexecve(test_pid, coprocd_args[0], coprocd_args, environ);
-	    do {
+	    if (coprocd_pid == 0) {
+	    	err2 = coexecve(test_pid, coprocd_args[0], coprocd_args, environ);
+			_exit(EX_UNAVAILABLE); /* Should not reach unless error */
+	    } do {
 	    	sleep(1);
 	    	error = colookup(U_COPROC_INIT, &coproc_init_scb);
 	    	sleep(1);
@@ -449,8 +451,6 @@ int main(int argc, char *const argv[])
 
     do_tests();
     do_procdeath_test();
-
-	
 
 	return (0);
 }
