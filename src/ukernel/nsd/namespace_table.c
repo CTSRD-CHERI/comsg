@@ -43,6 +43,7 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/queue.h>
