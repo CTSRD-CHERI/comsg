@@ -200,31 +200,36 @@ is_root_namespace(namespace_t *ns_cap)
 	return (root_namespace == ns_cap);
 }
 
-void *get_root_namespace(void)
+void *
+get_root_namespace(void)
 {
-	assert(root_namespace != NULL);
+	//assert(root_namespace != NULL); //no longer correct since this can be used to test if root ns is null
 	return (root_namespace);
 }
 
-int in_ns_table(namespace_t *ptr)
+int 
+in_ns_table(namespace_t *ptr)
 {
 	vaddr_t addr = cheri_getaddress(ptr);
 	return (cheri_is_address_inbounds(namespace_table.namespaces, addr));
 }
 
-int in_nsobject_table(nsobject_t *ptr)
+int 
+in_nsobject_table(nsobject_t *ptr)
 {
 	vaddr_t addr = cheri_getaddress(ptr);
 	return (cheri_is_address_inbounds(nsobject_table.nsobjects, addr));
 }
 
-void nsobject_deleted(void)
+void 
+nsobject_deleted(void)
 {
 	atomic_fetch_sub(&nsobject_table.nsobject_count, 1);
 	return;
 }
 
-void namespace_deleted(void)
+void 
+namespace_deleted(void)
 {
 	atomic_fetch_sub(&namespace_table.namespace_count, 1);
 	return;
