@@ -110,7 +110,8 @@ init_ns_members(namespace_t *ns_cap)
 	target->max_namespaces = -1;
 }
 
-namespace_t *new_namespace(const char *name, nstype_t type, namespace_t *parent)
+namespace_t *
+new_namespace(const char *name, nstype_t type, namespace_t *parent)
 {
 	namespace_t *ns_ptr;
 	namespace_t *parent_cap;
@@ -143,7 +144,8 @@ namespace_t *new_namespace(const char *name, nstype_t type, namespace_t *parent)
 	return (ns_ptr);
 }
 
-nsobject_t *new_nsobject(const char *name, nsobject_type_t type, namespace_t *parent)
+nsobject_t *
+new_nsobject(const char *name, nsobject_type_t type, namespace_t *parent)
 {
 	validate_nsobjcreate_params(name, type, parent);
 	
@@ -176,7 +178,8 @@ update_nsobject(nsobject_t *nsobj, void *handle, nsobject_type_t new_type)
 
 }
 
-int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
+int 
+delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 {
 	nsobject_t *result;
 	struct _ns_member *member, *member_temp;
@@ -200,7 +203,8 @@ int delete_nsobject(nsobject_t *ns_obj, namespace_t *ns_cap)
 	return (0);
 }
 
-int delete_namespace(namespace_t *ns_cap)
+int 
+delete_namespace(namespace_t *ns_cap)
 {
 	struct _ns_member *member, *member_temp;
 	namespace_t *parent_ns;
