@@ -34,6 +34,7 @@
 #include <cheri/cheric.h>
 #include <cheri/cherireg.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <sys/cdefs.h>
 
 
@@ -110,7 +111,7 @@ struct _namespace {
 
 __BEGIN_DECLS
 
-int valid_ns_name(const char * name);
+bool valid_ns_name(const char * name);
 
 __END_DECLS
 

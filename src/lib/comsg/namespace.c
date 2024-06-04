@@ -32,21 +32,23 @@
 #include <comsg/namespace.h>
 
 #include <ctype.h>
+#include <stdbool.h>
 #include <string.h>
 
-int valid_ns_name(const char *name)
+bool
+valid_ns_name(const char *name)
 {
 	int i;
 
 	if (!__builtin_cheri_tag_get(name))
-		return (0);
+		return (false);
 	else if(name[0]=='\0')
-		return (0);
+		return (false);
 
 	for(i = 0; i < strnlen(name, NS_NAME_LEN); i++) {
 		if(!isalnum(name[i]) && name[i] != '-' && name[i] != '_' && name[i] != '.')
-			return (0);
+			return (false);
 	}
-	return (1);
+	return (true);
 }
 

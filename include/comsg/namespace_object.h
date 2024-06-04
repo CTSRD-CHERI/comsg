@@ -34,7 +34,8 @@
 #include <comsg/coport.h>
 #include <comsg/coservice.h>
 #include <comsg/namespace.h>
-
+ 
+#include <stdbool.h>
 #include <sys/cdefs.h>
 
 /*
@@ -97,7 +98,7 @@ typedef struct _nsobject
 
 __BEGIN_DECLS
 
-int valid_nsobj_name(const char *name);
+bool valid_nsobj_name(const char *name);
 
 __END_DECLS
 

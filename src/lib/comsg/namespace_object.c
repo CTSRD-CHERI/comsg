@@ -32,8 +32,10 @@
 #include <comsg/namespace.h>
 #include <comsg/namespace_object.h>
 
+#include <stdbool.h>
 
-int valid_nsobj_name(const char *name)
+bool
+valid_nsobj_name(const char *name)
 {
 	return (valid_ns_name(name));
 }
