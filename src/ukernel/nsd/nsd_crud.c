@@ -162,7 +162,7 @@ new_namespace(const char *name, nstype_t type, namespace_t *parent)
 nsobject_t *
 new_nsobject(const char *name, nsobject_type_t type, namespace_t *parent)
 {
-	if (validate_nsobjcreate_params(name, type, parent))
+	if (!validate_nsobjcreate_params(name, type, parent))
 		return (NULL);
 	
 	nsobject_t *obj_ptr = allocate_nsobject(parent);
