@@ -108,12 +108,17 @@ cocallback_register(comsg_args_t *cocall_args, void *token)
 	coevent_t *provider_death;
 	cocallback_func_t *ccb_func;
 	pid_t pid;
+	int error;
 
 	/* XXX-PBB: this functionality (cogetpid2) doesn't exist in cheribsd in non-private branches */
 #ifdef COSETUP_COGETPID
 	pid = cogetpid2();
 #else
-	pid = cogetpid();
+	error = cocachedpid(&pid, token);
+	if (error == -1) {
+		COCALL_ERR(cocall_args, EOPNOTSUPP);
+	}
+		
 #endif
 	if (pid < 0) {
 		COCALL_ERR(cocall_args, EOPNOTSUPP);

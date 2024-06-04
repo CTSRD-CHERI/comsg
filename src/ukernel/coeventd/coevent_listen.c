@@ -68,13 +68,21 @@ add_event_listener(comsg_args_t *cocall_args, void *token)
 	coevent_t *coevent;
 	pid_t target_pid, requested_pid;
 	union coevent_subject subject;
+	int error;
 
 	coevent = NULL;
 	subject = cocall_args->subject;
 	switch (cocall_args->event) {
 	case PROCESS_DEATH:
 		/* event allocator must be the subject (i.e. the monitored process) */
+#ifdef COSETUP_COGETPID
 		target_pid = cogetpid2();
+#else
+		error = cocachedpid(&target_pid, token);
+		if (error == -1) {
+			COCALL_ERR(cocall_args, EOPNOTSUPP);
+		}
+#endif;
 		if (target_pid < 0) {
 			COCALL_ERR(cocall_args, EOPNOTSUPP);
 		}  else if (target_pid != cocall_args->subject.ces_pid) {
