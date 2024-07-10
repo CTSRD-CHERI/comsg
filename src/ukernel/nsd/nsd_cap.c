@@ -111,11 +111,11 @@ get_nsobj_sealcap(nsobject_type_t type)
 {
 	switch(type) {
 	case COMMAP:
-		return (coservice_nsobj.sc);
+		return (commap_nsobj.sc);
 	case COPORT:
 		return (coport_nsobj.sc);
 	case COSERVICE:
-		return (commap_nsobj.sc);
+		return (coservice_nsobj.sc);
 	case RESERVATION:
 		return (reservation_nsobj.sc);
 	default:
@@ -129,11 +129,11 @@ get_nsobj_unsealcap(nsobject_type_t type)
 {
 	switch(type) {
 	case COMMAP:
-		return (coservice_nsobj.usc);
+		return (commap_nsobj.usc);
 	case COPORT:
 		return (coport_nsobj.usc);
 	case COSERVICE:
-		return (commap_nsobj.usc);
+		return (coservice_nsobj.usc);
 	case RESERVATION:
 		return (reservation_nsobj.usc);
 	default:
