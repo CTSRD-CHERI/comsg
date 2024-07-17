@@ -69,10 +69,11 @@ void *lookup_commap(const char *name, namespace_t *ns_cap)
 nsobject_t *lookup_nsobject(const char *name, nsobject_type_t nsobject_type, namespace_t *ns_cap)
 {
 	nsobject_t *result;
+	namespace_t *ns;
 	struct _ns_member *member, *member_temp;
-	ns_cap = unseal_ns(ns_cap);
+	ns = unseal_ns(ns_cap);
 
-	LIST_FOREACH_SAFE (member, &ns_cap->members->objects, entries, member_temp) {
+	LIST_FOREACH_SAFE (member, &ns->members->objects, entries, member_temp) {
 		result = member->nsobj;
 		if((strncmp(result->name, name, NS_NAME_LEN) == 0)) {
 			if (result->type != nsobject_type)
