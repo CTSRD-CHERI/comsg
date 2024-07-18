@@ -32,11 +32,13 @@
 #include <comsg/utils.h>
 
 #include <assert.h>
+#include <err.h>
 #include <cheri/cheric.h>
 #include <sys/sysctl.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -122,8 +124,12 @@ make_otypes(void *rootcap, int n_otypes, struct object_type **results)
     void *seal_root;
     int i;
 
-    assert(cheri_getlen(rootcap) >= n_otypes);
-    assert(cheri_getperm(rootcap) & ( CHERI_PERM_SEAL | CHERI_PERM_UNSEAL ));
+    seal_root = cheri_setboundsexact(rootcap, n_otypes);
+    if (cheri_getlen(seal_root) < n_otypes) {
+        err(EX_SOFTWARE, "%s: root sealing capability [%p] insufficient to define %d object types", __func__, seal_root, n_otypes);
+    } else if ((cheri_getperm(seal_root) & ( CHERI_PERM_SEAL | CHERI_PERM_UNSEAL )) != ( CHERI_PERM_SEAL | CHERI_PERM_UNSEAL )) {
+        err(EX_SOFTWARE, "%s: root sealing capability [%p] lacks required permissions", __func__, seal_root);
+    }
 
     seal_root = cheri_setboundsexact(rootcap, n_otypes);
     for(i = 0; i < n_otypes; i++)
